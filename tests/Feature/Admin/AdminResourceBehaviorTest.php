@@ -10,6 +10,7 @@ use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
 use App\Filament\Resources\RoutingPolicies\Pages\CreateRoutingPolicy;
 use App\Filament\Widgets\GatewayStatsOverview;
 use App\Jobs\DispatchGatewayMessage;
+use App\Models\ApiCredential;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\ProviderAccount;
@@ -54,6 +55,16 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertDontSee('Sensitive gateway body');
     }
 
+    public function test_provider_accepted_message_only_shows_its_relevant_lifecycle_result(): void
+    {
+        $message = $this->createMessage('provider_accepted', now()->addMinute());
+        $message->forceFill(['provider_accepted_at' => now()])->save();
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertSee('Diterima provider')
+            ->assertDontSee('Hasil tidak diketahui');
+    }
+
     public function test_safe_retry_queues_one_job_and_appends_an_admin_event(): void
     {
         Queue::fake();
@@ -63,7 +74,7 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertActionVisible('retry')
             ->callAction('retry')
             ->assertHasNoActionErrors()
-            ->assertNotified('Retry queued');
+            ->assertNotified('Kirim ulang masuk antrian');
 
         $this->assertDatabaseHas('gateway_messages', [
             'id' => $message->getKey(),
@@ -103,7 +114,7 @@ class AdminResourceBehaviorTest extends TestCase
         Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
             ->callAction('retry')
             ->assertHasNoActionErrors()
-            ->assertNotified('Retry saved but queue unavailable');
+            ->assertNotified('Kirim ulang disimpan, tetapi antrian tidak tersedia');
 
         $this->assertSame('queued', $message->fresh()->status);
         $this->assertDatabaseHas('message_events', [
@@ -151,20 +162,40 @@ class AdminResourceBehaviorTest extends TestCase
                 'name' => 'Shelf production',
                 'abilities' => ['messages:send', 'messages:read'],
             ])
-            ->assertHasNoActionErrors();
+            ->assertHasNoActionErrors()
+            ->assertActionMounted('showIssuedToken');
 
         $raw = DB::table('api_credentials')->sole();
-        $notification = collect(session('filament.claimed_notifications'))->last();
+        $token = data_get($component->get('mountedActions'), '0.arguments.token');
 
         $this->assertSame(64, strlen($raw->token_hash));
-        $this->assertIsArray($notification);
-        $this->assertMatchesRegularExpression('/wgh_[A-Za-z0-9]{64}/', $notification['body']);
-        $this->assertStringNotContainsString($notification['body'], json_encode($raw, JSON_THROW_ON_ERROR));
-        $component->assertNotified('Credential created');
+        $this->assertIsString($token);
+        $this->assertMatchesRegularExpression('/^wgh_[A-Za-z0-9]{64}$/', $token);
+        $this->assertStringNotContainsString($token, json_encode($raw, JSON_THROW_ON_ERROR));
+        $this->assertSame(hash('sha256', $token), $raw->token_hash);
+    }
+
+    public function test_credential_issue_action_rejects_duplicate_names_for_the_same_application(): void
+    {
+        $application = $this->createClient('credential-duplicate');
+        ApiCredential::issue($application, 'Shelf production', ['messages:send']);
+
+        Livewire::test(ApiCredentialsRelationManager::class, [
+            'ownerRecord' => $application,
+            'pageClass' => EditClientApplication::class,
+        ])
+            ->callTableAction('issue', data: [
+                'name' => 'Shelf production',
+                'abilities' => ['messages:send'],
+            ])
+            ->assertHasActionErrors(['name']);
+
+        $this->assertSame(1, ApiCredential::query()->where('client_application_id', $application->id)->count());
     }
 
     public function test_blank_provider_secret_on_edit_preserves_the_existing_encrypted_secret(): void
     {
+
         $provider = ProviderAccount::forceCreate([
             'name' => 'WAHA Primary',
             'slug' => 'waha-primary',
@@ -280,10 +311,10 @@ class AdminResourceBehaviorTest extends TestCase
         ]);
 
         Livewire::test(GatewayStatsOverview::class)
-            ->assertSee('Queued')
-            ->assertSee('Provider accepted')
-            ->assertSee('Failed')
-            ->assertSee('Fallback rate')
+            ->assertSee('Antrian')
+            ->assertSee('Diterima provider')
+            ->assertSee('Gagal')
+            ->assertSee('Rasio cadangan')
             ->assertSee('33.3%');
     }
 
