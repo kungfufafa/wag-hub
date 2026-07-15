@@ -46,6 +46,10 @@ class GatewayMessageRetryTest extends TestCase
         $reloaded = $message->fresh();
         $this->assertSame('queued', $reloaded->status);
         $this->assertNotNull($reloaded->queued_at);
+        $this->assertNull($reloaded->processing_at);
+        $this->assertNull($reloaded->failed_at);
+        $this->assertNull($reloaded->last_error_code);
+        $this->assertNull($reloaded->last_error_message);
 
         $this->expectException(DomainException::class);
         $staleCopy->queueForRetry();
@@ -119,7 +123,10 @@ class GatewayMessageRetryTest extends TestCase
             'priority' => 10,
             'status' => $status,
             'expires_at' => $expiresAt,
+            'processing_at' => $status === 'failed' ? now()->subMinute() : null,
             'failed_at' => $status === 'failed' ? now() : null,
+            'last_error_code' => $status === 'failed' ? 'providers_failed' : null,
+            'last_error_message' => $status === 'failed' ? 'Previous provider failure' : null,
         ]);
     }
 }
