@@ -42,8 +42,7 @@ class AdminResourceSmokeTest extends TestCase
         string $path,
         string $heading,
         string $resourceLabel,
-    ): void
-    {
+    ): void {
         $administrator = User::factory()->create([
             'is_admin' => true,
             'is_active' => true,
