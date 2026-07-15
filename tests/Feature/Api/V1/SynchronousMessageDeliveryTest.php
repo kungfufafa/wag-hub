@@ -152,6 +152,13 @@ class SynchronousMessageDeliveryTest extends TestCase
         $this->assertContains('provider_accepted', $events);
         $this->assertNotContains('failed', $events);
         Http::assertSentCount(2);
+        Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'fonnte-secondary.test')
+            && $request->hasHeader('Authorization', 'secondary-secret')
+            && $request->isMultipart()
+            && $request->hasFile('target', '6281234567890')
+            && $request->hasFile('message', 'Pesan pengujian gateway')
+            && $request->hasFile('countryCode', '62')
+        );
     }
 
     public function test_an_ambiguous_provider_response_becomes_outcome_unknown_without_fallback(): void
