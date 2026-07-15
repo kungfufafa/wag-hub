@@ -38,7 +38,11 @@ class AdminResourceSmokeTest extends TestCase
     }
 
     #[DataProvider('configurationCreatePages')]
-    public function test_configuration_create_pages_show_a_next_step_sidebar(string $path, string $heading): void
+    public function test_configuration_create_pages_show_a_next_step_sidebar(
+        string $path,
+        string $heading,
+        string $resourceLabel,
+    ): void
     {
         $administrator = User::factory()->create([
             'is_admin' => true,
@@ -48,18 +52,19 @@ class AdminResourceSmokeTest extends TestCase
         $this->actingAs($administrator)
             ->get($path)
             ->assertOk()
-            ->assertSee($heading);
+            ->assertSee($heading)
+            ->assertSee($resourceLabel);
     }
 
     /**
-     * @return array<string, array{string, string}>
+     * @return array<string, array{string, string, string}>
      */
     public static function configurationCreatePages(): array
     {
         return [
-            'client application' => ['/admin/client-applications/create', 'Langkah berikutnya'],
-            'provider account' => ['/admin/provider-accounts/create', 'Sebelum menyimpan'],
-            'routing policy' => ['/admin/routing-policies/create', 'Urutan pengiriman'],
+            'client application' => ['/admin/client-applications/create', 'Langkah berikutnya', 'Aplikasi Klien'],
+            'provider account' => ['/admin/provider-accounts/create', 'Sebelum menyimpan', 'Akun Provider'],
+            'routing policy' => ['/admin/routing-policies/create', 'Urutan pengiriman', 'Aturan Pengiriman'],
         ];
     }
 }
