@@ -8,12 +8,14 @@ use App\Domain\Delivery\ProviderResult;
 use App\Models\ProviderAccount;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 
 final readonly class FonnteDriver implements ProviderDriver
 {
     public function __construct(
         private FonnteResponseClassifier $responses,
         private TransportFailureClassifier $transportFailures,
+        private ProviderEndpointGuard $endpoints,
     ) {}
 
     public function send(ProviderAccount $account, OutboundText $message): ProviderResult
@@ -26,6 +28,15 @@ final readonly class FonnteDriver implements ProviderDriver
             return ProviderResult::providerFailed(
                 errorCode: 'provider_configuration_invalid',
                 errorMessage: 'Konfigurasi Fonnte belum lengkap.',
+            );
+        }
+
+        try {
+            $this->endpoints->assertAllowed($endpoint);
+        } catch (InvalidArgumentException) {
+            return ProviderResult::providerFailed(
+                errorCode: 'provider_endpoint_not_allowed',
+                errorMessage: 'Endpoint Fonnte tidak diizinkan.',
             );
         }
 

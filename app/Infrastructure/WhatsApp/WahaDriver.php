@@ -8,12 +8,14 @@ use App\Domain\Delivery\ProviderResult;
 use App\Models\ProviderAccount;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 
 final readonly class WahaDriver implements ProviderDriver
 {
     public function __construct(
         private WahaResponseClassifier $responses,
         private TransportFailureClassifier $transportFailures,
+        private ProviderEndpointGuard $endpoints,
     ) {}
 
     public function send(ProviderAccount $account, OutboundText $message): ProviderResult
@@ -26,6 +28,17 @@ final readonly class WahaDriver implements ProviderDriver
             return ProviderResult::providerFailed(
                 errorCode: 'provider_configuration_invalid',
                 errorMessage: 'Konfigurasi WAHA belum lengkap.',
+            );
+        }
+
+        $endpoint = rtrim($baseUrl, '/').'/api/sendText';
+
+        try {
+            $this->endpoints->assertAllowed($endpoint);
+        } catch (InvalidArgumentException) {
+            return ProviderResult::providerFailed(
+                errorCode: 'provider_endpoint_not_allowed',
+                errorMessage: 'Endpoint WAHA tidak diizinkan.',
             );
         }
 
@@ -42,7 +55,7 @@ final readonly class WahaDriver implements ProviderDriver
         }
 
         try {
-            $response = $request->post(rtrim($baseUrl, '/').'/api/sendText', [
+            $response = $request->post($endpoint, [
                 'session' => $session,
                 'chatId' => $message->wahaChatId(),
                 'text' => $message->body,

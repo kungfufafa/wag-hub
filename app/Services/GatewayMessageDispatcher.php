@@ -7,6 +7,7 @@ use App\Domain\Delivery\ProviderOutcome;
 use App\Domain\Delivery\ProviderResult;
 use App\Infrastructure\WhatsApp\ProviderDriverManager;
 use App\Models\GatewayMessage;
+use App\Models\MessageAttempt;
 use App\Models\ProviderAccount;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -100,6 +101,7 @@ final readonly class GatewayMessageDispatcher
             $latencyMs = max(0, (int) floor((hrtime(true) - $startedAt) / 1_000_000));
 
             $this->finishAttempt($attemptId, $result, $latencyMs);
+            $this->recordProviderOutcome($provider, $result);
             $lastResult = $result;
 
             if ($result->outcome === ProviderOutcome::Accepted) {
@@ -162,6 +164,7 @@ final readonly class GatewayMessageDispatcher
             $existing = DB::table('routing_policies')
                 ->where('id', $message->routing_policy_id)
                 ->where('is_active', true)
+                ->whereNull('deleted_at')
                 ->value('id');
 
             if ($existing !== null) {
@@ -174,6 +177,7 @@ final readonly class GatewayMessageDispatcher
                 ->where('key', $message->route_key)
                 ->orderByRaw('CASE WHEN purpose = ? THEN 0 ELSE 1 END', [$message->purpose])
                 ->orderByDesc('is_default')
+                ->orderBy('id')
                 ->first();
 
             if ($policy) {
@@ -183,6 +187,7 @@ final readonly class GatewayMessageDispatcher
             $default = $this->policyQuery($message, $applicationId)
                 ->where('is_default', true)
                 ->orderByRaw('CASE WHEN purpose = ? THEN 0 ELSE 1 END', [$message->purpose])
+                ->orderBy('id')
                 ->first();
 
             if ($default) {
@@ -197,6 +202,7 @@ final readonly class GatewayMessageDispatcher
     {
         $query = DB::table('routing_policies')
             ->where('is_active', true)
+            ->whereNull('deleted_at')
             ->where(function (Builder $query) use ($message): void {
                 $query->where('purpose', $message->purpose)->orWhereNull('purpose');
             });
@@ -229,7 +235,8 @@ final readonly class GatewayMessageDispatcher
                 ->where('gateway_message_id', $message->id)
                 ->max('sequence')) + 1;
 
-            $attemptId = DB::table('message_attempts')->insertGetId([
+            $attempt = new MessageAttempt;
+            $attempt->forceFill([
                 'gateway_message_id' => $message->id,
                 'provider_account_id' => $provider->id,
                 'sequence' => $sequence,
@@ -244,13 +251,11 @@ final readonly class GatewayMessageDispatcher
                 'response_excerpt' => null,
                 'started_at' => $now,
                 'finished_at' => null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+            ])->save();
 
             $this->appendEvent($message->id, 'attempt_started');
 
-            return $attemptId;
+            return (int) $attempt->getKey();
         });
     }
 
@@ -265,7 +270,8 @@ final readonly class GatewayMessageDispatcher
                 ->where('gateway_message_id', $message->id)
                 ->max('sequence')) + 1;
 
-            DB::table('message_attempts')->insert([
+            $attempt = new MessageAttempt;
+            $attempt->forceFill([
                 'gateway_message_id' => $message->id,
                 'provider_account_id' => $provider->id,
                 'sequence' => $sequence,
@@ -280,9 +286,7 @@ final readonly class GatewayMessageDispatcher
                 'response_excerpt' => null,
                 'started_at' => $now,
                 'finished_at' => $now,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+            ])->save();
 
             $this->appendEvent($message->id, 'attempt_skipped');
         });
@@ -308,7 +312,7 @@ final readonly class GatewayMessageDispatcher
 
     private function finishAttempt(int $attemptId, ProviderResult $result, int $latencyMs): void
     {
-        DB::table('message_attempts')->where('id', $attemptId)->update([
+        MessageAttempt::query()->findOrFail($attemptId)->forceFill([
             'status' => $result->outcome->value,
             'delivery_certainty' => $result->deliveryCertainty->value,
             'retry_disposition' => $result->retryDisposition->value,
@@ -318,8 +322,59 @@ final readonly class GatewayMessageDispatcher
             'error_code' => $this->sanitize($result->errorCode, 120),
             'error_message' => $this->sanitize($result->errorMessage, 500),
             'finished_at' => now(),
-            'updated_at' => now(),
-        ]);
+        ])->save();
+    }
+
+    private function recordProviderOutcome(
+        ProviderAccount $provider,
+        ProviderResult $result,
+    ): void {
+        if (! in_array($result->outcome, [
+            ProviderOutcome::Accepted,
+            ProviderOutcome::ProviderFailed,
+        ], true)) {
+            return;
+        }
+
+        DB::transaction(function () use ($provider, $result): void {
+            $lockedProvider = ProviderAccount::query()
+                ->lockForUpdate()
+                ->find($provider->getKey());
+
+            if ($lockedProvider === null) {
+                return;
+            }
+
+            if ($result->outcome === ProviderOutcome::Accepted) {
+                $lockedProvider->forceFill([
+                    'consecutive_failures' => 0,
+                    'health_status' => 'healthy',
+                    'circuit_open_until' => null,
+                ])->save();
+
+                return;
+            }
+
+            $failureCount = (int) $lockedProvider->consecutive_failures + 1;
+            $failureThreshold = max(
+                1,
+                (int) config('gateway.provider_health.failure_threshold', 3),
+            );
+            $circuitSeconds = max(
+                1,
+                (int) config('gateway.provider_health.circuit_open_seconds', 300),
+            );
+
+            $lockedProvider->forceFill([
+                'consecutive_failures' => $failureCount,
+                'health_status' => $failureCount >= $failureThreshold
+                    ? 'unavailable'
+                    : 'degraded',
+                'circuit_open_until' => $failureCount >= $failureThreshold
+                    ? now()->addSeconds($circuitSeconds)
+                    : null,
+            ])->save();
+        });
     }
 
     private function markAccepted(
