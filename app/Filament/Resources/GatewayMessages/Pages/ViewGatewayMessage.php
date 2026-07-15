@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\GatewayMessages\Pages;
 
 use App\Filament\Resources\GatewayMessages\GatewayMessageResource;
-use App\Jobs\DispatchGatewayMessage;
 use App\Models\GatewayMessage;
+use App\Services\GatewayMessageEnqueuer;
 use DomainException;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -29,7 +29,7 @@ class ViewGatewayMessage extends ViewRecord
                 ->visible(fn (): bool => $this->getRecord()->isSafeToRetry())
                 ->action(function (): void {
                     try {
-                        DB::transaction(function (): void {
+                        $message = DB::transaction(function (): GatewayMessage {
                             /** @var GatewayMessage $message */
                             $message = GatewayMessage::query()->findOrFail($this->getRecord()->getKey());
                             $message->queueForRetry();
@@ -42,12 +42,24 @@ class ViewGatewayMessage extends ViewRecord
                                 'occurred_at' => now(),
                             ]);
 
-                            DispatchGatewayMessage::dispatch($message->getKey())->afterCommit();
+                            return $message;
                         });
                     } catch (DomainException) {
                         Notification::make()
                             ->title('Retry no longer available')
                             ->body('The message state changed or it has expired. Refresh and inspect the latest timeline.')
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
+
+                    if (! app(GatewayMessageEnqueuer::class)->enqueue($message, 'admin')) {
+                        $this->getRecord()->refresh();
+
+                        Notification::make()
+                            ->title('Retry saved but queue unavailable')
+                            ->body('The message remains queued and scheduled recovery will try again automatically.')
                             ->danger()
                             ->send();
 

@@ -332,6 +332,7 @@ final readonly class GatewayMessageDispatcher
         if (! in_array($result->outcome, [
             ProviderOutcome::Accepted,
             ProviderOutcome::ProviderFailed,
+            ProviderOutcome::OutcomeUnknown,
         ], true)) {
             return;
         }

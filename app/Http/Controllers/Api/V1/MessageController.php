@@ -4,11 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreMessageRequest;
-use App\Jobs\DispatchGatewayMessage;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
 use App\Services\GatewayMessageDispatcher;
+use App\Services\GatewayMessageEnqueuer;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
@@ -17,10 +17,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Throwable;
 
 class MessageController extends Controller
 {
+    public function __construct(private readonly GatewayMessageEnqueuer $enqueuer) {}
+
     public function store(StoreMessageRequest $request): JsonResponse
     {
         /** @var ClientApplication $application */
@@ -181,14 +182,12 @@ class MessageController extends Controller
             ], 409);
         }
 
-        if ($this->hasUnrecoveredEnqueueFailure($message)) {
+        if ($this->enqueuer->hasUnrecoveredFailure($message)) {
             $enqueueFailure = $this->enqueueAsyncMessage($request, $message, true);
 
             if ($enqueueFailure !== null) {
                 return $enqueueFailure;
             }
-
-            $this->recordQueueEvent($message, 'enqueue_recovered');
         }
 
         return response()->json([
@@ -202,11 +201,7 @@ class MessageController extends Controller
         GatewayMessage $message,
         bool $duplicate,
     ): ?JsonResponse {
-        try {
-            DispatchGatewayMessage::dispatch($message->getKey());
-        } catch (Throwable) {
-            $this->recordQueueEvent($message, 'enqueue_failed');
-
+        if (! $this->enqueuer->enqueue($message, 'api')) {
             return response()->json([
                 'message' => 'The message was saved, but the queue is currently unavailable.',
                 'error' => [
@@ -219,41 +214,6 @@ class MessageController extends Controller
         }
 
         return null;
-    }
-
-    private function hasUnrecoveredEnqueueFailure(GatewayMessage $message): bool
-    {
-        if (
-            $this->statusValue($message->mode) !== 'async'
-            || $this->statusValue($message->status) !== 'queued'
-        ) {
-            return false;
-        }
-
-        $latestQueueEvent = MessageEvent::query()
-            ->where('gateway_message_id', $message->getKey())
-            ->whereIn('type', ['enqueue_failed', 'enqueue_recovered'])
-            ->when(
-                $message->queued_at !== null,
-                fn ($query) => $query->where('occurred_at', '>=', $message->queued_at),
-            )
-            ->latest('id')
-            ->value('type');
-
-        return $latestQueueEvent === 'enqueue_failed';
-    }
-
-    private function recordQueueEvent(GatewayMessage $message, string $type): void
-    {
-        $event = new MessageEvent;
-        $event->forceFill([
-            'gateway_message_id' => $message->getKey(),
-            'type' => $type,
-            'source' => 'api',
-            'data' => null,
-            'occurred_at' => now(),
-        ]);
-        $event->save();
     }
 
     private function dispatchFailureResponse(Request $request, GatewayMessage $message): JsonResponse
