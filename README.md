@@ -34,10 +34,25 @@ touch database/database.sqlite
 php artisan key:generate
 php artisan migrate
 npm run build
-php artisan gateway:create-admin
+php artisan db:seed
 ```
 
-Command administrator akan meminta nama, email, dan password melalui prompt; password tidak perlu ditulis sebagai argumen shell.
+Sebelum menjalankan `db:seed`, isi `GATEWAY_SEED_ADMIN_NAME`,
+`GATEWAY_SEED_ADMIN_EMAIL`, dan `GATEWAY_SEED_ADMIN_PASSWORD` di `.env`.
+Seeder menyiapkan aplikasi `appscript-ft`, `web-shelf`, `web-sam`, dan
+`web-helpdesk`. Nama `appscript-ft` digunakan sebagai aplikasi Apps Script yang
+tersedia di repository. Jika yang dimaksud adalah aplikasi lain, buat Client
+Application baru dari panel.
+
+Tambahkan kredensial provider dan token per aplikasi hanya bila ingin langsung
+dipakai saat seed; semua nilai `GATEWAY_SEED_*` bersifat opsional selain tiga
+nilai admin. Provider tidak akan dibuat tanpa konfigurasi lengkap dan route tidak
+akan dibuat tanpa provider aktif. Seeder dapat dijalankan ulang dengan aman.
+Untuk provisioning tanpa menyimpan password di `.env`, gunakan:
+
+```bash
+php artisan gateway:create-admin
+```
 
 Jalankan aplikasi, worker, dan scheduler pada proses terpisah:
 
@@ -74,6 +89,19 @@ GATEWAY_PROVIDER_CIRCUIT_SECONDS=300
 3. Buat satu atau beberapa **Provider Account** WAHA/Fonnte.
 4. Buat **Routing Policy** untuk aplikasi, `route_key`, dan `purpose`.
 5. Susun provider steps sesuai prioritas fallback.
+
+## Seeder manajemen awal
+
+`php artisan db:seed` membuat data administrasi yang konsisten untuk seluruh
+aplikasi sumber. Bila WAHA dan Fonnte dikonfigurasi, WAHA menjadi prioritas
+pertama dan Fonnte fallback kedua pada default route setiap aplikasi. Route Shelf
+bernama `shelf-notifications`; karena ia ditandai default, konfigurasi Shelf yang
+masih memakai `WHATSAPP_HUB_ROUTE_KEY=default` tetap dapat menggunakan route ini.
+
+Setiap `GATEWAY_SEED_*_TOKEN` membuat credential bernama `Seeded application
+token` untuk aplikasi yang sesuai, dengan ability `messages:send` dan
+`messages:read`. Token hanya disimpan sebagai hash; putar token bila pernah
+tersimpan atau terekspos di file `.env`.
 
 Untuk pilot Shelf, gunakan aplikasi `web-shelf`, purpose `notification`, dan satu route key yang sama persis pada Hub dan konfigurasi Shelf. Panel menolak scope route yang sama dibuat dua kali.
 
