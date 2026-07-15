@@ -180,6 +180,10 @@ class AdminResourceBehaviorTest extends TestCase
         ]);
 
         Livewire::test(EditProviderAccount::class, ['record' => $provider->getKey()])
+            ->assertSchemaStateSet([
+                'configuration.base_url' => 'https://waha.internal.example',
+                'configuration.session' => 'primary',
+            ])
             ->assertSchemaStateSet(['configuration.api_key' => null])
             ->assertDontSee('existing-provider-secret')
             ->fillForm([
