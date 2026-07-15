@@ -69,13 +69,13 @@ class AdminResourceSmokeTest extends TestCase
     }
 
     #[DataProvider('configurationResourceFiles')]
-    public function test_configuration_forms_only_split_on_extra_wide_displays(string $resourceFile): void
+    public function test_configuration_forms_use_the_workspace_sidebar_on_desktop(string $resourceFile): void
     {
         $source = file_get_contents(app_path($resourceFile));
 
         $this->assertIsString($source);
-        $this->assertStringContainsString("Grid::make(['2xl' => 3])", $source);
-        $this->assertStringNotContainsString("Grid::make(['xl' => 3])", $source);
+        $this->assertStringContainsString("Grid::make(['xl' => 3])", $source);
+        $this->assertStringNotContainsString("Grid::make(['2xl' => 3])", $source);
     }
 
     /**
