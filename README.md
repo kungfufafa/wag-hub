@@ -37,8 +37,10 @@ npm run build
 php artisan db:seed
 ```
 
-Sebelum menjalankan `db:seed`, isi `GATEWAY_SEED_ADMIN_NAME`,
-`GATEWAY_SEED_ADMIN_EMAIL`, dan `GATEWAY_SEED_ADMIN_PASSWORD` di `.env`.
+`db:seed` membuat administrator default `admin@gateway.local` dengan password
+`admin12345`. Nilai tersebut dapat diubah sebelum seed lewat
+`GATEWAY_SEED_ADMIN_NAME`, `GATEWAY_SEED_ADMIN_EMAIL`, dan
+`GATEWAY_SEED_ADMIN_PASSWORD` di `.env`.
 Seeder menyiapkan aplikasi `appscript-ft`, `web-shelf`, `web-sam`, dan
 `web-helpdesk`. Nama `appscript-ft` digunakan sebagai aplikasi Apps Script yang
 tersedia di repository. Jika yang dimaksud adalah aplikasi lain, buat Client

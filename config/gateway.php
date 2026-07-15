@@ -24,9 +24,9 @@ return [
 
     'seed' => [
         'administrator' => [
-            'name' => env('GATEWAY_SEED_ADMIN_NAME'),
-            'email' => env('GATEWAY_SEED_ADMIN_EMAIL'),
-            'password' => env('GATEWAY_SEED_ADMIN_PASSWORD'),
+            'name' => env('GATEWAY_SEED_ADMIN_NAME') ?: 'Gateway Administrator',
+            'email' => env('GATEWAY_SEED_ADMIN_EMAIL') ?: 'admin@gateway.local',
+            'password' => env('GATEWAY_SEED_ADMIN_PASSWORD') ?: 'admin12345',
         ],
         'providers' => [
             'waha' => [
