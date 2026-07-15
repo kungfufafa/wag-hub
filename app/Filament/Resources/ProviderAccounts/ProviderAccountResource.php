@@ -41,7 +41,7 @@ class ProviderAccountResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Grid::make(['lg' => 3])
+            Grid::make(['xl' => 3])
                 ->schema([
                     Group::make([
                         Section::make('Provider account')
@@ -119,7 +119,7 @@ class ProviderAccountResource extends Resource
                             ])
                             ->visible(fn (Get $get): bool => $get('driver') === 'fonnte')
                             ->columns(['md' => 2]),
-                    ])->columnSpan(['lg' => 2]),
+                    ])->columnSpan(['xl' => 2]),
                     Group::make([
                         Section::make('Sebelum menyimpan')
                             ->description('Provider hanya dipakai oleh Hub, bukan aplikasi sumber.')
@@ -134,7 +134,7 @@ class ProviderAccountResource extends Resource
                                     ->label('3. Aktifkan lalu uji')
                                     ->content('Provider aktif akan dipakai oleh route yang menempatkannya pada urutan fallback.'),
                             ]),
-                    ])->columnSpan(['lg' => 1]),
+                    ])->columnSpan(['xl' => 1]),
                 ]),
         ]);
     }

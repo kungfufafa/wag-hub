@@ -39,7 +39,7 @@ class ClientApplicationResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Grid::make(['lg' => 3])
+            Grid::make(['xl' => 3])
                 ->schema([
                     Group::make([
                         Section::make('Identitas aplikasi')
@@ -69,7 +69,7 @@ class ClientApplicationResource extends Resource
                                     ->required(),
                             ])
                             ->columns(['md' => 2]),
-                    ])->columnSpan(['lg' => 2]),
+                    ])->columnSpan(['xl' => 2]),
                     Group::make([
                         Section::make('Langkah berikutnya')
                             ->description('Selesaikan setup aplikasi dalam urutan ini.')
@@ -84,7 +84,7 @@ class ClientApplicationResource extends Resource
                                     ->label('3. Aktifkan aplikasi')
                                     ->content('Nonaktifkan aplikasi untuk menghentikan pengiriman tanpa menghapus riwayat.'),
                             ]),
-                    ])->columnSpan(['lg' => 1]),
+                    ])->columnSpan(['xl' => 1]),
                 ]),
         ]);
     }
