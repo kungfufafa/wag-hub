@@ -16,6 +16,19 @@ class HubManagementSeederTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_it_seeds_the_default_administrator_when_no_seed_credentials_are_configured(): void
+    {
+        config()->set('gateway.seed.providers', ['waha' => [], 'fonnte' => []]);
+        config()->set('gateway.seed.credentials', []);
+
+        $this->seed(GatewayHubManagementSeeder::class);
+
+        $administrator = User::query()->where('email', 'admin@gateway.local')->sole();
+
+        $this->assertTrue($administrator->is_admin);
+        $this->assertTrue(Hash::check('admin12345', $administrator->password));
+    }
+
     public function test_it_seeds_an_administrator_client_applications_and_provider_routing(): void
     {
         config()->set('gateway.seed', [
