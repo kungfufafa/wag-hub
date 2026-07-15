@@ -50,7 +50,7 @@ class RoutingPolicyResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Grid::make(['xl' => 3])
+            Grid::make(['2xl' => 3])
                 ->schema([
                     Group::make([
                         Section::make('Routing policy')
@@ -121,7 +121,7 @@ class RoutingPolicyResource extends Resource
                                     ->reorderable()
                                     ->addActionLabel('Add provider'),
                             ]),
-                    ])->columnSpan(['xl' => 2]),
+                    ])->columnSpan(['2xl' => 2]),
                     Group::make([
                         Section::make('Urutan pengiriman')
                             ->description('Hub mencoba provider dari atas ke bawah.')
@@ -136,7 +136,7 @@ class RoutingPolicyResource extends Resource
                                     ->label('3. Susun fallback')
                                     ->content('Taruh provider utama di urutan pertama, lalu provider cadangan setelahnya.'),
                             ]),
-                    ])->columnSpan(['xl' => 1]),
+                    ])->columnSpan(['2xl' => 1]),
                 ]),
         ]);
     }

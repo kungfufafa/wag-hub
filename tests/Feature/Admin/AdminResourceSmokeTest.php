@@ -52,8 +52,7 @@ class AdminResourceSmokeTest extends TestCase
             ->get($path)
             ->assertOk()
             ->assertSee($heading)
-            ->assertSee($resourceLabel)
-            ->assertSee('2xl:grid-cols-3', false);
+            ->assertSee($resourceLabel);
     }
 
     /**
@@ -65,6 +64,28 @@ class AdminResourceSmokeTest extends TestCase
             'client application' => ['/admin/client-applications/create', 'Langkah berikutnya', 'Aplikasi Klien'],
             'provider account' => ['/admin/provider-accounts/create', 'Sebelum menyimpan', 'Akun Provider'],
             'routing policy' => ['/admin/routing-policies/create', 'Urutan pengiriman', 'Aturan Pengiriman'],
+        ];
+    }
+
+    #[DataProvider('configurationResourceFiles')]
+    public function test_configuration_forms_only_split_on_extra_wide_displays(string $resourceFile): void
+    {
+        $source = file_get_contents(app_path($resourceFile));
+
+        $this->assertIsString($source);
+        $this->assertStringContainsString("Grid::make(['2xl' => 3])", $source);
+        $this->assertStringNotContainsString("Grid::make(['xl' => 3])", $source);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function configurationResourceFiles(): array
+    {
+        return [
+            'client application' => ['Filament/Resources/ClientApplications/ClientApplicationResource.php'],
+            'provider account' => ['Filament/Resources/ProviderAccounts/ProviderAccountResource.php'],
+            'routing policy' => ['Filament/Resources/RoutingPolicies/RoutingPolicyResource.php'],
         ];
     }
 }
