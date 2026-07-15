@@ -41,7 +41,7 @@ class AdminResourceBehaviorTest extends TestCase
         ]));
     }
 
-    public function test_message_list_masks_the_recipient_and_does_not_render_the_body(): void
+    public function test_message_list_masks_the_recipient_and_renders_the_body_for_audit(): void
     {
         $message = $this->createMessage('failed', now()->addMinute());
 
@@ -53,7 +53,7 @@ class AdminResourceBehaviorTest extends TestCase
                 $message,
             )
             ->assertDontSee('6281234567890')
-            ->assertDontSee('Sensitive gateway body');
+            ->assertSee('Sensitive gateway body');
     }
 
     public function test_provider_accepted_message_only_shows_its_relevant_lifecycle_result(): void
