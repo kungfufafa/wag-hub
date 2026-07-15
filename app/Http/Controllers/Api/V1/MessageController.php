@@ -141,7 +141,7 @@ class MessageController extends Controller
             'status' => $mode === 'async' ? 'queued' : 'processing',
             'metadata' => $payload['metadata'],
             'expires_at' => is_string($payload['expires_at'])
-                ? CarbonImmutable::parse($payload['expires_at'])
+                ? CarbonImmutable::parse($payload['expires_at'])->setTimezone(config('app.timezone'))
                 : null,
             'queued_at' => $mode === 'async' ? $now : null,
             'processing_at' => $mode === 'sync' ? $now : null,
