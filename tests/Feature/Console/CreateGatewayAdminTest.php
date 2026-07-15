@@ -43,4 +43,22 @@ class CreateGatewayAdminTest extends TestCase
 
         $this->assertDatabaseCount('users', 1);
     }
+
+    public function test_it_prompts_securely_when_command_options_are_omitted(): void
+    {
+        $password = 'Prompt-Only-Secret-123!';
+
+        $this->artisan('gateway:create-admin')
+            ->expectsQuestion('Nama administrator', 'Prompt Operator')
+            ->expectsQuestion('Alamat email administrator', 'prompt@example.test')
+            ->expectsQuestion('Kata sandi administrator (minimal 12 karakter)', $password)
+            ->expectsOutputToContain('prompt@example.test')
+            ->doesntExpectOutputToContain($password)
+            ->assertSuccessful();
+
+        $administrator = User::query()->where('email', 'prompt@example.test')->sole();
+
+        $this->assertTrue($administrator->is_admin);
+        $this->assertTrue(Hash::check($password, $administrator->password));
+    }
 }
