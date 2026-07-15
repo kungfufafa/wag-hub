@@ -9,11 +9,14 @@ use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
 use BackedEnum;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
@@ -41,73 +44,93 @@ class RoutingPolicyResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('Routing policy')
-                ->description('Application-specific policies override global routes.')
+            Grid::make(['lg' => 3])
                 ->schema([
-                    Select::make('client_application_id')
-                        ->label('Application')
-                        ->relationship('clientApplication', 'name')
-                        ->searchable()
-                        ->preload()
-                        ->placeholder('Global policy'),
-                    TextInput::make('name')
-                        ->required()
-                        ->maxLength(120),
-                    TextInput::make('key')
-                        ->label('Route key')
-                        ->required()
-                        ->alphaDash()
-                        ->scopedUnique(
-                            model: RoutingPolicy::class,
-                            ignoreRecord: true,
-                            modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query
-                                ->where('client_application_id', $get('client_application_id'))
-                                ->where('purpose', $get('purpose')),
-                        )
-                        ->maxLength(80),
-                    Select::make('purpose')
-                        ->options([
-                            'otp' => 'OTP',
-                            'transactional' => 'Transactional',
-                            'notification' => 'Notification',
-                        ])
-                        ->placeholder('Any purpose'),
-                    Toggle::make('is_default')
-                        ->label('Default route')
-                        ->default(false),
-                    Toggle::make('is_active')
-                        ->label('Policy active')
-                        ->default(true)
-                        ->required(),
-                ])
-                ->columns(2),
-            Section::make('Provider order')
-                ->description('Drag providers into fallback order. A provider can appear only once.')
-                ->schema([
-                    Repeater::make('steps')
-                        ->relationship()
-                        ->orderColumn('position')
-                        ->schema([
-                            Select::make('provider_account_id')
-                                ->label('Provider')
-                                ->options(fn () => ProviderAccount::query()
-                                    ->where('is_active', true)
-                                    ->orderBy('name')
-                                    ->pluck('name', 'id'))
-                                ->searchable()
-                                ->preload()
-                                ->required()
-                                ->disableOptionsWhenSelectedInSiblingRepeaterItems(),
-                            Toggle::make('is_active')
-                                ->label('Step active')
-                                ->default(true)
-                                ->required(),
-                        ])
-                        ->columns(2)
-                        ->minItems(1)
-                        ->required()
-                        ->reorderable()
-                        ->addActionLabel('Add provider'),
+                    Group::make([
+                        Section::make('Routing policy')
+                            ->description('Application-specific policies override global routes.')
+                            ->schema([
+                                Select::make('client_application_id')
+                                    ->label('Application')
+                                    ->relationship('clientApplication', 'name')
+                                    ->searchable()
+                                    ->preload()
+                                    ->placeholder('Global policy'),
+                                TextInput::make('name')
+                                    ->required()
+                                    ->maxLength(120),
+                                TextInput::make('key')
+                                    ->label('Route key')
+                                    ->required()
+                                    ->alphaDash()
+                                    ->scopedUnique(
+                                        model: RoutingPolicy::class,
+                                        ignoreRecord: true,
+                                        modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query
+                                            ->where('client_application_id', $get('client_application_id'))
+                                            ->where('purpose', $get('purpose')),
+                                    )
+                                    ->maxLength(80),
+                                Select::make('purpose')
+                                    ->options([
+                                        'otp' => 'OTP',
+                                        'transactional' => 'Transactional',
+                                        'notification' => 'Notification',
+                                    ])
+                                    ->placeholder('Any purpose'),
+                                Toggle::make('is_default')
+                                    ->label('Default route')
+                                    ->default(false),
+                                Toggle::make('is_active')
+                                    ->label('Policy active')
+                                    ->default(true)
+                                    ->required(),
+                            ])
+                            ->columns(['md' => 2]),
+                        Section::make('Provider order')
+                            ->description('Drag providers into fallback order. A provider can appear only once.')
+                            ->schema([
+                                Repeater::make('steps')
+                                    ->relationship()
+                                    ->orderColumn('position')
+                                    ->schema([
+                                        Select::make('provider_account_id')
+                                            ->label('Provider')
+                                            ->options(fn () => ProviderAccount::query()
+                                                ->where('is_active', true)
+                                                ->orderBy('name')
+                                                ->pluck('name', 'id'))
+                                            ->searchable()
+                                            ->preload()
+                                            ->required()
+                                            ->disableOptionsWhenSelectedInSiblingRepeaterItems(),
+                                        Toggle::make('is_active')
+                                            ->label('Step active')
+                                            ->default(true)
+                                            ->required(),
+                                    ])
+                                    ->columns(2)
+                                    ->minItems(1)
+                                    ->required()
+                                    ->reorderable()
+                                    ->addActionLabel('Add provider'),
+                            ]),
+                    ])->columnSpan(['lg' => 2]),
+                    Group::make([
+                        Section::make('Urutan pengiriman')
+                            ->description('Hub mencoba provider dari atas ke bawah.')
+                            ->schema([
+                                Placeholder::make('route_scope')
+                                    ->label('1. Tentukan aplikasi')
+                                    ->content('Pilih aplikasi agar route ini tidak memengaruhi aplikasi lain.'),
+                                Placeholder::make('route_match')
+                                    ->label('2. Tentukan route key')
+                                    ->content('Gunakan default bila aplikasi hanya memiliki satu jalur pengiriman.'),
+                                Placeholder::make('route_fallback')
+                                    ->label('3. Susun fallback')
+                                    ->content('Taruh provider utama di urutan pertama, lalu provider cadangan setelahnya.'),
+                            ]),
+                    ])->columnSpan(['lg' => 1]),
                 ]),
         ]);
     }

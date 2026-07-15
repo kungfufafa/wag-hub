@@ -9,9 +9,12 @@ use App\Filament\Resources\ClientApplications\RelationManagers\ApiCredentialsRel
 use App\Models\ClientApplication;
 use BackedEnum;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -36,30 +39,53 @@ class ClientApplicationResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('Application identity')
-                ->description('Each source system receives isolated credentials and limits.')
+            Grid::make(['lg' => 3])
                 ->schema([
-                    TextInput::make('name')
-                        ->required()
-                        ->maxLength(120),
-                    TextInput::make('slug')
-                        ->required()
-                        ->alphaDash()
-                        ->maxLength(80)
-                        ->unique(ignoreRecord: true),
-                    TextInput::make('rate_limit_per_minute')
-                        ->label('Rate limit per minute')
-                        ->numeric()
-                        ->required()
-                        ->minValue(1)
-                        ->maxValue(6000)
-                        ->default(60),
-                    Toggle::make('is_active')
-                        ->label('Application active')
-                        ->default(true)
-                        ->required(),
-                ])
-                ->columns(2),
+                    Group::make([
+                        Section::make('Identitas aplikasi')
+                            ->description('Satu aplikasi sumber memakai credential dan limitnya sendiri.')
+                            ->schema([
+                                TextInput::make('name')
+                                    ->label('Nama aplikasi')
+                                    ->required()
+                                    ->maxLength(120),
+                                TextInput::make('slug')
+                                    ->label('ID aplikasi')
+                                    ->helperText('Gunakan huruf kecil, angka, dan tanda hubung. Tidak dapat dipakai ulang.')
+                                    ->required()
+                                    ->alphaDash()
+                                    ->maxLength(80)
+                                    ->unique(ignoreRecord: true),
+                                TextInput::make('rate_limit_per_minute')
+                                    ->label('Batas kirim per menit')
+                                    ->numeric()
+                                    ->required()
+                                    ->minValue(1)
+                                    ->maxValue(6000)
+                                    ->default(60),
+                                Toggle::make('is_active')
+                                    ->label('Aplikasi aktif')
+                                    ->default(true)
+                                    ->required(),
+                            ])
+                            ->columns(['md' => 2]),
+                    ])->columnSpan(['lg' => 2]),
+                    Group::make([
+                        Section::make('Langkah berikutnya')
+                            ->description('Selesaikan setup aplikasi dalam urutan ini.')
+                            ->schema([
+                                Placeholder::make('create_credential')
+                                    ->label('1. Buat credential')
+                                    ->content('Setelah disimpan, buka tab API Credentials untuk membuat token aplikasi.'),
+                                Placeholder::make('choose_route')
+                                    ->label('2. Pilih routing')
+                                    ->content('Atur route default aplikasi ini dari menu Routing Policies.'),
+                                Placeholder::make('activate_application')
+                                    ->label('3. Aktifkan aplikasi')
+                                    ->content('Nonaktifkan aplikasi untuk menghentikan pengiriman tanpa menghapus riwayat.'),
+                            ]),
+                    ])->columnSpan(['lg' => 1]),
+                ]),
         ]);
     }
 
