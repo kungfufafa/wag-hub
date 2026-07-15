@@ -73,6 +73,7 @@ trait BuildsGatewayFixtures
      */
     protected function createProviderAccount(string $driver, string $slug, array $configuration): array
     {
+        $this->allowTestProviderEndpoint($configuration['base_url'] ?? $configuration['endpoint'] ?? null);
         $now = now();
 
         $id = DB::table('provider_accounts')->insertGetId([
@@ -91,6 +92,28 @@ trait BuildsGatewayFixtures
         ]);
 
         return ['id' => $id, 'slug' => $slug];
+    }
+
+    private function allowTestProviderEndpoint(mixed $endpoint): void
+    {
+        if (! is_string($endpoint)) {
+            return;
+        }
+
+        $host = parse_url($endpoint, PHP_URL_HOST);
+        $scheme = parse_url($endpoint, PHP_URL_SCHEME);
+
+        if (! is_string($host) || ! str_ends_with(strtolower($host), '.test')) {
+            return;
+        }
+
+        $configKey = strtolower((string) $scheme) === 'http'
+            ? 'gateway.provider_endpoints.http_hosts'
+            : 'gateway.provider_endpoints.https_hosts';
+        $allowedHosts = config($configKey, []);
+        $allowedHosts[] = strtolower($host);
+
+        config()->set($configKey, array_values(array_unique($allowedHosts)));
     }
 
     /**

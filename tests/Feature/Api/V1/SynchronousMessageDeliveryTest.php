@@ -27,9 +27,12 @@ class SynchronousMessageDeliveryTest extends TestCase
         ]);
         $policyId = $this->createRoutingPolicy($client['id'], [$provider['id']]);
 
-        Http::fake([
-            'waha-primary.test/*' => Http::response(['id' => 'waha-remote-001'], 201),
-        ]);
+        $redirectsDisabled = false;
+        Http::fake(function (Request $request, array $options) use (&$redirectsDisabled) {
+            $redirectsDisabled = ($options['allow_redirects'] ?? null) === false;
+
+            return Http::response(['id' => 'waha-remote-001'], 201);
+        });
 
         $payload = $this->messagePayload('sync');
         $response = $this->postMessage($client['token'], 'sync-accepted-1', $payload);
@@ -70,6 +73,7 @@ class SynchronousMessageDeliveryTest extends TestCase
         $this->assertContains('provider_accepted', $eventTypes);
 
         Queue::assertNothingPushed();
+        $this->assertTrue($redirectsDisabled);
         Http::assertSentCount(1);
         Http::assertSent(fn (Request $request): bool => $request->hasHeader('X-Api-Key', 'waha-test-secret')
             && $request['session'] === 'default'
@@ -95,7 +99,10 @@ class SynchronousMessageDeliveryTest extends TestCase
         ]);
         $this->createRoutingPolicy($client['id'], [$primary['id'], $secondary['id']]);
 
-        Http::fake(function (Request $request) {
+        $redirectOptions = [];
+        Http::fake(function (Request $request, array $options) use (&$redirectOptions) {
+            $redirectOptions[] = $options['allow_redirects'] ?? null;
+
             if (str_contains($request->url(), 'waha-primary.test')) {
                 return Http::response(['error' => 'provider authentication failed'], 401);
             }
@@ -151,6 +158,7 @@ class SynchronousMessageDeliveryTest extends TestCase
         $this->assertContains('fallback_started', $events);
         $this->assertContains('provider_accepted', $events);
         $this->assertNotContains('failed', $events);
+        $this->assertSame([false, false], $redirectOptions);
         Http::assertSentCount(2);
         Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'fonnte-secondary.test')
             && $request->hasHeader('Authorization', 'secondary-secret')
