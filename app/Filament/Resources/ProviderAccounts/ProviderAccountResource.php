@@ -36,6 +36,12 @@ class ProviderAccountResource extends Resource
 
     protected static ?int $navigationSort = 20;
 
+    protected static ?string $navigationLabel = 'Akun Provider';
+
+    protected static ?string $modelLabel = 'Akun Provider';
+
+    protected static ?string $pluralModelLabel = 'Akun Provider';
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public static function form(Schema $schema): Schema

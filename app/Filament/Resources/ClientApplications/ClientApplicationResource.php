@@ -34,6 +34,12 @@ class ClientApplicationResource extends Resource
 
     protected static ?int $navigationSort = 10;
 
+    protected static ?string $navigationLabel = 'Aplikasi Klien';
+
+    protected static ?string $modelLabel = 'Aplikasi Klien';
+
+    protected static ?string $pluralModelLabel = 'Aplikasi Klien';
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public static function form(Schema $schema): Schema

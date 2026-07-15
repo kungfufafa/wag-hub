@@ -39,6 +39,12 @@ class RoutingPolicyResource extends Resource
 
     protected static ?int $navigationSort = 30;
 
+    protected static ?string $navigationLabel = 'Aturan Pengiriman';
+
+    protected static ?string $modelLabel = 'Aturan Pengiriman';
+
+    protected static ?string $pluralModelLabel = 'Aturan Pengiriman';
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public static function form(Schema $schema): Schema
