@@ -33,6 +33,7 @@ final readonly class FonnteDriver implements ProviderDriver
             $response = Http::acceptJson()
                 ->withHeaders(['Authorization' => $token])
                 ->asMultipart()
+                ->withoutRedirecting()
                 ->timeout($this->timeout($account))
                 ->connectTimeout(min(5, $this->timeout($account)))
                 ->post($endpoint, [

@@ -31,6 +31,7 @@ final readonly class WahaDriver implements ProviderDriver
 
         $request = Http::acceptJson()
             ->asJson()
+            ->withoutRedirecting()
             ->timeout($this->timeout($account))
             ->connectTimeout(min(5, $this->timeout($account)));
 

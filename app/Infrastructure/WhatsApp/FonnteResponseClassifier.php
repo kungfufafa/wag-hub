@@ -40,6 +40,14 @@ final class FonnteResponseClassifier
         $payload = $this->decodeObject($body) ?? [];
         $message = $this->reason($payload);
 
+        if ($httpStatus === 408 || ($httpStatus >= 300 && $httpStatus < 400) || $httpStatus >= 500) {
+            return ProviderResult::outcomeUnknown(
+                httpStatus: $httpStatus,
+                errorCode: 'ambiguous_provider_http_error',
+                errorMessage: 'Fonnte gagal setelah request mungkin sudah diproses.',
+            );
+        }
+
         if (in_array($httpStatus, [400, 422], true)) {
             return ProviderResult::rejected(
                 httpStatus: $httpStatus,
