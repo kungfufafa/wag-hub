@@ -79,7 +79,7 @@ class HubManagementSeederTest extends TestCase
         $this->assertSame(['messages:send', 'messages:read'], $credential->abilities);
     }
 
-    public function test_it_is_idempotent_and_does_not_create_provider_routes_without_provider_credentials(): void
+    public function test_it_is_idempotent_and_seeds_disabled_provider_accounts_and_routes_without_provider_credentials(): void
     {
         config()->set('gateway.seed', [
             'administrator' => [
@@ -96,8 +96,10 @@ class HubManagementSeederTest extends TestCase
 
         $this->assertDatabaseCount('users', 1);
         $this->assertDatabaseCount('client_applications', 4);
-        $this->assertDatabaseCount('provider_accounts', 0);
-        $this->assertDatabaseCount('routing_policies', 0);
+        $this->assertDatabaseCount('provider_accounts', 2);
+        $this->assertDatabaseCount('routing_policies', 4);
         $this->assertDatabaseCount('api_credentials', 0);
+        $this->assertFalse(ProviderAccount::query()->where('slug', 'waha-primary')->sole()->is_active);
+        $this->assertFalse(ProviderAccount::query()->where('slug', 'fonnte-primary')->sole()->is_active);
     }
 }
