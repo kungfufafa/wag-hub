@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\PayloadHasher;
 use App\Support\PhoneNormalizer;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
@@ -128,10 +129,10 @@ class StoreMessageRequest extends FormRequest
 
     public function payloadHash(): string
     {
-        return hash('sha256', json_encode(
+        return app(PayloadHasher::class)->hash(
             $this->canonicalPayload(),
-            JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION,
-        ));
+            (string) config('app.key'),
+        );
     }
 
     protected function failedValidation(ValidatorContract $validator): never
