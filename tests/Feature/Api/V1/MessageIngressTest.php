@@ -125,6 +125,28 @@ class MessageIngressTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_an_otp_expiry_with_a_timezone_offset_is_stored_in_the_application_timezone(): void
+    {
+        Queue::fake();
+        $this->travelTo(now()->startOfSecond());
+        $client = $this->createClientApplication();
+        $expiresAt = now()->addMinute();
+
+        $response = $this->postMessage(
+            $client['token'],
+            'otp-expiry-timezone',
+            $this->messagePayload('async', [
+                'purpose' => 'otp',
+                'expires_at' => $expiresAt->toIso8601String(),
+            ]),
+        )->assertStatus(202);
+
+        $message = DB::table('gateway_messages')->where('uuid', $response->json('data.id'))->sole();
+
+        $this->assertSame($expiresAt->toDateTimeString(), $message->expires_at);
+        $this->travelBack();
+    }
+
     public function test_an_identical_replay_returns_the_same_resource_without_new_work(): void
     {
         Queue::fake();
