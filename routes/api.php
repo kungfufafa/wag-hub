@@ -4,7 +4,7 @@ use App\Http\Controllers\Api\V1\MessageController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')
-    ->middleware('client.auth')
+    ->middleware(['client.auth', 'client.rate'])
     ->group(function (): void {
         Route::post('/messages', [MessageController::class, 'store'])
             ->middleware('client.ability:messages:send');
