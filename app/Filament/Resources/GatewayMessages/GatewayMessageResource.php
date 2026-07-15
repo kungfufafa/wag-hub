@@ -130,125 +130,182 @@ class GatewayMessageResource extends Resource
 
     public static function infolist(Schema $schema): Schema
     {
-        return $schema->components([
-            Section::make('Pesan')
-                ->schema([
-                    TextEntry::make('uuid')
-                        ->label('ID pesan')
-                        ->copyable(),
-                    TextEntry::make('correlation_id')
-                        ->label('ID korelasi')
-                        ->copyable(),
-                    TextEntry::make('clientApplication.name')
-                        ->label('Aplikasi'),
-                    TextEntry::make('recipient_last4')
-                        ->label('Penerima')
-                        ->formatStateUsing(fn (?string $state): string => '••••••••'.($state ?? '')),
-                    TextEntry::make('status')
-                        ->label('Status')
-                        ->badge()
-                        ->color(fn (string $state): string => static::statusColor($state))
-                        ->formatStateUsing(fn (string $state): string => static::statusLabel($state)),
-                    TextEntry::make('purpose')
-                        ->label('Tujuan')
-                        ->badge()
-                        ->formatStateUsing(fn (?string $state): string => static::purposeLabel($state)),
-                    TextEntry::make('mode')
-                        ->label('Mode')
-                        ->badge(),
-                    TextEntry::make('route_key')->label('Kunci rute'),
-                    TextEntry::make('client_reference')
-                        ->label('Referensi klien')
-                        ->placeholder('—'),
-                    TextEntry::make('acceptedProviderAccount.name')
-                        ->label('Provider yang menerima')
-                        ->placeholder('—'),
-                    TextEntry::make('provider_message_id')
-                        ->label('ID pesan provider')
-                        ->placeholder('—'),
-                    TextEntry::make('last_error_code')
-                        ->label('Kode error terakhir')
-                        ->placeholder('—'),
-                    TextEntry::make('last_error_message')
-                        ->label('Error terakhir')
-                        ->placeholder('—')
-                        ->columnSpanFull(),
-                ])
-                ->columns(2),
-            Section::make('Siklus hidup')
-                ->schema([
-                    TextEntry::make('created_at')->label('Dibuat')->dateTime(),
-                    TextEntry::make('queued_at')
-                        ->label('Masuk antrian')
-                        ->dateTime()
-                        ->visible(fn (GatewayMessage $record): bool => $record->queued_at !== null),
-                    TextEntry::make('processing_at')
-                        ->label('Diproses')
-                        ->dateTime()
-                        ->visible(fn (GatewayMessage $record): bool => $record->processing_at !== null),
-                    TextEntry::make('provider_accepted_at')
-                        ->label('Diterima provider')
-                        ->dateTime()
-                        ->visible(fn (GatewayMessage $record): bool => $record->provider_accepted_at !== null),
-                    TextEntry::make('failed_at')
-                        ->label('Gagal')
-                        ->dateTime()
-                        ->visible(fn (GatewayMessage $record): bool => $record->failed_at !== null),
-                    TextEntry::make('outcome_unknown_at')
-                        ->label('Hasil tidak diketahui')
-                        ->dateTime()
-                        ->visible(fn (GatewayMessage $record): bool => $record->outcome_unknown_at !== null),
-                    TextEntry::make('dead_lettered_at')
-                        ->label('Dead letter')
-                        ->dateTime()
-                        ->visible(fn (GatewayMessage $record): bool => $record->dead_lettered_at !== null),
-                    TextEntry::make('expires_at')->label('Kedaluwarsa')->dateTime()->placeholder('Tanpa batas'),
-                ])
-                ->columns(2),
-            Section::make('Percobaan provider')
-                ->schema([
-                    RepeatableEntry::make('attempts')
-                        ->label('')
-                        ->schema([
-                            TextEntry::make('sequence')->label('#'),
-                            TextEntry::make('providerAccount.name')->label('Provider'),
-                            TextEntry::make('status')
-                                ->label('Status')
-                                ->badge()
-                                ->formatStateUsing(fn (?string $state): string => static::attemptStatusLabel($state)),
-                            TextEntry::make('delivery_certainty')
-                                ->label('Hasil provider')
-                                ->badge()
-                                ->formatStateUsing(fn (?string $state): string => static::deliveryCertaintyLabel($state)),
-                            TextEntry::make('retry_disposition')
-                                ->label('Tindak lanjut')
-                                ->badge()
-                                ->formatStateUsing(fn (?string $state): string => static::retryDispositionLabel($state)),
-                            TextEntry::make('http_status')->label('HTTP')->placeholder('—'),
-                            TextEntry::make('latency_ms')->label('Latensi')->suffix(' ms')->placeholder('—'),
-                            TextEntry::make('provider_message_id')->label('ID remote')->placeholder('—'),
-                            TextEntry::make('error_code')->label('Kode error')->placeholder('—'),
-                            TextEntry::make('error_message')->label('Error')->placeholder('—')->columnSpanFull(),
-                            TextEntry::make('started_at')->label('Mulai')->dateTime(),
-                            TextEntry::make('finished_at')->label('Selesai')->dateTime()->placeholder('—'),
-                        ])
-                        ->columns(3),
-                ]),
-            Section::make('Linimasa event')
-                ->schema([
-                    RepeatableEntry::make('events')
-                        ->label('')
-                        ->schema([
-                            TextEntry::make('occurred_at')->label('Waktu')->dateTime(),
-                            TextEntry::make('type')
-                                ->label('Proses')
-                                ->badge()
-                                ->formatStateUsing(fn (?string $state): string => static::eventLabel($state)),
-                            TextEntry::make('source')->label('Sumber')->badge(),
-                        ])
-                        ->columns(3),
-                ]),
-        ]);
+        return $schema
+            ->columns([
+                'default' => 1,
+                'lg' => 3,
+            ])
+            ->components([
+                Section::make('Pesan')
+                    ->schema([
+                        TextEntry::make('uuid')
+                            ->label('ID pesan')
+                            ->copyable(),
+                        TextEntry::make('correlation_id')
+                            ->label('ID korelasi')
+                            ->copyable(),
+                        TextEntry::make('clientApplication.name')
+                            ->label('Aplikasi'),
+                        TextEntry::make('recipient_last4')
+                            ->label('Penerima')
+                            ->formatStateUsing(fn (?string $state): string => '••••••••'.($state ?? '')),
+                        TextEntry::make('body')
+                            ->label('Isi pesan')
+                            ->copyable()
+                            ->placeholder('—')
+                            ->columnSpanFull(),
+                        TextEntry::make('status')
+                            ->label('Status')
+                            ->badge()
+                            ->color(fn (string $state): string => static::statusColor($state))
+                            ->formatStateUsing(fn (string $state): string => static::statusLabel($state)),
+                        TextEntry::make('purpose')
+                            ->label('Tujuan')
+                            ->badge()
+                            ->color('gray')
+                            ->formatStateUsing(fn (?string $state): string => static::purposeLabel($state)),
+                        TextEntry::make('mode')
+                            ->label('Mode')
+                            ->badge()
+                            ->color('gray'),
+                        TextEntry::make('route_key')->label('Kunci rute'),
+                        TextEntry::make('client_reference')
+                            ->label('Referensi klien')
+                            ->placeholder('—'),
+                        TextEntry::make('acceptedProviderAccount.name')
+                            ->label('Provider yang menerima')
+                            ->placeholder('—'),
+                        TextEntry::make('provider_message_id')
+                            ->label('ID pesan provider')
+                            ->placeholder('—'),
+                        TextEntry::make('last_error_code')
+                            ->label('Kode error terakhir')
+                            ->placeholder('—'),
+                        TextEntry::make('last_error_message')
+                            ->label('Error terakhir')
+                            ->placeholder('—')
+                            ->columnSpanFull(),
+                    ])
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ])
+                    ->columnSpan([
+                        'default' => 'full',
+                        'lg' => 2,
+                    ]),
+                Section::make('Siklus hidup')
+                    ->description('Tahap yang sudah terjadi, urut waktu.')
+                    ->schema([
+                        RepeatableEntry::make('lifecycle')
+                            ->label('')
+                            ->getStateUsing(fn (GatewayMessage $record): array => static::lifecycleTimeline($record))
+                            ->schema([
+                                TextEntry::make('label')
+                                    ->label('Tahap')
+                                    ->badge()
+                                    ->color(fn (?string $state): string => match ($state) {
+                                        'Dibuat', 'Masuk antrian', 'Kedaluwarsa' => 'gray',
+                                        'Diproses' => 'info',
+                                        'Diterima provider' => 'success',
+                                        'Gagal', 'Dead letter' => 'danger',
+                                        'Hasil tidak diketahui' => 'warning',
+                                        default => 'gray',
+                                    }),
+                                TextEntry::make('at')
+                                    ->label('Waktu')
+                                    ->dateTime()
+                                    ->placeholder('Tanpa batas'),
+                            ])
+                            ->columns(1)
+                            ->contained(false),
+                    ])
+                    ->columnSpan([
+                        'default' => 'full',
+                        'lg' => 1,
+                    ]),
+                Section::make('Percobaan provider')
+                    ->schema([
+                        RepeatableEntry::make('attempts')
+                            ->label('')
+                            ->schema([
+                                TextEntry::make('sequence')->label('#'),
+                                TextEntry::make('providerAccount.name')->label('Provider'),
+                                TextEntry::make('status')
+                                    ->label('Status')
+                                    ->badge()
+                                    ->color(fn (?string $state): string => static::attemptStatusColor($state))
+                                    ->formatStateUsing(fn (?string $state): string => static::attemptStatusLabel($state)),
+                                TextEntry::make('delivery_certainty')
+                                    ->label('Hasil provider')
+                                    ->badge()
+                                    ->color(fn (?string $state): string => static::deliveryCertaintyColor($state))
+                                    ->formatStateUsing(fn (?string $state): string => static::deliveryCertaintyLabel($state)),
+                                TextEntry::make('retry_disposition')
+                                    ->label('Tindak lanjut')
+                                    ->badge()
+                                    ->color(fn (?string $state): string => static::retryDispositionColor($state))
+                                    ->formatStateUsing(fn (?string $state): string => static::retryDispositionLabel($state)),
+                                TextEntry::make('http_status')->label('HTTP')->placeholder('—'),
+                                TextEntry::make('latency_ms')->label('Latensi')->suffix(' ms')->placeholder('—'),
+                                TextEntry::make('provider_message_id')->label('ID remote')->placeholder('—'),
+                                TextEntry::make('error_code')->label('Kode error')->placeholder('—'),
+                                TextEntry::make('error_message')->label('Error')->placeholder('—')->columnSpanFull(),
+                                TextEntry::make('started_at')->label('Mulai')->dateTime(),
+                                TextEntry::make('finished_at')->label('Selesai')->dateTime()->placeholder('—'),
+                            ])
+                            ->columns(3),
+                    ])
+                    ->columnSpanFull(),
+                Section::make('Linimasa event')
+                    ->schema([
+                        RepeatableEntry::make('events')
+                            ->label('')
+                            ->schema([
+                                TextEntry::make('occurred_at')->label('Waktu')->dateTime(),
+                                TextEntry::make('type')
+                                    ->label('Proses')
+                                    ->badge()
+                                    ->color(fn (?string $state): string => static::eventColor($state))
+                                    ->formatStateUsing(fn (?string $state): string => static::eventLabel($state)),
+                                TextEntry::make('source')
+                                    ->label('Sumber')
+                                    ->badge()
+                                    ->color('gray'),
+                            ])
+                            ->columns(3),
+                    ])
+                    ->columnSpanFull(),
+            ]);
+    }
+
+    /**
+     * @return list<array{label: string, at: mixed}>
+     */
+    public static function lifecycleTimeline(GatewayMessage $record): array
+    {
+        $steps = [];
+
+        foreach ([
+            ['label' => 'Dibuat', 'at' => $record->created_at],
+            ['label' => 'Masuk antrian', 'at' => $record->queued_at],
+            ['label' => 'Diproses', 'at' => $record->processing_at],
+            ['label' => 'Diterima provider', 'at' => $record->provider_accepted_at],
+            ['label' => 'Gagal', 'at' => $record->failed_at],
+            ['label' => 'Hasil tidak diketahui', 'at' => $record->outcome_unknown_at],
+            ['label' => 'Dead letter', 'at' => $record->dead_lettered_at],
+        ] as $step) {
+            if ($step['at'] !== null) {
+                $steps[] = $step;
+            }
+        }
+
+        $steps[] = [
+            'label' => 'Kedaluwarsa',
+            'at' => $record->expires_at,
+        ];
+
+        return $steps;
     }
 
     public static function canCreate(): bool
@@ -326,6 +383,18 @@ class GatewayMessageResource extends Resource
         };
     }
 
+    public static function attemptStatusColor(?string $status): string
+    {
+        return match ($status) {
+            'accepted' => 'success',
+            'started' => 'info',
+            'provider_failed' => 'danger',
+            'outcome_unknown' => 'warning',
+            'skipped' => 'gray',
+            default => 'gray',
+        };
+    }
+
     public static function deliveryCertaintyLabel(?string $certainty): string
     {
         return match ($certainty) {
@@ -336,6 +405,16 @@ class GatewayMessageResource extends Resource
         };
     }
 
+    public static function deliveryCertaintyColor(?string $certainty): string
+    {
+        return match ($certainty) {
+            'accepted' => 'success',
+            'not_sent' => 'danger',
+            'unknown' => 'warning',
+            default => 'gray',
+        };
+    }
+
     public static function retryDispositionLabel(?string $disposition): string
     {
         return match ($disposition) {
@@ -343,6 +422,16 @@ class GatewayMessageResource extends Resource
             'do_not_retry' => 'Selesai',
             'reconcile_only' => 'Perlu pengecekan manual',
             default => $disposition ?? '—',
+        };
+    }
+
+    public static function retryDispositionColor(?string $disposition): string
+    {
+        return match ($disposition) {
+            'fallback_allowed' => 'warning',
+            'do_not_retry' => 'gray',
+            'reconcile_only' => 'info',
+            default => 'gray',
         };
     }
 
@@ -360,6 +449,18 @@ class GatewayMessageResource extends Resource
             'expired' => 'Pesan kedaluwarsa',
             'manual_retry_queued', 'recovery_requeued' => 'Dimasukkan ke antrian ulang',
             default => $event ?? '—',
+        };
+    }
+
+    public static function eventColor(?string $event): string
+    {
+        return match ($event) {
+            'provider_accepted', 'recovery_provider_accepted' => 'success',
+            'failed', 'recovery_failed', 'recovery_sync_failed_before_attempt', 'expired' => 'danger',
+            'outcome_unknown', 'recovery_outcome_unknown', 'fallback_started', 'manual_retry_queued', 'recovery_requeued' => 'warning',
+            'processing', 'attempt_started' => 'info',
+            'queued', 'attempt_skipped' => 'gray',
+            default => 'gray',
         };
     }
 }
