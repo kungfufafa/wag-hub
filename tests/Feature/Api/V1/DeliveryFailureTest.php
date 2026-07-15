@@ -58,8 +58,8 @@ class DeliveryFailureTest extends TestCase
         $this->createRoutingPolicy($client['id'], [$primary['id'], $secondary['id']]);
 
         Http::fake(fn (Request $request) => str_contains($request->url(), 'waha-primary.test')
-            ? Http::response(['error' => 'unavailable'], 503)
-            : Http::response(['reason' => 'account unavailable'], 503));
+            ? Http::response(['error' => 'invalid provider credential'], 401)
+            : Http::response(['reason' => 'provider rate limited'], 429));
 
         $this->postMessage(
             $client['token'],

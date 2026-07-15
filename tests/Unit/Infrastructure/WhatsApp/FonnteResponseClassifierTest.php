@@ -90,6 +90,18 @@ final class FonnteResponseClassifierTest extends TestCase
         self::assertFalse($result->allowsFallback());
     }
 
+    public function test_a_server_error_is_ambiguous_and_never_triggers_blind_fallback(): void
+    {
+        $result = (new FonnteResponseClassifier)->classify(
+            httpStatus: 503,
+            body: '{"status":false,"reason":"Upstream failed after processing began"}',
+        );
+
+        self::assertSame(ProviderOutcome::OutcomeUnknown, $result->outcome);
+        self::assertSame(RetryDisposition::ReconcileOnly, $result->retryDisposition);
+        self::assertFalse($result->allowsFallback());
+    }
+
     #[DataProvider('providerAccountFailureStatuses')]
     public function test_provider_or_account_http_errors_allow_fallback(int $httpStatus): void
     {
@@ -111,6 +123,5 @@ final class FonnteResponseClassifierTest extends TestCase
         yield 'authentication failure' => [401];
         yield 'authorization failure' => [403];
         yield 'rate limited' => [429];
-        yield 'provider server error' => [503];
     }
 }

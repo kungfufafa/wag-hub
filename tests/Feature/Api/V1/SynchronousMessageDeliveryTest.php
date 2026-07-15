@@ -97,7 +97,7 @@ class SynchronousMessageDeliveryTest extends TestCase
 
         Http::fake(function (Request $request) {
             if (str_contains($request->url(), 'waha-primary.test')) {
-                return Http::response(['error' => 'temporarily unavailable'], 503);
+                return Http::response(['error' => 'provider authentication failed'], 401);
             }
 
             return Http::response([
@@ -134,7 +134,7 @@ class SynchronousMessageDeliveryTest extends TestCase
         $this->assertSame('provider_failed', $attempts[0]->status);
         $this->assertSame('not_sent', $attempts[0]->delivery_certainty);
         $this->assertSame('fallback_allowed', $attempts[0]->retry_disposition);
-        $this->assertSame(503, $attempts[0]->http_status);
+        $this->assertSame(401, $attempts[0]->http_status);
         $this->assertNotNull($attempts[0]->latency_ms);
 
         $this->assertSame($secondary['id'], $attempts[1]->provider_account_id);
