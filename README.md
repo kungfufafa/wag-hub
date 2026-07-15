@@ -49,7 +49,9 @@ Application baru dari panel.
 Tambahkan kredensial provider dan token per aplikasi hanya bila ingin langsung
 dipakai saat seed; semua nilai `GATEWAY_SEED_*` bersifat opsional selain tiga
 nilai admin. Provider tidak akan dibuat tanpa konfigurasi lengkap dan route tidak
-akan dibuat tanpa provider aktif. Seeder dapat dijalankan ulang dengan aman.
+akan dibuat tanpa provider aktif. Tanpa credential, seeder tetap membuat akun
+WAHA dan Fonnte serta route awal dalam status nonaktif agar dapat dilengkapi dari
+panel. Seeder dapat dijalankan ulang dengan aman.
 Untuk provisioning tanpa menyimpan password di `.env`, gunakan:
 
 ```bash

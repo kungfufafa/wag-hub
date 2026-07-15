@@ -35,9 +35,7 @@ class GatewayHubManagementSeeder extends Seeder
         $applications = $this->seedApplications();
         $providers = $this->seedProviders();
 
-        if ($providers !== []) {
-            $this->seedDefaultRoutes($applications, $providers);
-        }
+        $this->seedDefaultRoutes($applications, $providers);
 
         $this->seedApplicationCredentials($applications);
     }
@@ -114,6 +112,19 @@ class GatewayHubManagementSeeder extends Seeder
                     'timeout_seconds' => 15,
                 ],
             );
+        } else {
+            $providers[] = ProviderAccount::query()->firstOrCreate(
+                ['slug' => 'waha-primary'],
+                [
+                    'name' => 'WAHA Primary',
+                    'driver' => 'waha',
+                    'configuration' => [],
+                    'is_active' => false,
+                    'health_status' => 'unknown',
+                    'consecutive_failures' => 0,
+                    'timeout_seconds' => 15,
+                ],
+            );
         }
 
         $fonnte = config('gateway.seed.providers.fonnte', []);
@@ -132,6 +143,21 @@ class GatewayHubManagementSeeder extends Seeder
                     'health_status' => 'unknown',
                     'consecutive_failures' => 0,
                     'circuit_open_until' => null,
+                    'timeout_seconds' => 15,
+                ],
+            );
+        } else {
+            $providers[] = ProviderAccount::query()->firstOrCreate(
+                ['slug' => 'fonnte-primary'],
+                [
+                    'name' => 'Fonnte Primary',
+                    'driver' => 'fonnte',
+                    'configuration' => [
+                        'endpoint' => 'https://api.fonnte.com/send',
+                    ],
+                    'is_active' => false,
+                    'health_status' => 'unknown',
+                    'consecutive_failures' => 0,
                     'timeout_seconds' => 15,
                 ],
             );
