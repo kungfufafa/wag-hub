@@ -52,7 +52,8 @@ class AdminResourceSmokeTest extends TestCase
             ->get($path)
             ->assertOk()
             ->assertSee($heading)
-            ->assertSee($resourceLabel);
+            ->assertSee($resourceLabel)
+            ->assertSee('2xl:grid-cols-3', false);
     }
 
     /**
