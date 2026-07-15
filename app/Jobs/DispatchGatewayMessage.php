@@ -20,7 +20,7 @@ final class DispatchGatewayMessage implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 90;
+    public int $timeout = 360;
 
     public function __construct(public readonly int $messageId) {}
 
@@ -29,7 +29,11 @@ final class DispatchGatewayMessage implements ShouldQueue
      */
     public function middleware(): array
     {
-        return [(new WithoutOverlapping("gateway-message:{$this->messageId}"))->dontRelease()];
+        return [
+            (new WithoutOverlapping("gateway-message:{$this->messageId}"))
+                ->dontRelease()
+                ->expireAfter(420),
+        ];
     }
 
     public function handle(GatewayMessageDispatcher $dispatcher): void
