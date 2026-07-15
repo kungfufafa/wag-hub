@@ -34,6 +34,14 @@ final class WahaResponseClassifierTest extends TestCase
         self::assertNull($result->providerMessageId);
     }
 
+    public function test_it_accepts_the_empty_created_response_used_by_this_waha_connection(): void
+    {
+        $result = (new WahaResponseClassifier)->classify(httpStatus: 201, body: '');
+
+        self::assertSame(ProviderOutcome::Accepted, $result->outcome);
+        self::assertNull($result->providerMessageId);
+    }
+
     #[DataProvider('ambiguousSuccessfulResponses')]
     public function test_an_indeterminate_2xx_response_is_unknown_and_cannot_fallback(string $body): void
     {
