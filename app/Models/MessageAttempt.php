@@ -37,6 +37,7 @@ class MessageAttempt extends Model
             'sequence' => 'integer',
             'http_status' => 'integer',
             'latency_ms' => 'integer',
+            'error_message' => 'encrypted',
             'response_excerpt' => 'encrypted',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',

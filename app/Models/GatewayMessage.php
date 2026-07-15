@@ -61,6 +61,7 @@ class GatewayMessage extends Model
             'recipient' => 'encrypted',
             'body' => 'encrypted',
             'metadata' => 'encrypted:array',
+            'last_error_message' => 'encrypted',
             'priority' => 'integer',
             'expires_at' => 'datetime',
             'queued_at' => 'datetime',
