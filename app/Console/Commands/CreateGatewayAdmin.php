@@ -18,9 +18,10 @@ class CreateGatewayAdmin extends Command
     public function handle(): int
     {
         $input = [
-            'name' => $this->option('name'),
-            'email' => $this->option('email'),
-            'password' => $this->option('password'),
+            'name' => $this->option('name') ?: $this->ask('Nama administrator'),
+            'email' => $this->option('email') ?: $this->ask('Alamat email administrator'),
+            'password' => $this->option('password')
+                ?: $this->secret('Kata sandi administrator (minimal 12 karakter)'),
         ];
 
         $validator = Validator::make($input, [
