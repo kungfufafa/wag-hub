@@ -53,7 +53,7 @@ class AdminResourceSmokeTest extends TestCase
             ->assertOk()
             ->assertSee($heading)
             ->assertSee($resourceLabel)
-            ->assertSee('max-w-full', false);
+            ->assertSee('fi-width-full', false);
     }
 
     /**

@@ -4,12 +4,15 @@ namespace App\Filament\Resources\ProviderAccounts\Pages;
 
 use App\Filament\Resources\ProviderAccounts\ProviderAccountResource;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Enums\Width;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
 
 class EditProviderAccount extends EditRecord
 {
     protected static string $resource = ProviderAccountResource::class;
+
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
