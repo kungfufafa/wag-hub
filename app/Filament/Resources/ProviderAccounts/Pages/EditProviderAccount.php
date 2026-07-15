@@ -11,6 +11,15 @@ class EditProviderAccount extends EditRecord
 {
     protected static string $resource = ProviderAccountResource::class;
 
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $configuration = $this->record->configuration ?? [];
+
+        $data['configuration'] = Arr::except($configuration, ['api_key', 'token']);
+
+        return $data;
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $driver = $data['driver'];
