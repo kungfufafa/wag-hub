@@ -9,6 +9,10 @@ final class WahaResponseClassifier
     public function classify(int $httpStatus, string $body): ProviderResult
     {
         if ($httpStatus >= 200 && $httpStatus < 300) {
+            if ($httpStatus === 201 && trim($body) === '') {
+                return ProviderResult::accepted(httpStatus: $httpStatus);
+            }
+
             $payload = $this->decodeObject($body);
 
             if ($payload === null || ! $this->isExplicitlyProcessable($payload)) {
