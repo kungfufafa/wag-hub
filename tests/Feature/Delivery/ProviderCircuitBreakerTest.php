@@ -118,4 +118,71 @@ class ProviderCircuitBreakerTest extends TestCase
         $this->assertSame('healthy', $healthyProvider->health_status);
         $this->assertNull($healthyProvider->circuit_open_until);
     }
+
+    public function test_unknown_outcomes_open_the_circuit_without_falling_back_for_the_current_message(): void
+    {
+        $client = $this->createClientApplication();
+        $primary = $this->createProviderAccount('waha', 'waha-unknown-primary', [
+            'base_url' => 'https://waha-unknown-primary.test',
+            'api_key' => 'primary-secret',
+            'session' => 'default',
+        ]);
+        $secondary = $this->createProviderAccount('fonnte', 'fonnte-unknown-secondary', [
+            'endpoint' => 'https://fonnte-unknown-secondary.test/send',
+            'token' => 'secondary-secret',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$primary['id'], $secondary['id']]);
+
+        $primaryCalls = 0;
+        $secondaryCalls = 0;
+        Http::fake(function (Request $request) use (&$primaryCalls, &$secondaryCalls) {
+            if (str_contains($request->url(), 'waha-unknown-primary.test')) {
+                $primaryCalls++;
+
+                return Http::response(['message' => 'Upstream result is uncertain.'], 500);
+            }
+
+            $secondaryCalls++;
+
+            return Http::response([
+                'status' => true,
+                'id' => 'secondary-after-open',
+            ]);
+        });
+
+        foreach (range(1, 3) as $sequence) {
+            $this->postMessage(
+                $client['token'],
+                "unknown-circuit-{$sequence}",
+                $this->messagePayload('sync'),
+            )
+                ->assertStatus(502)
+                ->assertJsonPath('error.code', 'provider_outcome_unknown');
+        }
+
+        $openedPrimary = ProviderAccount::query()->findOrFail($primary['id']);
+        $this->assertSame(3, $primaryCalls);
+        $this->assertSame(0, $secondaryCalls);
+        $this->assertSame(3, $openedPrimary->consecutive_failures);
+        $this->assertSame('unavailable', $openedPrimary->health_status);
+        $this->assertTrue($openedPrimary->circuit_open_until->isFuture());
+
+        $fourth = $this->postMessage(
+            $client['token'],
+            'unknown-circuit-skips-open-primary',
+            $this->messagePayload('sync'),
+        )->assertCreated();
+
+        $this->assertSame(3, $primaryCalls);
+        $this->assertSame(1, $secondaryCalls);
+
+        $fourthMessageId = DB::table('gateway_messages')
+            ->where('uuid', $fourth->json('data.id'))
+            ->value('id');
+        $this->assertDatabaseHas('message_attempts', [
+            'gateway_message_id' => $fourthMessageId,
+            'provider_account_id' => $primary['id'],
+            'status' => 'skipped',
+        ]);
+    }
 }

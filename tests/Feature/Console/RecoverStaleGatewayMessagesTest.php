@@ -7,11 +7,14 @@ use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\MessageAttempt;
 use App\Models\ProviderAccount;
+use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Tests\TestCase;
 
 class RecoverStaleGatewayMessagesTest extends TestCase
@@ -59,6 +62,57 @@ class RecoverStaleGatewayMessagesTest extends TestCase
 
         Queue::assertPushed(DispatchGatewayMessage::class, 1);
         $this->assertDatabaseCount('message_events', 1);
+    }
+
+    public function test_stale_async_enqueue_failure_is_idempotently_reported_and_later_recovered(): void
+    {
+        $message = $this->createProcessingMessage(minutesOld: 10);
+        $dispatchCalls = 0;
+        $bus = Mockery::mock(BusDispatcher::class);
+        $bus->shouldReceive('dispatch')
+            ->times(3)
+            ->with(Mockery::type(DispatchGatewayMessage::class))
+            ->andReturnUsing(function () use (&$dispatchCalls): string {
+                $dispatchCalls++;
+
+                if ($dispatchCalls <= 2) {
+                    throw new RuntimeException('Queue storage is unavailable.');
+                }
+
+                return 'queued-job-id';
+            });
+        $this->app->instance(BusDispatcher::class, $bus);
+
+        $this->artisan('gateway:recover-stale', ['--minutes' => 5])
+            ->expectsOutputToContain('Requeued: 0')
+            ->expectsOutputToContain('Enqueue failed: 1')
+            ->assertFailed();
+
+        $this->assertSame('queued', $message->fresh()->status);
+        $this->assertDatabaseHas('message_events', [
+            'gateway_message_id' => $message->id,
+            'type' => 'enqueue_failed',
+            'source' => 'system',
+        ]);
+
+        $this->artisan('gateway:recover-stale', ['--minutes' => 5])
+            ->expectsOutputToContain('Requeued: 0')
+            ->expectsOutputToContain('Enqueue failed: 1')
+            ->assertFailed();
+
+        $this->assertSame(1, $message->events()->where('type', 'enqueue_failed')->count());
+        $this->assertSame(0, $message->events()->where('type', 'enqueue_recovered')->count());
+
+        $this->artisan('gateway:recover-stale', ['--minutes' => 5])
+            ->expectsOutputToContain('Requeued: 1')
+            ->expectsOutputToContain('Enqueue failed: 0')
+            ->assertSuccessful();
+
+        $this->assertSame(3, $dispatchCalls);
+        $this->assertSame(
+            ['recovery_requeued', 'enqueue_failed', 'enqueue_recovered'],
+            $message->events()->orderBy('id')->pluck('type')->all(),
+        );
     }
 
     public function test_unfinished_started_attempt_becomes_unknown_and_is_never_blindly_resent(): void
@@ -136,11 +190,49 @@ class RecoverStaleGatewayMessagesTest extends TestCase
         Queue::assertNothingPushed();
     }
 
-    public function test_recovery_ignores_fresh_sync_and_nonprocessing_messages(): void
+    public function test_stale_sync_processing_without_an_attempt_becomes_safely_failed(): void
+    {
+        Queue::fake();
+        $message = $this->createProcessingMessage(minutesOld: 10, mode: 'sync');
+
+        $this->artisan('gateway:recover-stale', ['--minutes' => 5])
+            ->expectsOutputToContain('Failed aggregates restored: 1')
+            ->assertSuccessful();
+
+        $recovered = $message->fresh();
+        $this->assertSame('failed', $recovered->status);
+        $this->assertSame('stale_sync_without_attempt', $recovered->last_error_code);
+        $this->assertNotNull($recovered->failed_at);
+        $this->assertTrue($recovered->isSafeToRetry());
+        $this->assertDatabaseHas('message_events', [
+            'gateway_message_id' => $message->id,
+            'type' => 'recovery_sync_failed_before_attempt',
+            'source' => 'system',
+        ]);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_stale_sync_processing_with_a_started_attempt_becomes_outcome_unknown(): void
+    {
+        Queue::fake();
+        $message = $this->createProcessingMessage(minutesOld: 10, mode: 'sync');
+        $attempt = $this->createAttempt($message, 'started', finished: false);
+
+        $this->artisan('gateway:recover-stale', ['--minutes' => 5])
+            ->expectsOutputToContain('Outcome unknown: 1')
+            ->assertSuccessful();
+
+        $this->assertSame('outcome_unknown', $message->fresh()->status);
+        $this->assertSame('outcome_unknown', $attempt->fresh()->status);
+        $this->assertSame('reconcile_only', $attempt->fresh()->retry_disposition);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_recovery_ignores_fresh_and_nonprocessing_messages(): void
     {
         Queue::fake();
         $fresh = $this->createProcessingMessage(minutesOld: 4);
-        $sync = $this->createProcessingMessage(minutesOld: 10, mode: 'sync');
+        $freshSync = $this->createProcessingMessage(minutesOld: 4, mode: 'sync');
         $queued = $this->createProcessingMessage(minutesOld: 10, status: 'queued');
 
         $this->artisan('gateway:recover-stale', ['--minutes' => 5])
@@ -148,7 +240,7 @@ class RecoverStaleGatewayMessagesTest extends TestCase
             ->assertSuccessful();
 
         $this->assertSame('processing', $fresh->fresh()->status);
-        $this->assertSame('processing', $sync->fresh()->status);
+        $this->assertSame('processing', $freshSync->fresh()->status);
         $this->assertSame('queued', $queued->fresh()->status);
         $this->assertDatabaseCount('message_events', 0);
         Queue::assertNothingPushed();

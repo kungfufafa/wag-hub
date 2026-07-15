@@ -14,12 +14,15 @@ use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\ProviderAccount;
 use App\Models\User;
+use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Tests\TestCase;
 
 class AdminResourceBehaviorTest extends TestCase
@@ -75,6 +78,50 @@ class AdminResourceBehaviorTest extends TestCase
             DispatchGatewayMessage::class,
             fn (DispatchGatewayMessage $job): bool => $job->messageId === $message->getKey(),
         );
+    }
+
+    public function test_safe_retry_reports_enqueue_failure_and_leaves_the_message_recoverable(): void
+    {
+        $message = $this->createMessage('failed', now()->addMinute());
+        $message->forceFill(['mode' => 'sync'])->save();
+        $dispatchCalls = 0;
+        $bus = Mockery::mock(BusDispatcher::class);
+        $bus->shouldReceive('dispatch')
+            ->twice()
+            ->with(Mockery::type(DispatchGatewayMessage::class))
+            ->andReturnUsing(function () use (&$dispatchCalls): string {
+                $dispatchCalls++;
+
+                if ($dispatchCalls === 1) {
+                    throw new RuntimeException('Queue storage is unavailable.');
+                }
+
+                return 'queued-job-id';
+            });
+        $this->app->instance(BusDispatcher::class, $bus);
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->callAction('retry')
+            ->assertHasNoActionErrors()
+            ->assertNotified('Retry saved but queue unavailable');
+
+        $this->assertSame('queued', $message->fresh()->status);
+        $this->assertDatabaseHas('message_events', [
+            'gateway_message_id' => $message->getKey(),
+            'type' => 'enqueue_failed',
+            'source' => 'admin',
+        ]);
+
+        $this->artisan('gateway:recover-stale')
+            ->expectsOutputToContain('Requeued: 1')
+            ->assertSuccessful();
+
+        $this->assertSame(2, $dispatchCalls);
+        $this->assertDatabaseHas('message_events', [
+            'gateway_message_id' => $message->getKey(),
+            'type' => 'enqueue_recovered',
+            'source' => 'system',
+        ]);
     }
 
     #[DataProvider('unsafeRetryProvider')]
