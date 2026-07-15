@@ -129,6 +129,10 @@ class GatewayMessage extends Model
             ->update([
                 'status' => 'queued',
                 'queued_at' => $queuedAt,
+                'processing_at' => null,
+                'failed_at' => null,
+                'last_error_code' => null,
+                'last_error_message' => null,
                 'updated_at' => $queuedAt,
             ]);
 
