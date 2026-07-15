@@ -2,6 +2,8 @@
 
 Gateway Laravel terpusat untuk `appscript-ft`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA/Fonnte, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
 
+Panduan deploy production dari `git clone`: [docs/DEPLOYMENT_ID.md](docs/DEPLOYMENT_ID.md).
+
 ## Cakupan MVP
 
 - API Bearer token terpisah untuk setiap aplikasi.
