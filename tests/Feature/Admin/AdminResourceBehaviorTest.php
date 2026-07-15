@@ -4,6 +4,7 @@ namespace Tests\Feature\Admin;
 
 use App\Filament\Resources\ClientApplications\Pages\EditClientApplication;
 use App\Filament\Resources\ClientApplications\RelationManagers\ApiCredentialsRelationManager;
+use App\Filament\Resources\GatewayMessages\GatewayMessageResource;
 use App\Filament\Resources\GatewayMessages\Pages\ListGatewayMessages;
 use App\Filament\Resources\GatewayMessages\Pages\ViewGatewayMessage;
 use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
@@ -62,6 +63,45 @@ class AdminResourceBehaviorTest extends TestCase
 
         Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
             ->assertSee('Diterima provider')
+            ->assertDontSee('Hasil tidak diketahui');
+    }
+
+    public function test_message_detail_shows_the_encrypted_body_for_admin_audit(): void
+    {
+        $message = $this->createMessage('provider_accepted', now()->addMinute());
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertSee('Isi pesan')
+            ->assertSee('Sensitive gateway body');
+    }
+
+    public function test_message_view_shows_compact_lifecycle_timeline_without_empty_stages(): void
+    {
+        $message = $this->createMessage('provider_accepted', now()->addMinute());
+        $message->forceFill([
+            'processing_at' => now()->subSeconds(2),
+            'provider_accepted_at' => now()->subSecond(),
+            'queued_at' => null,
+            'failed_at' => null,
+            'outcome_unknown_at' => null,
+            'dead_lettered_at' => null,
+        ])->save();
+
+        $timeline = GatewayMessageResource::lifecycleTimeline($message->fresh());
+
+        $this->assertSame(
+            ['Dibuat', 'Diproses', 'Diterima provider', 'Kedaluwarsa'],
+            array_column($timeline, 'label'),
+        );
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertSee('Siklus hidup')
+            ->assertSee('Dibuat')
+            ->assertSee('Diproses')
+            ->assertSee('Diterima provider')
+            ->assertSee('Kedaluwarsa')
+            ->assertDontSee('Masuk antrian')
+            ->assertDontSee('Dead letter')
             ->assertDontSee('Hasil tidak diketahui');
     }
 
