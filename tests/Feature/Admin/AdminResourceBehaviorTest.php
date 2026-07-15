@@ -211,6 +211,27 @@ class AdminResourceBehaviorTest extends TestCase
         );
     }
 
+    public function test_edit_form_displays_a_fonnte_endpoint_but_not_its_token(): void
+    {
+        $provider = ProviderAccount::forceCreate([
+            'name' => 'Fonnte Primary',
+            'slug' => 'fonnte-primary',
+            'driver' => 'fonnte',
+            'configuration' => [
+                'endpoint' => 'https://api.fonnte.com/send',
+                'token' => 'existing-fonnte-token',
+            ],
+            'is_active' => true,
+            'health_status' => 'healthy',
+            'timeout_seconds' => 15,
+        ]);
+
+        Livewire::test(EditProviderAccount::class, ['record' => $provider->getKey()])
+            ->assertSchemaStateSet(['configuration.endpoint' => 'https://api.fonnte.com/send'])
+            ->assertSchemaStateSet(['configuration.token' => null])
+            ->assertDontSee('existing-fonnte-token');
+    }
+
     public function test_routing_policy_rejects_the_same_provider_twice(): void
     {
         $application = $this->createClient('route-application');
