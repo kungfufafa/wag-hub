@@ -59,11 +59,6 @@ class GatewayMessageResource extends Resource
                 TextColumn::make('recipient_last4')
                     ->label('Penerima')
                     ->formatStateUsing(fn (?string $state): string => '••••••••'.($state ?? '')),
-                TextColumn::make('body')
-                    ->label('Isi pesan')
-                    ->limit(90)
-                    ->tooltip(fn (GatewayMessage $record): string => (string) $record->body)
-                    ->wrap(),
                 TextColumn::make('purpose')
                     ->label('Tujuan')
                     ->badge()
