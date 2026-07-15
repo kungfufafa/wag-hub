@@ -62,16 +62,16 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 | FR-002 | Sistem harus memvalidasi dan menormalisasi satu nomor individual Indonesia serta menolak raw JID dan multi-target. | Must | Kompatibilitas aplikasi | TC-004–TC-006 |
 | FR-003 | Sistem harus mewajibkan `Idempotency-Key` dan mengembalikan message/result yang sama untuk pengulangan key dalam aplikasi yang sama. | Must | Risiko duplikasi | TC-007–TC-009 |
 | FR-004 | Sistem harus mendukung mode sinkron yang sukses hanya setelah salah satu provider mengembalikan penerimaan eksplisit. | Must | OTP | TC-010–TC-014 |
-| FR-005 | Sistem harus mendukung mode asinkron yang menyimpan pesan secara durabel lalu menjalankan job pengiriman. | Must | Notifikasi | TC-015–TC-017 |
-| FR-006 | Sistem harus memilih routing policy berdasarkan aplikasi + route key/purpose, lalu mencoba provider account aktif sesuai urutan step. | Must | Routing berlapis | TC-018–TC-021 |
+| FR-005 | Sistem harus mendukung mode asinkron yang menyimpan pesan secara durabel, menjalankan job, dan merekam/memulihkan handoff queue yang gagal. | Must | Notifikasi | TC-015–TC-017 |
+| FR-006 | Sistem harus memilih routing policy berdasarkan aplikasi + route key/purpose, lalu mencoba provider account aktif/circuit-closed sesuai urutan step. | Must | Routing berlapis | TC-018–TC-021 |
 | FR-007 | Sistem harus menyediakan driver WAHA dan Fonnte dengan request serta klasifikasi response masing-masing. | Must | Provider saat ini | TC-022–TC-029 |
 | FR-008 | Sistem harus menyimpan satu attempt record untuk setiap panggilan provider, termasuk status, latency, HTTP status, remote ID, dan error tersanitasi. | Must | Observability | TC-030–TC-032 |
-| FR-009 | Sistem harus menjaga lifecycle message `queued`, `processing`, `provider_accepted`, `failed`, `outcome_unknown`, `expired`, dan `dead_letter`. | Must | Operasi | TC-033–TC-036 |
+| FR-009 | Sistem harus menjaga lifecycle message `queued`, `processing`, `provider_accepted`, `failed`, `outcome_unknown`, `expired`, dan `dead_letter` serta merekonsiliasi processing stale tanpa blind resend. | Must | Operasi | TC-033–TC-036 |
 | FR-010 | Sistem harus menolak pengiriman pesan yang sudah melewati `expires_at`. | Must | OTP | TC-037 |
 | FR-011 | Administrator harus dapat mengelola aplikasi, API credential, provider account, routing policy, dan ordered route step. | Must | Operasi pusat | TC-038–TC-041 |
 | FR-012 | Administrator harus dapat melihat message timeline dan melakukan retry manual hanya pada status terminal yang aman. | Must | Operasi pusat | TC-042–TC-044 |
 | FR-013 | Sistem harus menyediakan endpoint baca status yang hanya dapat melihat pesan milik aplikasi pemanggil. | Should | Integrasi | TC-045–TC-047 |
-| FR-014 | Pilot `web-shelf` harus menggunakan Hub melalui adapter yang mempertahankan `send(): bool` dan tidak lagi menyimpan credential provider. | Must | Persetujuan MVP | TC-048–TC-051 |
+| FR-014 | Pilot `web-shelf` harus menggunakan Hub melalui adapter yang mempertahankan `send(): bool`, memakai identitas event stabil untuk retry, dan tidak lagi menyimpan credential provider. | Must | Persetujuan MVP | TC-048–TC-051 |
 
 ## Business rules
 
@@ -85,12 +85,14 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 | BR-006 | Pesan kedaluwarsa tidak boleh dipanggil ke provider. | FR-010 | OTP safety |
 | BR-007 | Retry manual membuat attempt baru dan tidak menghapus history lama. | FR-008, FR-012 | Auditability |
 | BR-008 | Provider/response rahasia tidak pernah dikembalikan ke client atau log umum. | FR-007, FR-008 | Security |
+| BR-009 | Outcome ambigu menghentikan pesan saat ini tetapi menambah failure health; setelah threshold, circuit terbuka agar pesan baru melewati provider tersebut. | FR-006, FR-009 | Reliability |
+| BR-010 | Processing stale tanpa attempt provider aman direqueue (async) atau ditandai failed (sync); started attempt stale menjadi outcome_unknown. | FR-005, FR-009 | Crash recovery |
 
 ## Non-functional requirements
 
 | ID | Quality | Measurable requirement | Verification |
 |---|---|---|---|
-| NFR-001 | Security | Provider credential dan message body tersimpan terenkripsi; API token hanya tersimpan sebagai SHA-256 hash; admin nonaktif/non-admin ditolak. | Model cast review, TC-001–TC-003, TC-038 |
+| NFR-001 | Security | Provider credential, message body, metadata, dan error sensitif tersimpan terenkripsi; API token hanya tersimpan sebagai SHA-256 hash; endpoint provider wajib exact-host allowlist; admin nonaktif/non-admin ditolak. | Model cast review, endpoint guard tests, TC-001–TC-003, TC-038 |
 | NFR-002 | Reliability | Idempotency harus tetap benar pada request berulang dan unique constraint menjadi guard terakhir. | TC-007–TC-009 |
 | NFR-003 | Performance | Validasi/queue response lokal p95 target <300 ms di luar waktu provider; latency provider dicatat per attempt. | Benchmark pasca-deploy dan TC-031 |
 | NFR-004 | Privacy | List admin selalu mem-mask recipient; raw body tidak muncul di application log; OTP content direkomendasikan retensi maksimal 24 jam. | UI/code review |
@@ -125,4 +127,4 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 
 ## Validation record
 
-Pada 2026-07-15 stakeholder menyetujui ringkasan arsitektur outbound-first dengan balasan “lanjur mvp”. Dokumen rinci ini berstatus `Reviewed`, bukan `Validated`, karena dibuat setelah persetujuan ringkasan. Persetujuan tersebut dicatat sebagai izin eksplisit untuk implementasi MVP dengan exception bahwa artefak rinci akan ditinjau pada handoff.
+Pada 2026-07-15 stakeholder menyetujui ringkasan arsitektur outbound-first dengan balasan “lanjur mvp”. Implementasi dan evidence kini berstatus Runtime Verified oleh AI; acceptance manusia dan live-provider smoke tetap diperlukan pada handoff sebelum production go-live.

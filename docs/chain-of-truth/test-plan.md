@@ -29,9 +29,9 @@ Risiko tertinggi adalah duplicate delivery setelah ambiguous timeout, false-posi
 
 - Entry: SRS/flows/data/UCIC berstatus Reviewed dan implementation exception dicatat.
 - RED gate: test target benar-benar berjalan dan gagal karena behavior belum ada.
-- Exit: semua P0/P1 automated tests pass, tidak ada skipped test, Pint pass, dependency audit bersih, dan target coverage 80% saat coverage extension tersedia.
-- Browser E2E dapat dicatat Not Run bila panel feature tests dan manual render tersedia, tetapi menjadi residual risk sebelum production go-live.
+- Exit: semua P0/P1 outbound automated tests pass, tidak ada skipped test, Pint pass, dependency audit bersih, dan target coverage 80% saat coverage extension tersedia.
+- Browser runtime inspection wajib mencakup login, dashboard, resource navigation, form, empty state, dan console error. Live-provider smoke tetap gate deployment terpisah.
 
 ## Execution and evidence
 
-Primary commands: `php artisan test`, targeted `php artisan test --filter=...`, `vendor/bin/pint --test`, `composer audit`. Coverage: `php artisan test --coverage --min=80` pada CI/runtime yang memiliki Xdebug atau PCOV. Hasil dicatat di `test-execution.md`.
+Primary commands: `php artisan test`, targeted `php artisan test --filter=...`, `vendor/bin/pint --test`, `composer audit`, `npm audit`, dan `npm run build`. Coverage: `php artisan test --coverage --min=80` pada CI/runtime yang memiliki Xdebug atau PCOV. Hasil dicatat di `test-execution.md`.

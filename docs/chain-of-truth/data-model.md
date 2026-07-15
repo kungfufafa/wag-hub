@@ -118,7 +118,7 @@ Used by: UC-001, UC-002, UC-004
 | status | string(32) | yes | state machine | Internal/public |
 | metadata | encrypted text | no | bounded JSON | Sensitive |
 | provider_message_id | string(255) | no | remote ID | Internal |
-| last_error_code/message | string/text | no | sanitized | Internal |
+| last_error_code/message | string/encrypted text | no | sanitized; message encrypted at rest | Sensitive/internal |
 | expires_at | datetime | required for otp | future, bounded | Internal |
 | queued_at, processing_at, provider_accepted_at, failed_at, outcome_unknown_at, dead_lettered_at | datetime | no | lifecycle | Internal |
 | timestamps | datetime | yes | automatic | Internal |
@@ -178,6 +178,7 @@ Used by: UC-001, UC-002, UC-004
 async: queued -> processing -> provider_accepted | failed | outcome_unknown | expired
 sync:  processing -> provider_accepted | failed | outcome_unknown | expired
 manual safe retry: failed -> queued
+queue handoff recovery: queued + enqueue_failed -> enqueue_recovered
 ```
 
 - `provider_accepted`, `outcome_unknown`, dan `expired` tidak otomatis retry.
@@ -188,11 +189,12 @@ manual safe retry: failed -> queued
 ## Persistence and lifecycle
 
 - Insert idempotent message memakai transaksi + unique `(client_application_id, idempotency_key)`; duplicate race membaca record pemenang dan membandingkan `payload_hash`.
-- Job dispatch dilakukan `afterCommit`; recovery command dapat mencari `queued` tanpa job.
+- Job dispatch dilakukan setelah transaksi intake/retry selesai. Kegagalan handoff dicatat sebagai `enqueue_failed` dan recovery command mencoba kembali hingga `enqueue_recovered`.
 - Provider call tidak berada dalam transaksi database panjang. Attempt `started` disimpan lebih dulu; crash setelah itu diperlakukan outcome tidak pasti saat rekonsiliasi.
+- Processing stale tanpa attempt direqueue untuk async dan ditutup sebagai failed-safe untuk sync; started attempt stale tidak pernah dikirim ulang otomatis.
 - Foreign record konfigurasi memakai soft delete; delivery ledger tidak cascade-delete.
 - Index utama: message `(app,status,created_at)`, `(recipient_hash,created_at)`, attempt `(message,sequence)`, policy `(app,key,purpose,is_active)`.
-- Scheduled pruning menghapus body/response sesuai retensi tanpa menghapus metadata status/attempt sebelum masa audit berakhir.
+- Scheduled pruning belum diimplementasikan pada MVP. Deployment owner harus menetapkan purge manual sampai kebijakan retensi final dan command pruning tersedia.
 
 ## Diagram/schema
 

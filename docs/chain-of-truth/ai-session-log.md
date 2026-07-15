@@ -3,7 +3,9 @@
 | Date | Objective | Model/tool | Context artifacts | Instruction summary | Result/evidence |
 |---|---|---|---|---|---|
 | 2026-07-15 | Audit four WhatsApp integrations | Codex + local read-only inspection + subagents | appscript-ft, web-shelf, web-sam, web-helpdesk | Map provider logic, sync semantics, logs, risks | Identical Laravel gateways, seven duplicated Apps Script blocks, OTP sync requirement, public inbound risks |
-| 2026-07-15 | Define and implement Gateway Hub MVP | Codex, Chain of Truth, TDD, official provider docs | SRS through UCIC 0.1.0 | Outbound-first Hub, WAHA/Fonnte, routing, ledger, Filament, Shelf pilot | Laravel scaffold `448154e`; artifacts Reviewed; implementation pending |
+| 2026-07-15 | Define and implement Gateway Hub MVP | Codex, Chain of Truth, TDD, official provider docs | SRS through UCIC 0.1.0 | Outbound-first Hub, WAHA/Fonnte, routing, ledger, Filament, Shelf pilot | Hub API/admin/provider engine implemented; Shelf pilot adapter committed |
+| 2026-07-15 | Harden delivery and operational boundaries | Codex + parallel read-only security/ops reviews | Code, tests, provider contracts | Classify ambiguity safely; recover queue/stale state; protect endpoints/secrets; circuit health | 154 Hub tests GREEN; allowlist, encryption, rate limit, deterministic routes, recovery, stable Shelf idempotency |
+| 2026-07-15 | Validate executable MVP | Codex + local browser + build/audit tools | Filament runtime, migrations, routes, scheduler, Hub/Shelf suites | Verify rendered admin and release evidence | Browser pass/no console error; build/audits clean; Shelf targeted 29/106 GREEN |
 
 ## Reproducibility notes
 
@@ -11,3 +13,5 @@
 - Framework scaffold resolved Laravel 12.64.0 on 2026-07-15; dependency resolution can change on a fresh install unless `composer.lock` is used.
 - Official provider contract evidence consulted: WAHA sendText documentation and Fonnte send-message response documentation on 2026-07-15.
 - Rerun from repo root with `composer install`, copy `.env.example`, generate key, and execute `php artisan test`.
+- Numerical coverage is not reproducible in this local runtime because Xdebug/PCOV is absent; CI must run the documented coverage command.
+- No real provider credential was copied from the audited applications or used in automated/browser verification.

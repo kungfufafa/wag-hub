@@ -53,7 +53,7 @@ Status: Reviewed
 | TC-047 | API | FR-013 | read ability missing | GET own UUID | 403 | P0 |
 | TC-048 | Pilot unit | FR-014 | web-shelf adapter | Hub 202 queued | `send()` true | P0 |
 | TC-049 | Pilot unit | FR-014 | web-shelf adapter | Hub validation/auth/failed response | `send()` false + safe log | P0 |
-| TC-050 | Pilot unit | FR-014/FR-003 | repeated business event | inspect request | stable Idempotency-Key and canonical body | P0 |
+| TC-050 | Pilot unit | FR-014/FR-003 | caller supplies stable business-event context | retry the same reminder after ambiguous transport failure | same keyed request identity, Idempotency-Key, client reference, and canonical body | P0 |
 | TC-051 | Pilot security | FR-014/NFR-001 | migrated config | inspect code/env contract | no WAHA/Fonnte credential required by Shelf adapter | P0 |
 
 ## Coverage summary
