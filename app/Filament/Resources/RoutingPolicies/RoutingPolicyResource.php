@@ -15,6 +15,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -22,6 +23,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
 class RoutingPolicyResource extends Resource
@@ -55,6 +57,13 @@ class RoutingPolicyResource extends Resource
                         ->label('Route key')
                         ->required()
                         ->alphaDash()
+                        ->scopedUnique(
+                            model: RoutingPolicy::class,
+                            ignoreRecord: true,
+                            modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query
+                                ->where('client_application_id', $get('client_application_id'))
+                                ->where('purpose', $get('purpose')),
+                        )
                         ->maxLength(80),
                     Select::make('purpose')
                         ->options([
