@@ -12,11 +12,12 @@ use App\Services\GatewayMessageDispatcher;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
-use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Throwable;
 
 class MessageController extends Controller
 {
@@ -40,13 +41,9 @@ class MessageController extends Controller
                 $message = $this->createMessage($request, $application, $payloadHash);
                 $this->recordIngressEvent($message);
 
-                if ($this->statusValue($message->mode) === 'async') {
-                    DispatchGatewayMessage::dispatch($message->getKey())->afterCommit();
-                }
-
                 return $message;
             });
-        } catch (QueryException $exception) {
+        } catch (UniqueConstraintViolationException $exception) {
             $winner = $this->findExisting(
                 applicationId: $application->getKey(),
                 idempotencyKey: $request->idempotencyKey(),
@@ -60,6 +57,12 @@ class MessageController extends Controller
         }
 
         if ($this->statusValue($message->mode) === 'async') {
+            $enqueueFailure = $this->enqueueAsyncMessage($request, $message, false);
+
+            if ($enqueueFailure !== null) {
+                return $enqueueFailure;
+            }
+
             return response()->json([
                 'data' => $this->messageData($message, false),
                 'request_id' => $this->requestId($request),
@@ -178,10 +181,79 @@ class MessageController extends Controller
             ], 409);
         }
 
+        if ($this->hasUnrecoveredEnqueueFailure($message)) {
+            $enqueueFailure = $this->enqueueAsyncMessage($request, $message, true);
+
+            if ($enqueueFailure !== null) {
+                return $enqueueFailure;
+            }
+
+            $this->recordQueueEvent($message, 'enqueue_recovered');
+        }
+
         return response()->json([
             'data' => $this->messageData($message, true),
             'request_id' => $this->requestId($request),
         ]);
+    }
+
+    private function enqueueAsyncMessage(
+        Request $request,
+        GatewayMessage $message,
+        bool $duplicate,
+    ): ?JsonResponse {
+        try {
+            DispatchGatewayMessage::dispatch($message->getKey());
+        } catch (Throwable) {
+            $this->recordQueueEvent($message, 'enqueue_failed');
+
+            return response()->json([
+                'message' => 'The message was saved, but the queue is currently unavailable.',
+                'error' => [
+                    'code' => 'queue_unavailable',
+                    'retryable' => true,
+                ],
+                'data' => $this->messageData($message, $duplicate),
+                'request_id' => $this->requestId($request),
+            ], 503);
+        }
+
+        return null;
+    }
+
+    private function hasUnrecoveredEnqueueFailure(GatewayMessage $message): bool
+    {
+        if (
+            $this->statusValue($message->mode) !== 'async'
+            || $this->statusValue($message->status) !== 'queued'
+        ) {
+            return false;
+        }
+
+        $latestQueueEvent = MessageEvent::query()
+            ->where('gateway_message_id', $message->getKey())
+            ->whereIn('type', ['enqueue_failed', 'enqueue_recovered'])
+            ->when(
+                $message->queued_at !== null,
+                fn ($query) => $query->where('occurred_at', '>=', $message->queued_at),
+            )
+            ->latest('id')
+            ->value('type');
+
+        return $latestQueueEvent === 'enqueue_failed';
+    }
+
+    private function recordQueueEvent(GatewayMessage $message, string $type): void
+    {
+        $event = new MessageEvent;
+        $event->forceFill([
+            'gateway_message_id' => $message->getKey(),
+            'type' => $type,
+            'source' => 'api',
+            'data' => null,
+            'occurred_at' => now(),
+        ]);
+        $event->save();
     }
 
     private function dispatchFailureResponse(Request $request, GatewayMessage $message): JsonResponse
