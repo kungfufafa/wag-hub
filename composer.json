@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.2",
         "filament/filament": "^4.11",
+        "kungfufafa/mekaya-theme": "@dev",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1"
     },
@@ -83,6 +84,9 @@
             "php-http/discovery": true
         }
     },
+    "repositories": [
+        { "type": "vcs", "url": "https://github.com/kungfufafa/mekaya-theme.git" }
+    ],
     "minimum-stability": "stable",
     "prefer-stable": true
 }
