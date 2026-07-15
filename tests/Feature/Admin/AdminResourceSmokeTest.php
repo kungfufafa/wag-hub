@@ -36,4 +36,30 @@ class AdminResourceSmokeTest extends TestCase
             'message ledger' => ['/admin/messages'],
         ];
     }
+
+    #[DataProvider('configurationCreatePages')]
+    public function test_configuration_create_pages_show_a_next_step_sidebar(string $path, string $heading): void
+    {
+        $administrator = User::factory()->create([
+            'is_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($administrator)
+            ->get($path)
+            ->assertOk()
+            ->assertSee($heading);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function configurationCreatePages(): array
+    {
+        return [
+            'client application' => ['/admin/client-applications/create', 'Langkah berikutnya'],
+            'provider account' => ['/admin/provider-accounts/create', 'Sebelum menyimpan'],
+            'routing policy' => ['/admin/routing-policies/create', 'Urutan pengiriman'],
+        ];
+    }
 }
