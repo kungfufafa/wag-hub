@@ -84,12 +84,22 @@ class HubManagementSeederTest extends TestCase
         $shelf = ClientApplication::query()->where('slug', 'web-shelf')->sole();
         $policy = RoutingPolicy::query()
             ->where('client_application_id', $shelf->id)
+            ->where('operation', 'message')
             ->where('key', 'shelf-notifications')
             ->sole();
 
         $this->assertSame(
             ['waha-primary', 'fonnte-primary', 'gowa-primary', 'waba-primary'],
             $policy->steps->pluck('providerAccount.slug')->all(),
+        );
+        $numberCheckPolicy = RoutingPolicy::query()
+            ->where('client_application_id', $shelf->id)
+            ->where('operation', 'number_check')
+            ->where('key', 'default')
+            ->sole();
+        $this->assertSame(
+            ['waha-primary', 'fonnte-primary', 'gowa-primary'],
+            $numberCheckPolicy->steps->pluck('providerAccount.slug')->all(),
         );
 
         $credential = ApiCredential::query()->where('client_application_id', $shelf->id)->sole();
@@ -115,7 +125,7 @@ class HubManagementSeederTest extends TestCase
         $this->assertDatabaseCount('users', 1);
         $this->assertDatabaseCount('client_applications', 4);
         $this->assertDatabaseCount('provider_accounts', 4);
-        $this->assertDatabaseCount('routing_policies', 4);
+        $this->assertDatabaseCount('routing_policies', 8);
         $this->assertDatabaseCount('api_credentials', 0);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'waha-primary')->sole()->is_active);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'fonnte-primary')->sole()->is_active);
