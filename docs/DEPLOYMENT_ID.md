@@ -77,7 +77,7 @@ php artisan view:cache
 
 Seeder membuat aplikasi `appscript-ft`, `web-helpdesk`, `web-sam`, dan `web-shelf`, serta route awal. Masuk ke `https://gateway.example.com/admin`, lalu:
 
-1. Lengkapi **Akun Provider** WAHA/Fonnte.
+1. Lengkapi **Akun Provider** WAHA, Fonnte, GOWA, atau WABA.
 2. Pastikan **Aturan Pengiriman** aktif dengan urutan fallback yang benar.
 3. Terbitkan token di **Aplikasi Klien** untuk setiap aplikasi sumber.
 
@@ -160,7 +160,7 @@ WHATSAPP_HUB_ROUTE_KEY=default
 
 - OTP: gunakan `purpose=otp`, `mode=sync`, dan sertakan `expires_at` pada request.
 - Notifikasi: gunakan `mode=async`; worker Hub harus aktif.
-- Aplikasi sumber tidak lagi menyimpan credential WAHA/Fonnte.
+- Aplikasi sumber tidak lagi menyimpan credential provider WhatsApp.
 - Setelah mengubah `.env` aplikasi sumber, jalankan `php artisan config:cache` pada aplikasi tersebut.
 
 ## 9. Verifikasi deploy

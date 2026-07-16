@@ -5,6 +5,7 @@
 | 2026-07-15 | Audit four WhatsApp integrations | Codex + local read-only inspection + subagents | appscript-ft, web-shelf, web-sam, web-helpdesk | Map provider logic, sync semantics, logs, risks | Identical Laravel gateways, seven duplicated Apps Script blocks, OTP sync requirement, public inbound risks |
 | 2026-07-15 | Define and implement Gateway Hub MVP | Codex, Chain of Truth, TDD, official provider docs | SRS through UCIC 0.1.0 | Outbound-first Hub, WAHA/Fonnte, routing, ledger, Filament, Shelf pilot | Hub API/admin/provider engine implemented; Shelf pilot adapter committed |
 | 2026-07-15 | Harden delivery and operational boundaries | Codex + parallel read-only security/ops reviews | Code, tests, provider contracts | Classify ambiguity safely; recover queue/stale state; protect endpoints/secrets; circuit health | 154 Hub tests GREEN; allowlist, encryption, rate limit, deterministic routes, recovery, stable Shelf idempotency |
+| 2026-07-16 | Add GOWA and WABA providers | Codex, Graphify, TDD, official GOWA and Meta contracts | Provider engine, admin, seed, docs | Add GOWA Basic Auth/device scoping and WABA Meta Cloud API text delivery | 201 Hub tests GREEN; 894 assertions; dependency audits clean |
 | 2026-07-15 | Validate executable MVP | Codex + local browser + build/audit tools | Filament runtime, migrations, routes, scheduler, Hub/Shelf suites | Verify rendered admin and release evidence | Browser pass/no console error; build/audits clean; Shelf targeted 29/106 GREEN |
 
 ## Reproducibility notes

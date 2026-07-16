@@ -20,7 +20,7 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 - Token terpisah untuk setiap aplikasi sumber.
 - Mode sinkron sampai `provider_accepted` untuk OTP/transaksi kritis.
 - Mode asinkron yang berhenti di `queued` untuk notifikasi biasa.
-- Banyak akun WAHA/Fonnte dan route step berurutan.
+- Banyak akun WAHA, Fonnte, GOWA, dan WABA dengan route step berurutan.
 - Idempotency, masa kedaluwarsa, prioritas, attempt ledger, dan status message.
 - Pengelolaan aplikasi, credential, provider account, routing policy, dan route step.
 - Pencarian/filter log, detail timeline attempt, dan retry manual untuk kegagalan terminal.
@@ -41,7 +41,7 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 | ACT-001 | Aplikasi sumber | Meminta pengiriman dan membaca status pesan miliknya | Hanya token aplikasi aktif; tidak dapat memilih credential/provider account langsung |
 | ACT-002 | Administrator gateway | Mengelola aplikasi, provider, route, dan memantau/retry pesan | User aktif dengan `is_admin=true` |
 | ACT-003 | Queue worker | Memproses pesan asinkron | Proses internal; tidak diekspos sebagai API publik |
-| ACT-004 | Provider WAHA/Fonnte | Menerima pesan dari adapter | Hanya menerima credential account yang dipilih routing engine |
+| ACT-004 | Provider WhatsApp | Menerima pesan dari adapter WAHA, Fonnte, GOWA, atau WABA | Hanya menerima credential account yang dipilih routing engine |
 
 ## Assumptions and constraints
 
@@ -64,7 +64,7 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 | FR-004 | Sistem harus mendukung mode sinkron yang sukses hanya setelah salah satu provider mengembalikan penerimaan eksplisit. | Must | OTP | TC-010–TC-014 |
 | FR-005 | Sistem harus mendukung mode asinkron yang menyimpan pesan secara durabel, menjalankan job, dan merekam/memulihkan handoff queue yang gagal. | Must | Notifikasi | TC-015–TC-017 |
 | FR-006 | Sistem harus memilih routing policy berdasarkan aplikasi + route key/purpose, lalu mencoba provider account aktif/circuit-closed sesuai urutan step. | Must | Routing berlapis | TC-018–TC-021 |
-| FR-007 | Sistem harus menyediakan driver WAHA dan Fonnte dengan request serta klasifikasi response masing-masing. | Must | Provider saat ini | TC-022–TC-029 |
+| FR-007 | Sistem harus menyediakan driver WAHA, Fonnte, GOWA, dan WABA dengan request serta klasifikasi response masing-masing. | Must | Provider saat ini | TC-022–TC-029 |
 | FR-008 | Sistem harus menyimpan satu attempt record untuk setiap panggilan provider, termasuk status, latency, HTTP status, remote ID, dan error tersanitasi. | Must | Observability | TC-030–TC-032 |
 | FR-009 | Sistem harus menjaga lifecycle message `queued`, `processing`, `provider_accepted`, `failed`, `outcome_unknown`, `expired`, dan `dead_letter` serta merekonsiliasi processing stale tanpa blind resend. | Must | Operasi | TC-033–TC-036 |
 | FR-010 | Sistem harus menolak pengiriman pesan yang sudah melewati `expires_at`. | Must | OTP | TC-037 |
@@ -123,7 +123,7 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 |---|---|---|---|---|
 | OQ-001 | Retensi final body OTP/notifikasi untuk produksi | Storage dan privasi | Complete Selular IT | Sebelum production go-live; safe default diterapkan |
 | OQ-002 | URL/domain dan database/Redis produksi | Deployment | Complete Selular IT | Sebelum deployment |
-| OQ-003 | Webhook delivery/read WAHA dan Fonnte | Status delivery aktual | Complete Selular IT | Fase 2 |
+| OQ-003 | Webhook delivery/read semua provider | Status delivery aktual | Complete Selular IT | Fase 2 |
 
 ## Validation record
 

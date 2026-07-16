@@ -85,7 +85,7 @@ php artisan view:cache
 
 Masuk ke `https://gateway.example.com/admin`. Setelah login:
 
-1. Lengkapi **Akun Provider** WAHA/Fonnte.
+1. Lengkapi **Akun Provider** WAHA, Fonnte, GOWA, atau WABA.
 2. Pastikan **Aturan Pengiriman** aktif serta urutan provider benar.
 3. Terbitkan token di **Aplikasi Klien** untuk `web-sam`, `web-shelf`, `web-helpdesk`, dan `appscript-ft` sesuai kebutuhan.
 
@@ -142,7 +142,7 @@ WHATSAPP_HUB_ROUTE_KEY=default
 ```
 
 - Untuk OTP, gunakan `purpose=otp`, `mode=sync`, dan sertakan `expires_at`.
-- Aplikasi sumber tidak lagi memakai API key WAHA/Fonnte secara langsung.
+- Aplikasi sumber tidak lagi memakai credential provider WhatsApp secara langsung.
 - Setelah mengubah environment aplikasi sumber: `php artisan config:cache`.
 
 ## 10. Checklist go-live

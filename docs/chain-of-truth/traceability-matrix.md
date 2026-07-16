@@ -11,7 +11,7 @@ Baseline/version: 0.1.0
 | FR-004 | UC-001 | MOD-001 | ENT-006–008 | API-001/INT-001 | synchronous `GatewayMessageDispatcher` | TC-010–014 | Implemented; Pass |
 | FR-005 | UC-002 | MOD-001 | ENT-006/008 | API-001/JOB-001 | `GatewayMessageEnqueuer` + queue job + recovery | TC-015–017 | Implemented; Pass |
 | FR-006 | UC-001/002 | MOD-001 | ENT-003–007 | INT-001 | deterministic routing, fallback, circuit breaker | TC-018–021 | Implemented; Pass |
-| FR-007 | UC-001/002 | — | ENT-003/007 | INT-001 | WAHA/Fonnte drivers, classifiers, endpoint guard | TC-022–029 | Implemented; Pass |
+| FR-007 | UC-001/002 | — | ENT-003/007 | INT-001 | WAHA/Fonnte/GOWA/WABA drivers, classifiers, endpoint guard | TC-022–029 | Implemented; Pass |
 | FR-008 | UC-001/002/004 | PAGE-006 | ENT-006–008 | INT-001/UI-005 | encrypted attempt/event ledger | TC-030–032 | Implemented; Pass |
 | FR-009 | UC-001/002/004 | PAGE-005/006 | ENT-006–008 | JOB-001/UI-005 | dispatcher + stale/queue recovery transitions | TC-033–036 | Implemented; Pass |
 | FR-010 | UC-001/002 | MOD-001 | ENT-006 | API-001/JOB-001 | expiry guards before/within route | TC-037 | Implemented; Pass |
@@ -30,7 +30,7 @@ Baseline/version: 0.1.0
 | NFR-004 | masking + retention rules | TC-032, TC-042, code review | Masking/encryption pass; automated pruning pending |
 | NFR-005 | correlation/attempt/event ledger | TC-030–036 | Pass |
 | NFR-006 | driver interface | TC-022–029, architecture review | Pass |
-| NFR-007 | PHPUnit coverage | full suite coverage | 154 tests pass; line percentage unavailable without Xdebug/PCOV |
+| NFR-007 | PHPUnit coverage | full suite coverage | 201 tests pass; line percentage unavailable without Xdebug/PCOV |
 
 ## Coverage summary
 

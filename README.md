@@ -1,6 +1,6 @@
 # WhatsApp Gateway Hub
 
-Gateway Laravel terpusat untuk `appscript-ft`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA/Fonnte, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
+Gateway Laravel terpusat untuk `appscript-ft`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA, Fonnte, GOWA, atau WABA, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
 
 Panduan deploy production dari `git clone`: [docs/DEPLOYMENT_ID.md](docs/DEPLOYMENT_ID.md).
 Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md).
@@ -11,7 +11,7 @@ Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md
 - Idempotency key wajib agar request yang diulang tidak terkirim dua kali.
 - Mode `sync` untuk OTP/transaksi yang harus menunggu provider menerima pesan.
 - Mode `async` untuk notifikasi yang diproses worker.
-- Banyak akun WAHA/Fonnte dengan routing dan fallback berurutan.
+- Banyak akun WAHA, Fonnte, GOWA, dan WABA dengan routing dan fallback berurutan.
 - Ledger pesan, attempt provider, latency, event, dan error yang sudah disanitasi.
 - Status aman `outcome_unknown` untuk timeout/respons ambigu; Hub tidak melakukan fallback buta.
 - Panel Filament untuk aplikasi, credential, provider, route, monitoring, dan retry yang aman.
@@ -22,8 +22,8 @@ flowchart LR
     A["Aplikasi sumber"] -->|"Bearer + Idempotency-Key"| H["Gateway Hub"]
     H --> L["Message / Attempt / Event ledger"]
     H --> R["Routing policy"]
-    R --> W["WAHA primary"]
-    W -->|"gagal definitif"| F["Fonnte fallback"]
+    R --> W["Provider primary"]
+    W -->|"gagal definitif"| F["Provider fallback"]
     W -->|"hasil ambigu"| U["outcome_unknown; berhenti"]
 ```
 
@@ -51,9 +51,8 @@ Application baru dari panel.
 
 Tambahkan kredensial provider dan token per aplikasi hanya bila ingin langsung
 dipakai saat seed; semua nilai `GATEWAY_SEED_*` bersifat opsional selain tiga
-nilai admin. Provider tidak akan dibuat tanpa konfigurasi lengkap dan route tidak
-akan dibuat tanpa provider aktif. Tanpa credential, seeder tetap membuat akun
-WAHA dan Fonnte serta route awal dalam status nonaktif agar dapat dilengkapi dari
+nilai admin. Provider hanya diaktifkan bila konfigurasi lengkap. Tanpa credential, seeder tetap membuat akun
+WAHA, Fonnte, GOWA, dan WABA serta route awal dalam status nonaktif agar dapat dilengkapi dari
 panel. Seeder dapat dijalankan ulang dengan aman.
 Untuk provisioning tanpa menyimpan password di `.env`, gunakan:
 
@@ -78,13 +77,13 @@ Pada server pilot/production, kelola web process dan queue worker dengan process
 Hub hanya boleh menghubungi hostname provider yang didaftarkan secara eksplisit:
 
 ```dotenv
-GATEWAY_PROVIDER_HTTPS_HOSTS=api.fonnte.com,waha.internal.example
+GATEWAY_PROVIDER_HTTPS_HOSTS=api.fonnte.com,graph.facebook.com,waha.internal.example,gowa.internal.example
 GATEWAY_PROVIDER_HTTP_HOSTS=
 GATEWAY_PROVIDER_FAILURE_THRESHOLD=3
 GATEWAY_PROVIDER_CIRCUIT_SECONDS=300
 ```
 
-- Tambahkan hostname WAHA yang benar ke allowlist HTTPS. Jangan menyalin contoh `waha.internal.example` apa adanya.
+- Tambahkan hostname WAHA/GOWA yang benar ke allowlist HTTPS. Jangan menyalin hostname contoh apa adanya.
 - HTTP biasa ditolak kecuali hostname dimasukkan ke `GATEWAY_PROVIDER_HTTP_HOSTS` secara eksplisit.
 - `localhost`, literal private/loopback IP, metadata host, userinfo URL, subdomain yang tidak persis cocok, dan redirect tidak diikuti.
 - Setelah mengubah konfigurasi: jalankan `php artisan config:cache`, lalu `php artisan queue:restart` agar worker memakai allowlist terbaru.
@@ -93,15 +92,15 @@ GATEWAY_PROVIDER_CIRCUIT_SECONDS=300
 
 1. Masuk ke `/admin` memakai administrator yang dibuat lewat command.
 2. Buat **Client Application**, lalu terbitkan API credential. Salin token saat ditampilkan; plaintext tidak dapat dilihat lagi.
-3. Buat satu atau beberapa **Provider Account** WAHA/Fonnte.
+3. Buat satu atau beberapa **Provider Account** WAHA, Fonnte, GOWA, atau WABA.
 4. Buat **Routing Policy** untuk aplikasi, `route_key`, dan `purpose`.
 5. Susun provider steps sesuai prioritas fallback.
 
 ## Seeder manajemen awal
 
 `php artisan db:seed` membuat data administrasi yang konsisten untuk seluruh
-aplikasi sumber. Bila WAHA dan Fonnte dikonfigurasi, WAHA menjadi prioritas
-pertama dan Fonnte fallback kedua pada default route setiap aplikasi. Route Shelf
+aplikasi sumber. Provider aktif diurutkan WAHA, Fonnte, GOWA, lalu WABA pada
+default route setiap aplikasi. Urutan dapat diubah dari panel. Route Shelf
 bernama `shelf-notifications`; karena ia ditandai default, konfigurasi Shelf yang
 masih memakai `WHATSAPP_HUB_ROUTE_KEY=default` tetap dapat menggunakan route ini.
 
@@ -112,7 +111,14 @@ tersimpan atau terekspos di file `.env`.
 
 Untuk pilot Shelf, gunakan aplikasi `web-shelf`, purpose `notification`, dan satu route key yang sama persis pada Hub dan konfigurasi Shelf. Panel menolak scope route yang sama dibuat dua kali.
 
-Jangan menyalin credential lama dari source code. Credential WAHA/Fonnte yang pernah tertanam di aplikasi lama harus dirotasi sebelum pilot.
+Jangan menyalin credential lama dari source code. Credential provider yang pernah tertanam di aplikasi lama harus dirotasi sebelum pilot.
+
+### Catatan GOWA dan WABA
+
+- GOWA memakai `POST /send/message`, Basic Auth, dan `X-Device-Id` opsional untuk server multi-device.
+- WABA memakai Meta Cloud API resmi dengan Phone Number ID dan System User Access Token.
+- Driver WABA saat ini mengirim pesan teks bebas. Meta hanya mengizinkannya dalam customer-service window yang berlaku; pesan di luar window harus memakai template, yang belum menjadi bagian kontrak message Hub saat ini.
+- `GATEWAY_SEED_WABA_API_VERSION` dapat dinaikkan tanpa perubahan kode ketika versi Graph API berubah.
 
 ## Mengirim pesan
 
@@ -173,15 +179,15 @@ WHATSAPP_HUB_ROUTE_KEY=shelf-notifications
 php artisan config:cache
 ```
 
-Token Shelf cukup diberi ability `messages:send` (`messages:read` hanya bila Shelf perlu membaca status). Shelf tidak lagi membutuhkan credential WAHA/Fonnte. Reminder terjadwal menurunkan idempotency key dari identitas business event, sehingga timeout dan retry menggunakan pesan Hub yang sama.
+Token Shelf cukup diberi ability `messages:send` (`messages:read` hanya bila Shelf perlu membaca status). Shelf tidak membutuhkan credential provider. Reminder terjadwal menurunkan idempotency key dari identitas business event, sehingga timeout dan retry menggunakan pesan Hub yang sama.
 
 ## Checklist pilot
 
 - Hub memakai `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL` HTTPS, `APP_KEY` persisten dan dibackup.
 - Database production, backup, web process, queue worker, dan scheduler aktif.
-- Host WAHA/Fonnte sudah masuk allowlist dan worker telah direstart.
+- Semua host provider terpilih sudah masuk allowlist dan worker telah direstart.
 - Credential lama yang pernah tertanam di aplikasi/Apps Script sudah dirotasi.
-- Satu smoke test nyata WAHA dan Fonnte diverifikasi dari ledger sebelum trafik aplikasi dialihkan.
+- Satu smoke test nyata untuk setiap provider aktif diverifikasi dari ledger sebelum trafik aplikasi dialihkan.
 - Adapter Shelf sudah masuk branch deployment (`staging`/`main`) dan environment Shelf telah direcache.
 
 Retention/pruning otomatis dan webhook inbound/delivered/read belum termasuk MVP. Tentukan prosedur purge manual serta jaga endpoint inbound aplikasi lama tetap di jaringan tepercaya sampai fase autentikasi inbound dikerjakan.

@@ -51,7 +51,7 @@ Used by: UC-001, UC-002, UC-003, UC-004
 |---|---|---|---|---|
 | id, uuid | bigint, uuid | yes | PK + unique | Internal/public ID |
 | name, slug | string | yes | slug unique | Internal |
-| driver | enum string | yes | `waha` or `fonnte` | Internal |
+| driver | enum string | yes | `waha`, `fonnte`, `gowa`, or `waba` | Internal |
 | configuration | encrypted text | yes | validated per driver; endpoint + credential | Secret |
 | is_active | boolean | yes | true | Internal |
 | health_status | enum string | yes | unknown/healthy/degraded/unavailable | Internal |

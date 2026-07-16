@@ -32,7 +32,7 @@ Status: Reviewed
 | TC-026 | Unit | FR-007/BR-004 | connection exception | cURL connect refusal | provider_failed + fallback allowed | P0 |
 | TC-027 | Unit | FR-007/BR-004 | connection exception | timeout/reset after possible write | outcome_unknown + reconcile only | P0 |
 | TC-028 | Unit | FR-007 | HTTP errors | invalid payload vs provider auth/rate failure | message rejection stops; account failure may fallback | P0 |
-| TC-029 | Contract | FR-007 | fake HTTP | inspect WAHA/Fonnte requests | correct endpoint/header/payload; no cross-driver leak | P0 |
+| TC-029 | Contract | FR-007 | fake HTTP | inspect WAHA/Fonnte/GOWA/WABA requests | correct endpoint/header/payload; no cross-driver leak | P0 |
 | TC-030 | Integration | FR-008 | success dispatch | inspect DB | message, attempt, events consistent | P0 |
 | TC-031 | Integration | FR-008 | fallback dispatch | inspect DB | ordered attempts, HTTP status, latency, disposition retained | P0 |
 | TC-032 | Security | FR-008/NFR-001 | request completes | inspect raw DB/log/API | token/secret/body/phone/raw response not leaked | P0 |
@@ -54,7 +54,7 @@ Status: Reviewed
 | TC-048 | Pilot unit | FR-014 | web-shelf adapter | Hub 202 queued | `send()` true | P0 |
 | TC-049 | Pilot unit | FR-014 | web-shelf adapter | Hub validation/auth/failed response | `send()` false + safe log | P0 |
 | TC-050 | Pilot unit | FR-014/FR-003 | caller supplies stable business-event context | retry the same reminder after ambiguous transport failure | same keyed request identity, Idempotency-Key, client reference, and canonical body | P0 |
-| TC-051 | Pilot security | FR-014/NFR-001 | migrated config | inspect code/env contract | no WAHA/Fonnte credential required by Shelf adapter | P0 |
+| TC-051 | Pilot security | FR-014/NFR-001 | migrated config | inspect code/env contract | no provider credential required by Shelf adapter | P0 |
 
 ## Coverage summary
 

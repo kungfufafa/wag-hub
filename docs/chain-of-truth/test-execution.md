@@ -6,7 +6,7 @@ Executed at: 2026-07-15
 
 | Test ID/scope | Command/manual evidence | Result | Evidence | Failure owner |
 |---|---|---|---|---|
-| TC-001–TC-047 | `php artisan test` di `gateway-hub` | Pass | 154 tests, 679 assertions; tidak ada skipped/failure | — |
+| TC-001–TC-047 | `php artisan test` di `gateway-hub` | Pass | 201 tests, 894 assertions; tidak ada skipped/failure | — |
 | TC-048–TC-051 | Targeted WhatsApp tests di `web-shelf` | Pass | 29 tests, 106 assertions | — |
 | Full Shelf regression | `php artisan test` di `web-shelf` | Conditional | 156 pass, 932 assertions; 2 failure lama dan tidak menyentuh adapter WhatsApp | Shelf: action size + missing test migration |
 | Admin runtime | Browser lokal `/admin` | Pass | Login, dashboard stats, empat resource, create forms, empty states; tidak ada console error | — |
@@ -14,7 +14,7 @@ Executed at: 2026-07-15
 | Static/build | Pint, diff check, Vite production build | Pass | Pint bersih; 55 modules built | — |
 | Dependency security | Composer audit Hub+Shelf; npm audit Hub | Pass | Tidak ada advisory/vulnerability | — |
 | Coverage threshold | `php artisan test --coverage --min=80` | Not Run | Runtime tidak menyediakan Xdebug/PCOV | CI owner |
-| Live provider smoke | WAHA/Fonnte credential nyata | Not Run | Credential dan host pilot belum diberikan | Deployment owner |
+| Live provider smoke | Credential provider nyata | Not Run | Credential dan host pilot belum diberikan | Deployment owner |
 
 ## Residual risk and release decision
 
