@@ -15,6 +15,7 @@ class GatewayHubManagementSeeder extends Seeder
     /** @var array<string, array{name: string, rate_limit_per_minute: int}> */
     private const APPLICATIONS = [
         'appscript-ft' => ['name' => 'AppScript FT', 'rate_limit_per_minute' => 120],
+        'web-cesa' => ['name' => 'Web CESA', 'rate_limit_per_minute' => 120],
         'web-helpdesk' => ['name' => 'Web Helpdesk', 'rate_limit_per_minute' => 120],
         'web-sam' => ['name' => 'Web SAM', 'rate_limit_per_minute' => 120],
         'web-shelf' => ['name' => 'Web Shelf', 'rate_limit_per_minute' => 120],
@@ -23,6 +24,7 @@ class GatewayHubManagementSeeder extends Seeder
     /** @var array<string, string> */
     private const DEFAULT_ROUTE_KEYS = [
         'appscript-ft' => 'default',
+        'web-cesa' => 'web-cesa-messages',
         'web-helpdesk' => 'default',
         'web-sam' => 'default',
         'web-shelf' => 'shelf-notifications',
@@ -281,38 +283,64 @@ class GatewayHubManagementSeeder extends Seeder
                 );
             }
 
-            $numberCheckPolicy = RoutingPolicy::query()->updateOrCreate(
-                [
-                    'client_application_id' => $application->id,
-                    'operation' => 'number_check',
-                    'key' => 'default',
-                    'purpose' => null,
-                ],
-                [
-                    'name' => $application->name.' WhatsApp number-check route',
-                    'is_default' => true,
-                    'is_active' => true,
-                ],
-            );
-            $checkPosition = 1;
-
-            foreach ($providers as $provider) {
-                if ((string) $provider->driver === 'waba') {
-                    continue;
-                }
-
-                RoutingStep::query()->updateOrCreate(
-                    [
-                        'routing_policy_id' => $numberCheckPolicy->id,
-                        'provider_account_id' => $provider->id,
-                    ],
-                    [
-                        'position' => $checkPosition++,
-                        'is_active' => true,
-                    ],
-                );
+            if ($slug === 'web-cesa') {
+                $this->seedWebCesaNumberCheckRoute($application, $providers);
             }
         }
+
+        $this->retireNumberCheckRoutesOutsideWebCesa($applications['web-cesa']);
+    }
+
+    /**
+     * @param  list<ProviderAccount>  $providers
+     */
+    private function seedWebCesaNumberCheckRoute(
+        ClientApplication $application,
+        array $providers,
+    ): void {
+        $numberCheckPolicy = RoutingPolicy::query()->updateOrCreate(
+            [
+                'client_application_id' => $application->id,
+                'operation' => 'number_check',
+                'key' => 'lead-number-check',
+                'purpose' => null,
+            ],
+            [
+                'name' => 'Web CESA Lead WhatsApp number-check route',
+                'is_default' => true,
+                'is_active' => true,
+            ],
+        );
+        $checkPosition = 1;
+
+        foreach ($providers as $provider) {
+            if ((string) $provider->driver === 'waba') {
+                continue;
+            }
+
+            RoutingStep::query()->updateOrCreate(
+                [
+                    'routing_policy_id' => $numberCheckPolicy->id,
+                    'provider_account_id' => $provider->id,
+                ],
+                [
+                    'is_active' => true,
+                    'position' => $checkPosition++,
+                ],
+            );
+        }
+    }
+
+    private function retireNumberCheckRoutesOutsideWebCesa(ClientApplication $webCesa): void
+    {
+        RoutingPolicy::query()
+            ->where('operation', 'number_check')
+            ->where(function ($query) use ($webCesa): void {
+                $query
+                    ->whereNull('client_application_id')
+                    ->orWhere('client_application_id', '!=', $webCesa->id);
+            })
+            ->delete();
     }
 
     /**
@@ -337,7 +365,9 @@ class GatewayHubManagementSeeder extends Seeder
                 [
                     'token_hash' => hash('sha256', $token),
                     'token_prefix' => substr($token, 0, 16),
-                    'abilities' => ['messages:send', 'messages:read'],
+                    'abilities' => $slug === 'web-cesa'
+                        ? ['messages:send', 'messages:read', 'numbers:check']
+                        : ['messages:send', 'messages:read'],
                     'revoked_at' => null,
                     'expires_at' => null,
                 ],

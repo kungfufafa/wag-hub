@@ -54,6 +54,7 @@ return [
         ],
         'credentials' => [
             'appscript-ft' => env('GATEWAY_SEED_APPSCRIPT_FT_TOKEN'),
+            'web-cesa' => env('GATEWAY_SEED_WEB_CESA_TOKEN'),
             'web-helpdesk' => env('GATEWAY_SEED_WEB_HELPDESK_TOKEN'),
             'web-sam' => env('GATEWAY_SEED_WEB_SAM_TOKEN'),
             'web-shelf' => env('GATEWAY_SEED_WEB_SHELF_TOKEN'),
