@@ -13,7 +13,7 @@ $hostList = static function (?string $value): array {
 
 return [
     'provider_endpoints' => [
-        'https_hosts' => $hostList(env('GATEWAY_PROVIDER_HTTPS_HOSTS', 'api.fonnte.com')),
+        'https_hosts' => $hostList(env('GATEWAY_PROVIDER_HTTPS_HOSTS', 'api.fonnte.com,graph.facebook.com')),
         'http_hosts' => $hostList(env('GATEWAY_PROVIDER_HTTP_HOSTS')),
     ],
 
@@ -37,6 +37,18 @@ return [
             'fonnte' => [
                 'endpoint' => env('GATEWAY_SEED_FONNTE_ENDPOINT', 'https://api.fonnte.com/send'),
                 'token' => env('GATEWAY_SEED_FONNTE_TOKEN'),
+            ],
+            'gowa' => [
+                'base_url' => env('GATEWAY_SEED_GOWA_BASE_URL'),
+                'username' => env('GATEWAY_SEED_GOWA_USERNAME'),
+                'password' => env('GATEWAY_SEED_GOWA_PASSWORD'),
+                'device_id' => env('GATEWAY_SEED_GOWA_DEVICE_ID'),
+            ],
+            'waba' => [
+                'base_url' => env('GATEWAY_SEED_WABA_BASE_URL', 'https://graph.facebook.com'),
+                'api_version' => env('GATEWAY_SEED_WABA_API_VERSION', 'v25.0'),
+                'phone_number_id' => env('GATEWAY_SEED_WABA_PHONE_NUMBER_ID'),
+                'access_token' => env('GATEWAY_SEED_WABA_ACCESS_TOKEN'),
             ],
         ],
         'credentials' => [

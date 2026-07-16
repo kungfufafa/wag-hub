@@ -18,7 +18,12 @@ class EditProviderAccount extends EditRecord
     {
         $configuration = $this->record->configuration ?? [];
 
-        $data['configuration'] = Arr::except($configuration, ['api_key', 'token']);
+        $data['configuration'] = Arr::except($configuration, [
+            'api_key',
+            'token',
+            'password',
+            'access_token',
+        ]);
 
         return $data;
     }
@@ -26,9 +31,13 @@ class EditProviderAccount extends EditRecord
     protected function mutateFormDataBeforeSave(array $data): array
     {
         $driver = $data['driver'];
-        $allowedKeys = $driver === 'waha'
-            ? ['base_url', 'session', 'api_key']
-            : ['endpoint', 'token'];
+        $allowedKeys = match ($driver) {
+            'waha' => ['base_url', 'session', 'api_key'],
+            'fonnte' => ['endpoint', 'token'],
+            'gowa' => ['base_url', 'username', 'password', 'device_id'],
+            'waba' => ['base_url', 'api_version', 'phone_number_id', 'access_token'],
+            default => [],
+        };
         $existing = $this->record->driver === $driver
             ? Arr::only($this->record->configuration ?? [], $allowedKeys)
             : [];
@@ -37,11 +46,17 @@ class EditProviderAccount extends EditRecord
             fn ($value): bool => filled($value),
         );
         $configuration = array_replace($existing, $incoming);
-        $secretKey = $driver === 'waha' ? 'api_key' : 'token';
+        $secretKey = match ($driver) {
+            'waha' => 'api_key',
+            'fonnte' => 'token',
+            'gowa' => 'password',
+            'waba' => 'access_token',
+            default => null,
+        };
 
-        if (blank($configuration[$secretKey] ?? null)) {
+        if ($secretKey === null || blank($configuration[$secretKey] ?? null)) {
             throw ValidationException::withMessages([
-                "data.configuration.{$secretKey}" => 'A provider secret is required when changing drivers.',
+                'data.driver' => 'Driver provider tidak didukung atau secret belum diisi.',
             ]);
         }
 

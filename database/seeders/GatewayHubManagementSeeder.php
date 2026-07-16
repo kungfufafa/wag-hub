@@ -163,6 +163,81 @@ class GatewayHubManagementSeeder extends Seeder
             );
         }
 
+        $gowa = config('gateway.seed.providers.gowa', []);
+
+        if ($this->hasValues($gowa, ['base_url', 'username', 'password'])) {
+            $providers[] = ProviderAccount::query()->updateOrCreate(
+                ['slug' => 'gowa-primary'],
+                [
+                    'name' => 'GOWA Primary',
+                    'driver' => 'gowa',
+                    'configuration' => array_filter([
+                        'base_url' => $this->value($gowa['base_url']),
+                        'username' => $this->value($gowa['username']),
+                        'password' => $this->value($gowa['password']),
+                        'device_id' => $this->value($gowa['device_id'] ?? null),
+                    ], static fn (?string $value): bool => $value !== null),
+                    'is_active' => true,
+                    'health_status' => 'unknown',
+                    'consecutive_failures' => 0,
+                    'circuit_open_until' => null,
+                    'timeout_seconds' => 15,
+                ],
+            );
+        } else {
+            $providers[] = ProviderAccount::query()->firstOrCreate(
+                ['slug' => 'gowa-primary'],
+                [
+                    'name' => 'GOWA Primary',
+                    'driver' => 'gowa',
+                    'configuration' => [],
+                    'is_active' => false,
+                    'health_status' => 'unknown',
+                    'consecutive_failures' => 0,
+                    'timeout_seconds' => 15,
+                ],
+            );
+        }
+
+        $waba = config('gateway.seed.providers.waba', []);
+
+        if ($this->hasValues($waba, ['base_url', 'api_version', 'phone_number_id', 'access_token'])) {
+            $providers[] = ProviderAccount::query()->updateOrCreate(
+                ['slug' => 'waba-primary'],
+                [
+                    'name' => 'WABA Primary',
+                    'driver' => 'waba',
+                    'configuration' => [
+                        'base_url' => $this->value($waba['base_url']),
+                        'api_version' => $this->value($waba['api_version']),
+                        'phone_number_id' => $this->value($waba['phone_number_id']),
+                        'access_token' => $this->value($waba['access_token']),
+                    ],
+                    'is_active' => true,
+                    'health_status' => 'unknown',
+                    'consecutive_failures' => 0,
+                    'circuit_open_until' => null,
+                    'timeout_seconds' => 15,
+                ],
+            );
+        } else {
+            $providers[] = ProviderAccount::query()->firstOrCreate(
+                ['slug' => 'waba-primary'],
+                [
+                    'name' => 'WABA Primary',
+                    'driver' => 'waba',
+                    'configuration' => [
+                        'base_url' => $this->value($waba['base_url'] ?? null) ?? 'https://graph.facebook.com',
+                        'api_version' => $this->value($waba['api_version'] ?? null) ?? 'v25.0',
+                    ],
+                    'is_active' => false,
+                    'health_status' => 'unknown',
+                    'consecutive_failures' => 0,
+                    'timeout_seconds' => 15,
+                ],
+            );
+        }
+
         return $providers;
     }
 

@@ -70,6 +70,8 @@ class ProviderAccountResource extends Resource
                                 ->options([
                                     'waha' => 'WAHA',
                                     'fonnte' => 'Fonnte',
+                                    'gowa' => 'GOWA',
+                                    'waba' => 'WABA (Meta Cloud API)',
                                 ])
                                 ->required()
                                 ->live(),
@@ -130,6 +132,67 @@ class ProviderAccountResource extends Resource
                         ])
                         ->visible(fn (Get $get): bool => $get('driver') === 'fonnte')
                         ->columns(['md' => 2]),
+                    Section::make('Koneksi GOWA')
+                        ->schema([
+                            TextInput::make('configuration.base_url')
+                                ->label('Base URL')
+                                ->url()
+                                ->required(fn (Get $get): bool => $get('driver') === 'gowa')
+                                ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.username')
+                                ->label('Username Basic Auth')
+                                ->required(fn (Get $get): bool => $get('driver') === 'gowa')
+                                ->maxLength(120)
+                                ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.password')
+                                ->label('Password Basic Auth')
+                                ->password()
+                                ->revealable()
+                                ->helperText('Kosongkan saat mengubah bila ingin mempertahankan password yang ada.')
+                                ->required(fn (string $operation): bool => $operation === 'create')
+                                ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                                ->dehydrated(fn (?string $state): bool => filled($state))
+                                ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.device_id')
+                                ->label('Device ID')
+                                ->helperText('Opsional bila server GOWA hanya memiliki satu device.')
+                                ->maxLength(255)
+                                ->dehydratedWhenHidden(false),
+                        ])
+                        ->visible(fn (Get $get): bool => $get('driver') === 'gowa')
+                        ->columns(['md' => 2]),
+                    Section::make('Koneksi WABA')
+                        ->description('WhatsApp Business Platform resmi melalui Meta Cloud API.')
+                        ->schema([
+                            TextInput::make('configuration.base_url')
+                                ->label('Graph API Base URL')
+                                ->url()
+                                ->default('https://graph.facebook.com')
+                                ->required(fn (Get $get): bool => $get('driver') === 'waba')
+                                ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.api_version')
+                                ->label('Graph API Version')
+                                ->default('v25.0')
+                                ->regex('/^v\d+\.\d+$/')
+                                ->required(fn (Get $get): bool => $get('driver') === 'waba')
+                                ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.phone_number_id')
+                                ->label('Phone Number ID')
+                                ->regex('/^\d+$/')
+                                ->required(fn (Get $get): bool => $get('driver') === 'waba')
+                                ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.access_token')
+                                ->label('System User Access Token')
+                                ->password()
+                                ->revealable()
+                                ->helperText('Gunakan token system user; kosongkan saat mengubah untuk mempertahankan token.')
+                                ->required(fn (string $operation): bool => $operation === 'create')
+                                ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                                ->dehydrated(fn (?string $state): bool => filled($state))
+                                ->dehydratedWhenHidden(false),
+                        ])
+                        ->visible(fn (Get $get): bool => $get('driver') === 'waba')
+                        ->columns(['md' => 2]),
                 ])->columnSpan([
                     'default' => 'full',
                     'lg' => 2,
@@ -139,7 +202,7 @@ class ProviderAccountResource extends Resource
                     ->schema([
                         Placeholder::make('provider_connection')
                             ->label('1. Lengkapi koneksi')
-                            ->content('Isi Base URL dan Session untuk WAHA, atau Endpoint untuk Fonnte.'),
+                            ->content('Isi koneksi sesuai driver: WAHA, Fonnte, GOWA, atau Meta WABA.'),
                         Placeholder::make('provider_secret')
                             ->label('2. Simpan secret')
                             ->content('API key atau token disimpan terenkripsi dan tidak dapat dilihat kembali.'),
@@ -205,6 +268,8 @@ class ProviderAccountResource extends Resource
                     ->options([
                         'waha' => 'WAHA',
                         'fonnte' => 'Fonnte',
+                        'gowa' => 'GOWA',
+                        'waba' => 'WABA (Meta Cloud API)',
                     ]),
                 SelectFilter::make('health_status')
                     ->label('Kesehatan')

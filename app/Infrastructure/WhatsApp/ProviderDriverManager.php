@@ -12,6 +12,8 @@ final readonly class ProviderDriverManager
     public function __construct(
         private WahaDriver $waha,
         private FonnteDriver $fonnte,
+        private GowaDriver $gowa,
+        private WabaDriver $waba,
     ) {}
 
     public function send(ProviderAccount $account, OutboundText $message): ProviderResult
@@ -33,6 +35,8 @@ final readonly class ProviderDriverManager
         return match (strtolower(trim($driver))) {
             'waha' => $this->waha,
             'fonnte' => $this->fonnte,
+            'gowa' => $this->gowa,
+            'waba' => $this->waba,
             default => null,
         };
     }
