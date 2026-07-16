@@ -34,6 +34,7 @@ class AdminResourceSmokeTest extends TestCase
             'provider accounts' => ['/admin/provider-accounts'],
             'routing policies' => ['/admin/routing-policies'],
             'message ledger' => ['/admin/messages'],
+            'number check ledger' => ['/admin/number-checks'],
         ];
     }
 
