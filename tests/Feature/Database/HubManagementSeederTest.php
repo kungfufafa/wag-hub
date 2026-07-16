@@ -62,6 +62,7 @@ class HubManagementSeederTest extends TestCase
             ],
             'credentials' => [
                 'web-shelf' => 'wgh_shelf_seed_token',
+                'web-cesa'  => 'wgh_cesa_seed_token',
             ],
         ]);
 
@@ -73,7 +74,7 @@ class HubManagementSeederTest extends TestCase
         $this->assertTrue(Hash::check('Seeder-Administrator-123!', $administrator->password));
 
         $this->assertSame(
-            ['appscript-ft', 'web-helpdesk', 'web-sam', 'web-shelf'],
+            ['appscript-ft', 'web-cesa', 'web-helpdesk', 'web-sam', 'web-shelf'],
             ClientApplication::query()->orderBy('slug')->pluck('slug')->all(),
         );
         $this->assertSame(
@@ -92,19 +93,41 @@ class HubManagementSeederTest extends TestCase
             ['waha-primary', 'fonnte-primary', 'gowa-primary', 'waba-primary'],
             $policy->steps->pluck('providerAccount.slug')->all(),
         );
+        $this->assertFalse(
+            RoutingPolicy::query()
+                ->where('client_application_id', $shelf->id)
+                ->where('operation', 'number_check')
+                ->exists(),
+        );
+
+        $cesa = ClientApplication::query()->where('slug', 'web-cesa')->sole();
+        $messagePolicy = RoutingPolicy::query()
+            ->where('client_application_id', $cesa->id)
+            ->where('operation', 'message')
+            ->where('key', 'web-cesa-messages')
+            ->sole();
+        $this->assertSame(
+            ['waha-primary', 'fonnte-primary', 'gowa-primary', 'waba-primary'],
+            $messagePolicy->steps->pluck('providerAccount.slug')->all(),
+        );
+
         $numberCheckPolicy = RoutingPolicy::query()
-            ->where('client_application_id', $shelf->id)
+            ->where('client_application_id', $cesa->id)
             ->where('operation', 'number_check')
-            ->where('key', 'default')
+            ->where('key', 'lead-number-check')
             ->sole();
         $this->assertSame(
             ['waha-primary', 'fonnte-primary', 'gowa-primary'],
             $numberCheckPolicy->steps->pluck('providerAccount.slug')->all(),
         );
 
-        $credential = ApiCredential::query()->where('client_application_id', $shelf->id)->sole();
-        $this->assertTrue(hash_equals(hash('sha256', 'wgh_shelf_seed_token'), $credential->getRawOriginal('token_hash')));
-        $this->assertSame(['messages:send', 'messages:read'], $credential->abilities);
+        $shelfCredential = ApiCredential::query()->where('client_application_id', $shelf->id)->sole();
+        $this->assertTrue(hash_equals(hash('sha256', 'wgh_shelf_seed_token'), $shelfCredential->getRawOriginal('token_hash')));
+        $this->assertSame(['messages:send', 'messages:read'], $shelfCredential->abilities);
+
+        $cesaCredential = ApiCredential::query()->where('client_application_id', $cesa->id)->sole();
+        $this->assertTrue(hash_equals(hash('sha256', 'wgh_cesa_seed_token'), $cesaCredential->getRawOriginal('token_hash')));
+        $this->assertSame(['messages:send', 'messages:read', 'numbers:check'], $cesaCredential->abilities);
     }
 
     public function test_it_is_idempotent_and_seeds_disabled_provider_accounts_and_routes_without_provider_credentials(): void
@@ -123,9 +146,9 @@ class HubManagementSeederTest extends TestCase
         $this->seed(GatewayHubManagementSeeder::class);
 
         $this->assertDatabaseCount('users', 1);
-        $this->assertDatabaseCount('client_applications', 4);
+        $this->assertDatabaseCount('client_applications', 5);
         $this->assertDatabaseCount('provider_accounts', 4);
-        $this->assertDatabaseCount('routing_policies', 8);
+        $this->assertDatabaseCount('routing_policies', 6);
         $this->assertDatabaseCount('api_credentials', 0);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'waha-primary')->sole()->is_active);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'fonnte-primary')->sole()->is_active);
