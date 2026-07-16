@@ -89,11 +89,97 @@ class RoutingPolicySelectionTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_purpose_specific_policy_wins_over_a_generic_policy(): void
+    {
+        $client = $this->createClientApplication();
+        $genericProvider = $this->createProviderAccount('waha', 'generic-purpose-provider', [
+            'base_url' => 'https://generic-purpose-provider.test',
+            'session' => 'default',
+        ]);
+        $specificProvider = $this->createProviderAccount('fonnte', 'specific-purpose-provider', [
+            'endpoint' => 'https://specific-purpose-provider.test/send',
+            'token' => 'secret',
+        ]);
+        $genericPolicy = $this->insertPolicy($client['id'], null, false);
+        $specificPolicy = $this->insertPolicy($client['id'], 'notification', false);
+        $this->insertStep($genericPolicy, $genericProvider['id']);
+        $this->insertStep($specificPolicy, $specificProvider['id']);
+
+        Http::fake(fn (Request $request) => str_contains($request->url(), 'specific-purpose-provider.test')
+            ? Http::response(['status' => true, 'id' => 'specific-selected'], 200)
+            : Http::response(['id' => 'generic-must-not-win'], 201));
+
+        $this->postMessage(
+            $client['token'],
+            'purpose-specific-selection',
+            $this->messagePayload('sync'),
+        )
+            ->assertCreated()
+            ->assertJsonPath('data.provider', 'specific-purpose-provider');
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_client_default_policy_wins_before_a_global_exact_route(): void
+    {
+        $client = $this->createClientApplication();
+        $clientProvider = $this->createProviderAccount('waha', 'client-default-provider', [
+            'base_url' => 'https://client-default-provider.test',
+            'session' => 'default',
+        ]);
+        $globalProvider = $this->createProviderAccount('fonnte', 'global-exact-provider', [
+            'endpoint' => 'https://global-exact-provider.test/send',
+            'token' => 'secret',
+        ]);
+        $clientPolicy = $this->insertPolicy($client['id'], null, true, key: 'default');
+        $globalPolicy = $this->insertPolicy(null, null, false, key: 'campaign');
+        $this->insertStep($clientPolicy, $clientProvider['id']);
+        $this->insertStep($globalPolicy, $globalProvider['id']);
+
+        Http::fake(fn (Request $request) => str_contains($request->url(), 'client-default-provider.test')
+            ? Http::response(['id' => 'client-default-selected'], 201)
+            : Http::response(['status' => true, 'id' => 'global-must-not-win'], 200));
+
+        $this->postMessage(
+            $client['token'],
+            'client-default-before-global',
+            $this->messagePayload('sync', ['route_key' => 'campaign']),
+        )
+            ->assertCreated()
+            ->assertJsonPath('data.provider', 'client-default-provider');
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_global_policy_is_used_only_when_the_client_has_no_matching_route(): void
+    {
+        $client = $this->createClientApplication();
+        $globalProvider = $this->createProviderAccount('waha', 'global-fallback-provider', [
+            'base_url' => 'https://global-fallback-provider.test',
+            'session' => 'default',
+        ]);
+        $globalPolicy = $this->insertPolicy(null, 'notification', true);
+        $this->insertStep($globalPolicy, $globalProvider['id']);
+
+        Http::fake(['*' => Http::response(['id' => 'global-selected'], 201)]);
+
+        $this->postMessage(
+            $client['token'],
+            'global-fallback-selection',
+            $this->messagePayload('sync'),
+        )
+            ->assertCreated()
+            ->assertJsonPath('data.provider', 'global-fallback-provider');
+
+        Http::assertSentCount(1);
+    }
+
     private function insertPolicy(
-        int $applicationId,
+        ?int $applicationId,
         ?string $purpose,
         bool $default,
         mixed $deletedAt = null,
+        string $key = 'default',
     ): int {
         $now = now();
 
@@ -101,7 +187,7 @@ class RoutingPolicySelectionTest extends TestCase
             'uuid' => (string) Str::uuid(),
             'client_application_id' => $applicationId,
             'name' => 'Policy '.Str::random(8),
-            'key' => 'default',
+            'key' => $key,
             'purpose' => $purpose,
             'is_default' => $default,
             'is_active' => true,

@@ -54,15 +54,15 @@ class AuthenticateApiCredential
 
     private function isUnavailable(ApiCredential $credential): bool
     {
-        if ($credential->revoked_at !== null) {
-            return true;
-        }
-
-        if ($credential->expires_at === null) {
-            return false;
-        }
-
         try {
+            if ($credential->revoked_at !== null) {
+                return true;
+            }
+
+            if ($credential->expires_at === null) {
+                return false;
+            }
+
             return CarbonImmutable::parse($credential->expires_at)->isPast();
         } catch (Throwable) {
             return true;

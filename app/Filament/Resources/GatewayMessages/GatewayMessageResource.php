@@ -136,24 +136,8 @@ class GatewayMessageResource extends Resource
                 'lg' => 3,
             ])
             ->components([
-                Section::make('Pesan')
+                Section::make('Ringkasan')
                     ->schema([
-                        TextEntry::make('uuid')
-                            ->label('ID pesan')
-                            ->copyable(),
-                        TextEntry::make('correlation_id')
-                            ->label('ID korelasi')
-                            ->copyable(),
-                        TextEntry::make('clientApplication.name')
-                            ->label('Aplikasi'),
-                        TextEntry::make('recipient_last4')
-                            ->label('Penerima')
-                            ->formatStateUsing(fn (?string $state): string => '••••••••'.($state ?? '')),
-                        TextEntry::make('body')
-                            ->label('Isi pesan')
-                            ->copyable()
-                            ->placeholder('—')
-                            ->columnSpanFull(),
                         TextEntry::make('status')
                             ->label('Status')
                             ->badge()
@@ -164,26 +148,21 @@ class GatewayMessageResource extends Resource
                             ->badge()
                             ->color('gray')
                             ->formatStateUsing(fn (?string $state): string => static::purposeLabel($state)),
-                        TextEntry::make('mode')
-                            ->label('Mode')
-                            ->badge()
-                            ->color('gray'),
-                        TextEntry::make('route_key')->label('Kunci rute'),
-                        TextEntry::make('client_reference')
-                            ->label('Referensi klien')
-                            ->placeholder('—'),
+                        TextEntry::make('clientApplication.name')
+                            ->label('Aplikasi'),
+                        TextEntry::make('recipient_last4')
+                            ->label('Penerima')
+                            ->formatStateUsing(fn (?string $state): string => '••••••••'.($state ?? '')),
                         TextEntry::make('acceptedProviderAccount.name')
-                            ->label('Provider yang menerima')
-                            ->placeholder('—'),
-                        TextEntry::make('provider_message_id')
-                            ->label('ID pesan provider')
-                            ->placeholder('—'),
-                        TextEntry::make('last_error_code')
-                            ->label('Kode error terakhir')
-                            ->placeholder('—'),
+                            ->label('Provider')
+                            ->placeholder('Belum ada'),
+                        TextEntry::make('uuid')
+                            ->label('ID pesan')
+                            ->copyable(),
                         TextEntry::make('last_error_message')
-                            ->label('Error terakhir')
+                            ->label('Error')
                             ->placeholder('—')
+                            ->visible(fn (GatewayMessage $record): bool => filled($record->last_error_message))
                             ->columnSpanFull(),
                     ])
                     ->columns([
@@ -194,15 +173,14 @@ class GatewayMessageResource extends Resource
                         'default' => 'full',
                         'lg' => 2,
                     ]),
-                Section::make('Siklus hidup')
-                    ->description('Tahap yang sudah terjadi, urut waktu.')
+                Section::make('Perjalanan')
                     ->schema([
                         RepeatableEntry::make('lifecycle')
-                            ->label('')
+                            ->hiddenLabel()
                             ->getStateUsing(fn (GatewayMessage $record): array => static::lifecycleTimeline($record))
                             ->schema([
                                 TextEntry::make('label')
-                                    ->label('Tahap')
+                                    ->hiddenLabel()
                                     ->badge()
                                     ->color(fn (?string $state): string => match ($state) {
                                         'Dibuat', 'Masuk antrian', 'Kedaluwarsa' => 'gray',
@@ -213,31 +191,105 @@ class GatewayMessageResource extends Resource
                                         default => 'gray',
                                     }),
                                 TextEntry::make('at')
-                                    ->label('Waktu')
+                                    ->hiddenLabel()
                                     ->dateTime()
-                                    ->placeholder('Tanpa batas'),
+                                    ->placeholder('—'),
                             ])
-                            ->columns(1)
+                            ->columns(2)
                             ->contained(false),
                     ])
                     ->columnSpan([
                         'default' => 'full',
                         'lg' => 1,
                     ]),
-                Section::make('Percobaan provider')
+                Section::make('Percobaan')
+                    ->description('Hasil tiap percobaan ke provider.')
                     ->schema([
                         RepeatableEntry::make('attempts')
-                            ->label('')
+                            ->hiddenLabel()
                             ->schema([
-                                TextEntry::make('sequence')->label('#'),
-                                TextEntry::make('providerAccount.name')->label('Provider'),
+                                TextEntry::make('providerAccount.name')
+                                    ->hiddenLabel()
+                                    ->weight('semibold'),
                                 TextEntry::make('status')
-                                    ->label('Status')
+                                    ->hiddenLabel()
                                     ->badge()
                                     ->color(fn (?string $state): string => static::attemptStatusColor($state))
                                     ->formatStateUsing(fn (?string $state): string => static::attemptStatusLabel($state)),
+                                TextEntry::make('http_status')
+                                    ->label('HTTP')
+                                    ->placeholder('—')
+                                    ->visible(fn (mixed $state): bool => filled($state)),
+                                TextEntry::make('latency_ms')
+                                    ->label('Latensi')
+                                    ->suffix(' ms')
+                                    ->placeholder('—')
+                                    ->visible(fn (mixed $state): bool => filled($state)),
+                                TextEntry::make('error_message')
+                                    ->label('Error')
+                                    ->placeholder('—')
+                                    ->visible(fn (mixed $state): bool => filled($state))
+                                    ->columnSpanFull(),
+                            ])
+                            ->columns(4)
+                            ->contained(false),
+                    ])
+                    ->columnSpanFull(),
+                Section::make('Detail teknis')
+                    ->description('ID pendukung, linimasa event, dan audit isi pesan.')
+                    ->collapsed()
+                    ->schema([
+                        TextEntry::make('correlation_id')
+                            ->label('ID korelasi')
+                            ->copyable()
+                            ->placeholder('—'),
+                        TextEntry::make('client_reference')
+                            ->label('Referensi klien')
+                            ->placeholder('—'),
+                        TextEntry::make('mode')
+                            ->label('Mode')
+                            ->badge()
+                            ->color('gray'),
+                        TextEntry::make('route_key')
+                            ->label('Kunci rute')
+                            ->placeholder('—'),
+                        TextEntry::make('provider_message_id')
+                            ->label('ID pesan provider')
+                            ->placeholder('—'),
+                        TextEntry::make('last_error_code')
+                            ->label('Kode error')
+                            ->placeholder('—'),
+                        TextEntry::make('body')
+                            ->label('Isi pesan')
+                            ->copyable()
+                            ->placeholder('—')
+                            ->columnSpanFull(),
+                        RepeatableEntry::make('events')
+                            ->label('Linimasa event')
+                            ->schema([
+                                TextEntry::make('occurred_at')
+                                    ->hiddenLabel()
+                                    ->dateTime(),
+                                TextEntry::make('type')
+                                    ->hiddenLabel()
+                                    ->badge()
+                                    ->color(fn (?string $state): string => static::eventColor($state))
+                                    ->formatStateUsing(fn (?string $state): string => static::eventLabel($state)),
+                                TextEntry::make('source')
+                                    ->hiddenLabel()
+                                    ->badge()
+                                    ->color('gray'),
+                            ])
+                            ->columns(3)
+                            ->contained(false)
+                            ->columnSpanFull(),
+                        RepeatableEntry::make('attempts')
+                            ->label('Rincian percobaan')
+                            ->schema([
+                                TextEntry::make('sequence')->label('#'),
+                                TextEntry::make('providerAccount.name')->label('Provider'),
                                 TextEntry::make('delivery_certainty')
-                                    ->label('Hasil provider')
+                                    ->label('Kepastian kirim')
                                     ->badge()
                                     ->color(fn (?string $state): string => static::deliveryCertaintyColor($state))
                                     ->formatStateUsing(fn (?string $state): string => static::deliveryCertaintyLabel($state)),
@@ -246,35 +298,21 @@ class GatewayMessageResource extends Resource
                                     ->badge()
                                     ->color(fn (?string $state): string => static::retryDispositionColor($state))
                                     ->formatStateUsing(fn (?string $state): string => static::retryDispositionLabel($state)),
-                                TextEntry::make('http_status')->label('HTTP')->placeholder('—'),
-                                TextEntry::make('latency_ms')->label('Latensi')->suffix(' ms')->placeholder('—'),
-                                TextEntry::make('provider_message_id')->label('ID remote')->placeholder('—'),
-                                TextEntry::make('error_code')->label('Kode error')->placeholder('—'),
-                                TextEntry::make('error_message')->label('Error')->placeholder('—')->columnSpanFull(),
-                                TextEntry::make('started_at')->label('Mulai')->dateTime(),
-                                TextEntry::make('finished_at')->label('Selesai')->dateTime()->placeholder('—'),
+                                TextEntry::make('provider_message_id')
+                                    ->label('ID remote')
+                                    ->placeholder('—'),
+                                TextEntry::make('error_code')
+                                    ->label('Kode error')
+                                    ->placeholder('—'),
+                                TextEntry::make('finished_at')
+                                    ->label('Selesai')
+                                    ->dateTime()
+                                    ->placeholder('—'),
                             ])
-                            ->columns(3),
+                            ->columns(3)
+                            ->columnSpanFull(),
                     ])
-                    ->columnSpanFull(),
-                Section::make('Linimasa event')
-                    ->schema([
-                        RepeatableEntry::make('events')
-                            ->label('')
-                            ->schema([
-                                TextEntry::make('occurred_at')->label('Waktu')->dateTime(),
-                                TextEntry::make('type')
-                                    ->label('Proses')
-                                    ->badge()
-                                    ->color(fn (?string $state): string => static::eventColor($state))
-                                    ->formatStateUsing(fn (?string $state): string => static::eventLabel($state)),
-                                TextEntry::make('source')
-                                    ->label('Sumber')
-                                    ->badge()
-                                    ->color('gray'),
-                            ])
-                            ->columns(3),
-                    ])
+                    ->columns(2)
                     ->columnSpanFull(),
             ]);
     }
@@ -294,16 +332,12 @@ class GatewayMessageResource extends Resource
             ['label' => 'Gagal', 'at' => $record->failed_at],
             ['label' => 'Hasil tidak diketahui', 'at' => $record->outcome_unknown_at],
             ['label' => 'Dead letter', 'at' => $record->dead_lettered_at],
+            ['label' => 'Kedaluwarsa', 'at' => $record->expires_at],
         ] as $step) {
             if ($step['at'] !== null) {
                 $steps[] = $step;
             }
         }
-
-        $steps[] = [
-            'label' => 'Kedaluwarsa',
-            'at' => $record->expires_at,
-        ];
 
         return $steps;
     }

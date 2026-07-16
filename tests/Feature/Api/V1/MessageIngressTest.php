@@ -3,6 +3,11 @@
 namespace Tests\Feature\Api\V1;
 
 use App\Jobs\DispatchGatewayMessage;
+use App\Models\GatewayMessage;
+use App\Models\MessageEvent;
+use App\Support\PayloadHasher;
+use App\Support\PhoneNormalizer;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -38,6 +43,57 @@ class MessageIngressTest extends TestCase
         $this->postMessage($revoked['token'], 'revoked-token', $payload)
             ->assertStatus(401)
             ->assertJsonPath('error.code', 'unauthenticated');
+
+        $this->assertDatabaseCount('gateway_messages', 0);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_expired_credential_is_rejected_without_creating_or_queueing_a_message(): void
+    {
+        Queue::fake();
+        $client = $this->createClientApplication();
+
+        DB::table('api_credentials')
+            ->where('id', $client['credential_id'])
+            ->update(['expires_at' => now()->subSecond()]);
+
+        $this->postMessage($client['token'], 'expired-credential', $this->messagePayload())
+            ->assertUnauthorized()
+            ->assertJsonPath('error.code', 'unauthenticated');
+
+        $this->assertDatabaseCount('gateway_messages', 0);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_malformed_credential_expiry_fails_closed_without_an_internal_error(): void
+    {
+        Queue::fake();
+        $client = $this->createClientApplication();
+
+        DB::table('api_credentials')
+            ->where('id', $client['credential_id'])
+            ->update(['expires_at' => 'not-a-valid-date']);
+
+        $this->postMessage($client['token'], 'malformed-expiry', $this->messagePayload())
+            ->assertUnauthorized()
+            ->assertJsonPath('error.code', 'unauthenticated');
+
+        $this->assertDatabaseCount('gateway_messages', 0);
+        Queue::assertNothingPushed();
+    }
+
+    public function test_corrupted_credential_abilities_fail_closed_without_creating_work(): void
+    {
+        Queue::fake();
+        $client = $this->createClientApplication();
+
+        DB::table('api_credentials')
+            ->where('id', $client['credential_id'])
+            ->update(['abilities' => 'corrupted-encrypted-value']);
+
+        $this->postMessage($client['token'], 'corrupted-abilities', $this->messagePayload())
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'forbidden');
 
         $this->assertDatabaseCount('gateway_messages', 0);
         Queue::assertNothingPushed();
@@ -168,6 +224,75 @@ class MessageIngressTest extends TestCase
         $this->assertDatabaseCount('message_attempts', 0);
         Queue::assertPushed(DispatchGatewayMessage::class, 1);
         Http::assertNothingSent();
+    }
+
+    public function test_concurrent_idempotent_insert_returns_the_winning_message_without_duplicate_work(): void
+    {
+        Queue::fake();
+        $client = $this->createClientApplication();
+        $payload = $this->messagePayload();
+        $winner = null;
+        $armed = true;
+
+        DB::listen(function (QueryExecuted $query) use (&$armed, &$winner, $client, $payload): void {
+            if (
+                ! $armed
+                || ! str_starts_with(strtolower(ltrim($query->sql)), 'select')
+                || ! str_contains(strtolower($query->sql), 'gateway_messages')
+            ) {
+                return;
+            }
+
+            $armed = false;
+            $canonicalRecipient = app(PhoneNormalizer::class)->normalize($payload['recipient']['value']);
+            $canonicalPayload = [
+                'recipient' => ['type' => 'phone', 'value' => $canonicalRecipient],
+                'message' => ['type' => 'text', 'text' => $payload['message']['text']],
+                'purpose' => $payload['purpose'],
+                'mode' => $payload['mode'],
+                'route_key' => $payload['route_key'],
+                'expires_at' => null,
+                'client_reference' => $payload['client_reference'],
+                'metadata' => $payload['metadata'],
+            ];
+
+            $winner = GatewayMessage::query()->forceCreate([
+                'uuid' => (string) Str::uuid(),
+                'client_application_id' => $client['id'],
+                'idempotency_key' => 'concurrent-key',
+                'payload_hash' => app(PayloadHasher::class)->hash($canonicalPayload, (string) config('app.key')),
+                'correlation_id' => (string) Str::uuid(),
+                'client_reference' => $payload['client_reference'],
+                'recipient' => $canonicalRecipient,
+                'recipient_hash' => hash_hmac('sha256', $canonicalRecipient, (string) config('app.key')),
+                'recipient_last4' => substr($canonicalRecipient, -4),
+                'body' => $payload['message']['text'],
+                'purpose' => $payload['purpose'],
+                'route_key' => $payload['route_key'],
+                'mode' => 'async',
+                'priority' => 10,
+                'status' => 'queued',
+                'metadata' => $payload['metadata'],
+                'queued_at' => now(),
+            ]);
+
+            MessageEvent::query()->forceCreate([
+                'gateway_message_id' => $winner->getKey(),
+                'type' => 'queued',
+                'source' => 'api',
+                'occurred_at' => now(),
+            ]);
+        });
+
+        $response = $this->postMessage($client['token'], 'concurrent-key', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.duplicate', true);
+
+        $this->assertNotNull($winner);
+        $this->assertSame($winner->uuid, $response->json('data.id'));
+        $this->assertDatabaseCount('gateway_messages', 1);
+        $this->assertDatabaseCount('message_events', 1);
+        Queue::assertNothingPushed();
     }
 
     public function test_same_application_key_with_a_different_payload_conflicts(): void

@@ -81,4 +81,25 @@ class MessageValidationTest extends TestCase
         $this->assertDatabaseCount('gateway_messages', 0);
         Queue::assertNothingPushed();
     }
+
+    public function test_oversized_metadata_and_invalid_route_key_are_rejected_before_persistence(): void
+    {
+        Queue::fake();
+        $client = $this->createClientApplication();
+
+        $this->postMessage($client['token'], 'oversized-metadata', $this->messagePayload(overrides: [
+            'metadata' => ['context' => str_repeat('x', 8193)],
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('metadata');
+
+        $this->postMessage($client['token'], 'invalid-route-key', $this->messagePayload(overrides: [
+            'route_key' => 'route key with spaces',
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('route_key');
+
+        $this->assertDatabaseCount('gateway_messages', 0);
+        Queue::assertNothingPushed();
+    }
 }

@@ -16,16 +16,26 @@ class ViewGatewayMessage extends ViewRecord
 {
     protected static string $resource = GatewayMessageResource::class;
 
+    public function getTitle(): string
+    {
+        return 'Detail pesan';
+    }
+
+    public function getHeading(): string
+    {
+        return 'Detail pesan';
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             Action::make('retry')
-                ->label('Retry message')
+                ->label('Coba kirim ulang')
                 ->icon(Heroicon::OutlinedArrowPath)
                 ->color('warning')
                 ->requiresConfirmation()
-                ->modalHeading('Queue this message for retry?')
-                ->modalDescription('The existing attempt history is retained and routing is evaluated again.')
+                ->modalHeading('Masukkan pesan ini ke antrian ulang?')
+                ->modalDescription('Riwayat percobaan tetap disimpan dan rute dievaluasi ulang.')
                 ->visible(fn (): bool => $this->getRecord()->isSafeToRetry())
                 ->action(function (): void {
                     try {
@@ -46,8 +56,8 @@ class ViewGatewayMessage extends ViewRecord
                         });
                     } catch (DomainException) {
                         Notification::make()
-                            ->title('Retry no longer available')
-                            ->body('The message state changed or it has expired. Refresh and inspect the latest timeline.')
+                            ->title('Kirim ulang tidak lagi tersedia')
+                            ->body('Status pesan berubah atau sudah kedaluwarsa. Muat ulang dan periksa linimasa terbaru.')
                             ->danger()
                             ->send();
 
@@ -58,8 +68,8 @@ class ViewGatewayMessage extends ViewRecord
                         $this->getRecord()->refresh();
 
                         Notification::make()
-                            ->title('Retry saved but queue unavailable')
-                            ->body('The message remains queued and scheduled recovery will try again automatically.')
+                            ->title('Kirim ulang disimpan, tetapi antrian tidak tersedia')
+                            ->body('Pesan tetap berada di antrian dan pemulihan terjadwal akan mencoba lagi secara otomatis.')
                             ->danger()
                             ->send();
 
@@ -69,7 +79,7 @@ class ViewGatewayMessage extends ViewRecord
                     $this->getRecord()->refresh();
 
                     Notification::make()
-                        ->title('Retry queued')
+                        ->title('Kirim ulang masuk antrian')
                         ->success()
                         ->send();
                 }),

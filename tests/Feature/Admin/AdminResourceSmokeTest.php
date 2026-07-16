@@ -74,7 +74,9 @@ class AdminResourceSmokeTest extends TestCase
         $source = file_get_contents(app_path($resourceFile));
 
         $this->assertIsString($source);
-        $this->assertStringContainsString("Grid::make(['xl' => 3])", $source);
+        $this->assertStringContainsString("'lg' => 3", $source);
+        $this->assertStringContainsString("'lg' => 2", $source);
+        $this->assertStringContainsString("'lg' => 1", $source);
         $this->assertStringNotContainsString("Grid::make(['2xl' => 3])", $source);
     }
 

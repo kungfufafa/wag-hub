@@ -25,20 +25,20 @@ class GatewayStatsOverview extends StatsOverviewWidget
             : round(($fallbackMessageCount / $messageCount) * 100, 1);
 
         return [
-            Stat::make('Queued', GatewayMessage::query()->where('status', 'queued')->count())
-                ->description('Waiting for a worker')
+            Stat::make('Antrian', GatewayMessage::query()->where('status', 'queued')->count())
+                ->description('Menunggu worker')
                 ->color('warning'),
             Stat::make(
-                'Provider accepted',
+                'Diterima provider',
                 GatewayMessage::query()->where('status', 'provider_accepted')->count(),
             )
-                ->description('Explicit provider acceptance')
+                ->description('Penerimaan eksplisit dari provider')
                 ->color('success'),
-            Stat::make('Failed', GatewayMessage::query()->where('status', 'failed')->count())
-                ->description('Safe failures requiring attention')
+            Stat::make('Gagal', GatewayMessage::query()->where('status', 'failed')->count())
+                ->description('Kegagalan aman yang perlu perhatian')
                 ->color('danger'),
-            Stat::make('Fallback rate', number_format($fallbackRate, 1).'%')
-                ->description("{$fallbackMessageCount} messages used fallback")
+            Stat::make('Rasio cadangan', number_format($fallbackRate, 1).'%')
+                ->description("{$fallbackMessageCount} pesan memakai jalur cadangan")
                 ->color($fallbackRate > 10 ? 'warning' : 'info'),
         ];
     }

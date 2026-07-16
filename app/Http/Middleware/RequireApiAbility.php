@@ -8,6 +8,7 @@ use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class RequireApiAbility
 {
@@ -22,13 +23,17 @@ class RequireApiAbility
             return $this->forbidden($request);
         }
 
-        $abilities = $credential->abilities;
+        try {
+            $abilities = $credential->abilities;
 
-        if ($abilities instanceof Arrayable) {
-            $abilities = $abilities->toArray();
-        } elseif (is_string($abilities)) {
-            $decoded = json_decode($abilities, true);
-            $abilities = is_array($decoded) ? $decoded : [];
+            if ($abilities instanceof Arrayable) {
+                $abilities = $abilities->toArray();
+            } elseif (is_string($abilities)) {
+                $decoded = json_decode($abilities, true);
+                $abilities = is_array($decoded) ? $decoded : [];
+            }
+        } catch (Throwable) {
+            return $this->forbidden($request);
         }
 
         if (! is_array($abilities) || (! in_array('*', $abilities, true) && ! in_array($requiredAbility, $abilities, true))) {

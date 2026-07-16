@@ -10,86 +10,242 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Js;
+use Illuminate\Validation\Rules\Unique;
 
 class ApiCredentialsRelationManager extends RelationManager
 {
     protected static string $relationship = 'apiCredentials';
 
-    protected static ?string $title = 'API credentials';
+    protected static ?string $title = 'Kredensial API';
+
+    public function showIssuedTokenAction(): Action
+    {
+        return Action::make('showIssuedToken')
+            ->modalHeading('Kredensial berhasil dibuat')
+            ->modalDescription('Salin token sekarang. Setelah modal ditutup, token tidak dapat dilihat lagi.')
+            ->modalIcon(Heroicon::OutlinedKey)
+            ->modalIconColor('success')
+            ->schema([
+                TextInput::make('token')
+                    ->label('Token API')
+                    ->password()
+                    ->revealable()
+                    ->readOnly()
+                    ->dehydrated(false)
+                    ->extraInputAttributes([
+                        'class' => 'font-mono',
+                    ])
+                    ->suffixAction(
+                        Action::make('copyToken')
+                            ->label('Salin')
+                            ->icon(Heroicon::ClipboardDocumentList)
+                            ->color('gray')
+                            ->alpineClickHandler(function (mixed $state): string {
+                                return static::copyToClipboardAlpine((string) ($state ?? ''));
+                            }),
+                    ),
+            ])
+            ->fillForm(fn (array $arguments): array => [
+                'token' => $arguments['token'] ?? '',
+            ])
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Selesai');
+    }
+
+    protected static function copyToClipboardAlpine(string $text): string
+    {
+        $token = Js::from($text);
+
+        return <<<JS
+            (() => {
+                const modal = (typeof \$el !== 'undefined')
+                    ? (\$el.closest('.fi-modal-window') || \$el.closest('.fi-modal') || \$el.closest('[role=dialog]'))
+                    : null
+
+                const text = {$token}
+
+                if (! text) {
+                    return
+                }
+
+                const notify = () => {
+                    try {
+                        \$tooltip('Token disalin', {
+                            theme: \$store.theme,
+                            timeout: 1500,
+                        })
+                    } catch (e) {}
+                }
+
+                // Filament modals trap focus, so a textarea on document.body cannot be
+                // focused and execCommand('copy') returns true while copying nothing.
+                const copyWithModalTextarea = () => {
+                    if (! modal) {
+                        return false
+                    }
+
+                    const el = document.createElement('textarea')
+                    el.value = text
+                    el.setAttribute('readonly', '')
+                    el.style.cssText = 'position:fixed;top:0;left:-9999px;font-size:12pt;'
+                    modal.appendChild(el)
+                    el.focus()
+                    el.select()
+                    el.setSelectionRange(0, el.value.length)
+
+                    const focused = document.activeElement === el
+                        && el.selectionEnd === el.value.length
+
+                    let ok = false
+
+                    try {
+                        ok = focused && Boolean(document.execCommand('copy'))
+                    } finally {
+                        el.remove()
+                    }
+
+                    return ok
+                }
+
+                const copyWithEvent = () => {
+                    let ok = false
+                    const onCopy = (event) => {
+                        if (! event.clipboardData) {
+                            return
+                        }
+
+                        event.clipboardData.setData('text/plain', text)
+                        event.preventDefault()
+                        ok = true
+                    }
+
+                    document.addEventListener('copy', onCopy, true)
+
+                    try {
+                        document.execCommand('copy')
+                    } finally {
+                        document.removeEventListener('copy', onCopy, true)
+                    }
+
+                    return ok
+                }
+
+                if (copyWithModalTextarea() || copyWithEvent()) {
+                    notify()
+                    return
+                }
+
+                if (window.isSecureContext && window.navigator.clipboard?.writeText) {
+                    window.navigator.clipboard.writeText(text).then(notify).catch(() => {})
+                }
+            })()
+            JS;
+    }
 
     public function table(Table $table): Table
     {
         return $table
             ->recordTitleAttribute('name')
             ->columns([
-                TextColumn::make('name')->searchable(),
+                TextColumn::make('name')
+                    ->label('Nama')
+                    ->searchable(),
                 TextColumn::make('token_prefix')
-                    ->label('Token prefix')
+                    ->label('Prefiks token')
                     ->fontFamily('mono')
                     ->copyable(),
                 TextColumn::make('abilities')
+                    ->label('Hak akses')
                     ->badge()
                     ->separator(','),
                 TextColumn::make('last_used_at')
+                    ->label('Terakhir dipakai')
                     ->dateTime()
-                    ->placeholder('Never'),
+                    ->placeholder('Belum pernah'),
                 TextColumn::make('expires_at')
+                    ->label('Kedaluwarsa')
                     ->dateTime()
-                    ->placeholder('No expiry'),
+                    ->placeholder('Tanpa batas'),
                 TextColumn::make('revoked_at')
                     ->label('Status')
-                    ->formatStateUsing(fn ($state): string => $state ? 'Revoked' : 'Active')
+                    ->formatStateUsing(fn ($state): string => $state ? 'Dicabut' : 'Aktif')
                     ->badge()
                     ->color(fn ($state): string => $state ? 'danger' : 'success'),
             ])
             ->headerActions([
                 Action::make('issue')
-                    ->label('Issue credential')
+                    ->label('Terbitkan kredensial')
                     ->icon(Heroicon::OutlinedKey)
+                    ->slideOver()
+                    ->modalWidth(Width::Medium)
                     ->schema([
                         TextInput::make('name')
+                            ->label('Nama')
                             ->required()
-                            ->maxLength(120),
+                            ->maxLength(120)
+                            ->unique(
+                                table: ApiCredential::class,
+                                column: 'name',
+                                modifyRuleUsing: fn (Unique $rule): Unique => $rule->where(
+                                    'client_application_id',
+                                    $this->getOwnerRecord()->getKey(),
+                                ),
+                            )
+                            ->validationMessages([
+                                'unique' => 'Nama kredensial ini sudah dipakai untuk aplikasi ini.',
+                            ]),
                         CheckboxList::make('abilities')
+                            ->label('Hak akses')
                             ->options([
-                                'messages:send' => 'Send messages',
-                                'messages:read' => 'Read message status',
+                                'messages:send' => 'Kirim pesan',
+                                'messages:read' => 'Baca status pesan',
                             ])
                             ->default(['messages:send', 'messages:read'])
                             ->required()
                             ->minItems(1),
                         DateTimePicker::make('expires_at')
-                            ->label('Expires at')
+                            ->label('Kedaluwarsa pada')
                             ->after('now')
                             ->seconds(false),
                     ])
                     ->action(function (array $data): void {
                         /** @var ClientApplication $application */
                         $application = $this->getOwnerRecord();
-                        $issued = ApiCredential::issue(
-                            $application,
-                            $data['name'],
-                            $data['abilities'],
-                        );
+
+                        try {
+                            $issued = ApiCredential::issue(
+                                $application,
+                                $data['name'],
+                                $data['abilities'],
+                            );
+                        } catch (UniqueConstraintViolationException) {
+                            Notification::make()
+                                ->title('Nama kredensial sudah dipakai')
+                                ->body('Gunakan nama lain untuk aplikasi ini.')
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
 
                         if (filled($data['expires_at'] ?? null)) {
                             $issued->credential->update(['expires_at' => $data['expires_at']]);
                         }
 
-                        Notification::make()
-                            ->title('Credential created')
-                            ->body($issued->plainTextToken)
-                            ->success()
-                            ->persistent()
-                            ->send();
+                        $this->replaceMountedAction('showIssuedToken', [
+                            'token' => $issued->plainTextToken,
+                        ]);
                     }),
             ])
             ->recordActions([
                 Action::make('revoke')
-                    ->label('Revoke')
+                    ->label('Cabut')
                     ->icon(Heroicon::OutlinedNoSymbol)
                     ->color('danger')
                     ->requiresConfirmation()
@@ -98,7 +254,7 @@ class ApiCredentialsRelationManager extends RelationManager
                         $record->update(['revoked_at' => now()]);
 
                         Notification::make()
-                            ->title('Credential revoked')
+                            ->title('Kredensial dicabut')
                             ->success()
                             ->send();
                     }),

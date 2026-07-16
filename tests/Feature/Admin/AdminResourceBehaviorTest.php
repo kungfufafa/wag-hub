@@ -17,6 +17,7 @@ use App\Models\GatewayMessage;
 use App\Models\ProviderAccount;
 use App\Models\User;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -66,13 +67,16 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertDontSee('Hasil tidak diketahui');
     }
 
-    public function test_message_detail_shows_the_encrypted_body_for_admin_audit(): void
+    public function test_message_detail_keeps_the_encrypted_body_in_collapsed_technical_details(): void
     {
         $message = $this->createMessage('provider_accepted', now()->addMinute());
 
         Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertSee('Detail teknis')
             ->assertSee('Isi pesan')
-            ->assertSee('Sensitive gateway body');
+            ->assertSee('Sensitive gateway body')
+            ->assertSee('Ringkasan')
+            ->assertSee('Perjalanan');
     }
 
     public function test_message_view_shows_compact_lifecycle_timeline_without_empty_stages(): void
@@ -95,7 +99,7 @@ class AdminResourceBehaviorTest extends TestCase
         );
 
         Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
-            ->assertSee('Siklus hidup')
+            ->assertSee('Perjalanan')
             ->assertSee('Dibuat')
             ->assertSee('Diproses')
             ->assertSee('Diterima provider')
@@ -231,6 +235,91 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertHasActionErrors(['name']);
 
         $this->assertSame(1, ApiCredential::query()->where('client_application_id', $application->id)->count());
+    }
+
+    public function test_credential_issue_action_handles_a_duplicate_name_race_without_leaking_a_second_token(): void
+    {
+        $application = $this->createClient('credential-race');
+        $armed = true;
+        $component = Livewire::test(ApiCredentialsRelationManager::class, [
+            'ownerRecord' => $application,
+            'pageClass' => EditClientApplication::class,
+        ]);
+
+        DB::listen(function (QueryExecuted $query) use (&$armed, $application): void {
+            if (
+                ! $armed
+                || ! str_starts_with(strtolower(ltrim($query->sql)), 'select')
+                || ! str_contains(strtolower($query->sql), 'api_credentials')
+                || ! str_contains(strtolower($query->sql), 'count')
+            ) {
+                return;
+            }
+
+            $armed = false;
+            ApiCredential::issue($application, 'Raced credential', ['messages:send']);
+        });
+
+        $component->callTableAction('issue', data: [
+            'name' => 'Raced credential',
+            'abilities' => ['messages:send'],
+        ])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame(1, ApiCredential::query()
+            ->where('client_application_id', $application->id)
+            ->where('name', 'Raced credential')
+            ->count());
+    }
+
+    public function test_credential_name_may_be_reused_by_a_different_application(): void
+    {
+        $firstApplication = $this->createClient('credential-scope-first');
+        $secondApplication = $this->createClient('credential-scope-second');
+        ApiCredential::issue($firstApplication, 'Production', ['messages:send']);
+
+        Livewire::test(ApiCredentialsRelationManager::class, [
+            'ownerRecord' => $secondApplication,
+            'pageClass' => EditClientApplication::class,
+        ])
+            ->callTableAction('issue', data: [
+                'name' => 'Production',
+                'abilities' => ['messages:read'],
+            ])
+            ->assertHasNoActionErrors()
+            ->assertActionMounted('showIssuedToken');
+
+        $this->assertSame(2, ApiCredential::query()->where('name', 'Production')->count());
+    }
+
+    public function test_credential_issue_action_rejects_a_past_expiry(): void
+    {
+        $application = $this->createClient('credential-expiry');
+
+        Livewire::test(ApiCredentialsRelationManager::class, [
+            'ownerRecord' => $application,
+            'pageClass' => EditClientApplication::class,
+        ])
+            ->callTableAction('issue', data: [
+                'name' => 'Already expired',
+                'abilities' => ['messages:send'],
+                'expires_at' => now()->subMinute(),
+            ])
+            ->assertHasActionErrors(['expires_at']);
+
+        $this->assertDatabaseCount('api_credentials', 0);
+    }
+
+    public function test_copy_token_script_contains_safe_fallbacks_and_escapes_script_terminators(): void
+    {
+        $method = new \ReflectionMethod(ApiCredentialsRelationManager::class, 'copyToClipboardAlpine');
+        $script = $method->invoke(null, 'wgh_</script><script>alert(1)</script>');
+
+        $this->assertIsString($script);
+        $this->assertStringContainsString('copyWithModalTextarea', $script);
+        $this->assertStringContainsString('copyWithEvent', $script);
+        $this->assertStringContainsString('navigator.clipboard?.writeText', $script);
+        $this->assertStringNotContainsString('</script>', $script);
     }
 
     public function test_blank_provider_secret_on_edit_preserves_the_existing_encrypted_secret(): void
