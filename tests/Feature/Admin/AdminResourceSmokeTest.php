@@ -30,11 +30,11 @@ class AdminResourceSmokeTest extends TestCase
     public static function resourcePages(): array
     {
         return [
-            'client applications' => ['/admin/client-applications'],
-            'provider accounts' => ['/admin/provider-accounts'],
-            'routing policies' => ['/admin/routing-policies'],
-            'message ledger' => ['/admin/messages'],
-            'number check ledger' => ['/admin/number-checks'],
+            'client applications' => ['/panel/client-applications'],
+            'provider accounts' => ['/panel/provider-accounts'],
+            'routing policies' => ['/panel/routing-policies'],
+            'message ledger' => ['/panel/messages'],
+            'number check ledger' => ['/panel/number-checks'],
         ];
     }
 
@@ -63,9 +63,9 @@ class AdminResourceSmokeTest extends TestCase
     public static function configurationCreatePages(): array
     {
         return [
-            'client application' => ['/admin/client-applications/create', 'Langkah berikutnya', 'Aplikasi Klien'],
-            'provider account' => ['/admin/provider-accounts/create', 'Sebelum menyimpan', 'Akun Provider'],
-            'routing policy' => ['/admin/routing-policies/create', 'Cara kerja rute', 'Aturan Rute'],
+            'client application' => ['/panel/client-applications/create', 'Langkah berikutnya', 'Aplikasi Klien'],
+            'provider account' => ['/panel/provider-accounts/create', 'Sebelum menyimpan', 'Akun Provider'],
+            'routing policy' => ['/panel/routing-policies/create', 'Cara kerja rute', 'Aturan Rute'],
         ];
     }
 

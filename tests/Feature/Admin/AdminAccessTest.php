@@ -12,8 +12,8 @@ class AdminAccessTest extends TestCase
 
     public function test_guest_is_redirected_to_the_filament_login_page(): void
     {
-        $this->get('/admin')
-            ->assertRedirect('/admin/login');
+        $this->get('/panel')
+            ->assertRedirect('/panel/login');
     }
 
     public function test_active_administrator_can_open_the_admin_panel(): void
@@ -21,7 +21,7 @@ class AdminAccessTest extends TestCase
         $administrator = $this->createUser(isAdmin: true, isActive: true);
 
         $this->actingAs($administrator)
-            ->get('/admin')
+            ->get('/panel')
             ->assertOk();
     }
 
@@ -30,7 +30,7 @@ class AdminAccessTest extends TestCase
         $user = $this->createUser(isAdmin: false, isActive: true);
 
         $this->actingAs($user)
-            ->get('/admin')
+            ->get('/panel')
             ->assertForbidden();
     }
 
@@ -39,13 +39,13 @@ class AdminAccessTest extends TestCase
         $administrator = $this->createUser(isAdmin: true, isActive: false);
 
         $this->actingAs($administrator)
-            ->get('/admin')
+            ->get('/panel')
             ->assertForbidden();
     }
 
     public function test_public_admin_registration_is_not_available(): void
     {
-        $this->get('/admin/register')
+        $this->get('/panel/register')
             ->assertNotFound();
     }
 
