@@ -155,4 +155,39 @@ class HubManagementSeederTest extends TestCase
         $this->assertFalse(ProviderAccount::query()->where('slug', 'gowa-primary')->sole()->is_active);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'waba-primary')->sole()->is_active);
     }
+
+    public function test_rerunning_the_seeder_retires_legacy_number_check_routes_outside_web_cesa(): void
+    {
+        config()->set('gateway.seed.providers', ['waha' => [], 'fonnte' => [], 'gowa' => [], 'waba' => []]);
+        config()->set('gateway.seed.credentials', []);
+
+        $this->seed(GatewayHubManagementSeeder::class);
+
+        $shelf = ClientApplication::query()->where('slug', 'web-shelf')->sole();
+        RoutingPolicy::query()->create([
+            'client_application_id' => $shelf->id,
+            'operation' => 'number_check',
+            'key' => 'default',
+            'name' => 'Legacy shelf number check',
+            'purpose' => null,
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+
+        $this->seed(GatewayHubManagementSeeder::class);
+
+        $this->assertFalse(
+            RoutingPolicy::query()
+                ->where('client_application_id', $shelf->id)
+                ->where('operation', 'number_check')
+                ->exists(),
+        );
+        $this->assertTrue(
+            RoutingPolicy::query()
+                ->where('client_application_id', ClientApplication::query()->where('slug', 'web-cesa')->value('id'))
+                ->where('operation', 'number_check')
+                ->where('key', 'lead-number-check')
+                ->exists(),
+        );
+    }
 }
