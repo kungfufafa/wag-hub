@@ -65,6 +65,23 @@ class ProviderEndpointEnforcementTest extends TestCase
                     'token' => 'fonnte-secret',
                 ],
             ],
+            'GOWA' => [
+                'gowa',
+                [
+                    'base_url' => 'https://attacker.example',
+                    'username' => 'gateway',
+                    'password' => 'gowa-secret',
+                ],
+            ],
+            'WABA' => [
+                'waba',
+                [
+                    'base_url' => 'https://attacker.example',
+                    'api_version' => 'v25.0',
+                    'phone_number_id' => '123456789012345',
+                    'access_token' => 'meta-token',
+                ],
+            ],
         ];
     }
 }
