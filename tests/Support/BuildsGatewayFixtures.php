@@ -124,14 +124,16 @@ trait BuildsGatewayFixtures
         array $providerAccountIds,
         string $purpose = 'notification',
         string $routeKey = 'default',
+        string $operation = 'message',
     ): int {
         $now = now();
         $policyId = DB::table('routing_policies')->insertGetId([
             'uuid' => (string) Str::uuid(),
             'client_application_id' => $applicationId,
             'name' => 'Test route '.Str::lower(Str::random(8)),
+            'operation' => $operation,
             'key' => $routeKey,
-            'purpose' => $purpose,
+            'purpose' => $operation === 'number_check' ? null : $purpose,
             'is_default' => true,
             'is_active' => true,
             'created_at' => $now,

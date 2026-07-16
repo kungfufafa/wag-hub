@@ -41,7 +41,7 @@ final class NumberCheckTest extends TestCase
             ->assertJsonValidationErrors(['recipient.value', 'provider']);
     }
 
-    public function test_number_check_queries_waha_fonnte_and_gowa_without_sending_a_waba_message(): void
+    public function test_number_check_uses_its_own_ordered_route_and_stops_on_a_definitive_result(): void
     {
         $client = $this->createClientApplication(['numbers:check']);
         $waha = $this->createProviderAccount('waha', 'waha-primary', [
@@ -66,12 +66,18 @@ final class NumberCheckTest extends TestCase
             'phone_number_id' => '123456789012345',
             'access_token' => 'meta-token',
         ]);
-        $this->createRoutingPolicy($client['id'], [
-            $waha['id'],
-            $fonnte['id'],
-            $gowa['id'],
-            $waba['id'],
+        $messageOnly = $this->createProviderAccount('gowa', 'message-only', [
+            'base_url' => 'https://message-only.test',
+            'username' => 'gateway',
+            'password' => 'message-secret',
         ]);
+        $this->createRoutingPolicy($client['id'], [$messageOnly['id']]);
+        $this->createRoutingPolicy($client['id'], [
+            $waba['id'],
+            $fonnte['id'],
+            $waha['id'],
+            $gowa['id'],
+        ], routeKey: 'lookup-primary', operation: 'number_check');
 
         Http::fake([
             'waha-check.test/*' => Http::response([
@@ -79,10 +85,9 @@ final class NumberCheckTest extends TestCase
                 'chatId' => '6281234567890@c.us',
             ]),
             'fonnte-check.test/*' => Http::response([
-                'status' => true,
-                'registered' => ['6281234567890'],
-                'not_registered' => [],
-            ]),
+                'status' => false,
+                'reason' => 'device disconnected',
+            ], 503),
             'gowa-check.test/*' => Http::response([
                 'code' => 'SUCCESS',
                 'message' => 'Success check user',
@@ -92,26 +97,26 @@ final class NumberCheckTest extends TestCase
 
         $this->postJson('/api/v1/number-checks', [
             'recipient' => ['type' => 'phone', 'value' => '0812-3456-7890'],
+            'route_key' => 'lookup-primary',
         ], [
             'Authorization' => "Bearer {$client['token']}",
         ])
             ->assertOk()
             ->assertJsonPath('data.recipient.type', 'phone')
             ->assertJsonPath('data.recipient.value', '6281234567890')
-            ->assertJsonPath('data.status', 'conflict')
-            ->assertJsonPath('data.registered', null)
-            ->assertJsonPath('data.checks.0.provider', 'waha-primary')
-            ->assertJsonPath('data.checks.0.status', 'registered')
+            ->assertJsonPath('data.route_key', 'lookup-primary')
+            ->assertJsonPath('data.status', 'registered')
+            ->assertJsonPath('data.registered', true)
+            ->assertJsonPath('data.checks.0.provider', 'waba-primary')
+            ->assertJsonPath('data.checks.0.status', 'unsupported')
             ->assertJsonPath('data.checks.1.provider', 'fonnte-primary')
-            ->assertJsonPath('data.checks.1.status', 'registered')
-            ->assertJsonPath('data.checks.2.provider', 'gowa-primary')
-            ->assertJsonPath('data.checks.2.status', 'not_registered')
-            ->assertJsonPath('data.checks.3.provider', 'waba-primary')
-            ->assertJsonPath('data.checks.3.status', 'unsupported')
-            ->assertJsonPath('data.checks.3.reason_code', 'provider_check_unsupported')
+            ->assertJsonPath('data.checks.1.status', 'unknown')
+            ->assertJsonPath('data.checks.2.provider', 'waha-primary')
+            ->assertJsonPath('data.checks.2.status', 'registered')
+            ->assertJsonCount(3, 'data.checks')
             ->assertJsonStructure(['request_id']);
 
-        Http::assertSentCount(3);
+        Http::assertSentCount(2);
         Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
             && $request->url() === 'https://waha-check.test/api/contacts/check-exists?phone=6281234567890&session=default'
             && $request->hasHeader('X-Api-Key', 'waha-secret'));
@@ -120,10 +125,8 @@ final class NumberCheckTest extends TestCase
             && $request->hasHeader('Authorization', 'fonnte-secret')
             && $request->hasFile('target', '6281234567890')
             && $request->hasFile('countryCode', '62'));
-        Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
-            && $request->url() === 'https://gowa-check.test/user/check?phone=6281234567890'
-            && $request->hasHeader('Authorization', 'Basic '.base64_encode('gateway:gowa-secret'))
-            && $request->hasHeader('X-Device-Id', 'device-main'));
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'gowa-check.test')
+            || str_contains($request->url(), 'message-only.test'));
         Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'graph-meta.test'));
     }
 
@@ -135,7 +138,7 @@ final class NumberCheckTest extends TestCase
             'validate_endpoint' => 'https://fonnte-check.test/validate',
             'token' => 'fonnte-secret',
         ]);
-        $this->createRoutingPolicy($client['id'], [$provider['id']]);
+        $this->createRoutingPolicy($client['id'], [$provider['id']], operation: 'number_check');
         Http::fake([
             'fonnte-check.test/*' => Http::response([
                 'status' => false,
@@ -163,6 +166,7 @@ final class NumberCheckTest extends TestCase
             'session' => 'default',
             'api_key' => 'waha-secret',
         ]);
+        $this->createRoutingPolicy($client['id'], [$provider['id']], operation: 'number_check');
         DB::table('provider_accounts')->where('id', $provider['id'])->update(['is_active' => false]);
 
         $this->postJson('/api/v1/number-checks', [
@@ -188,8 +192,8 @@ final class NumberCheckTest extends TestCase
             'session' => 'default',
             'api_key' => 'other-secret',
         ]);
-        $this->createRoutingPolicy($owner['id'], [$ownerProvider['id']]);
-        $this->createRoutingPolicy($other['id'], [$otherProvider['id']]);
+        $this->createRoutingPolicy($owner['id'], [$ownerProvider['id']], operation: 'number_check');
+        $this->createRoutingPolicy($other['id'], [$otherProvider['id']], operation: 'number_check');
         Http::fake([
             'owner-waha.test/*' => Http::response(['numberExists' => true]),
             'other-waha.test/*' => Http::response(['numberExists' => false]),
@@ -206,5 +210,82 @@ final class NumberCheckTest extends TestCase
 
         Http::assertSentCount(1);
         Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'other-waha.test'));
+    }
+
+    public function test_number_check_skips_an_open_circuit_and_never_uses_a_deleted_policy(): void
+    {
+        $client = $this->createClientApplication(['numbers:check']);
+        $openProvider = $this->createProviderAccount('waha', 'open-waha', [
+            'base_url' => 'https://open-waha.test',
+            'session' => 'default',
+            'api_key' => 'open-secret',
+        ]);
+        $healthyProvider = $this->createProviderAccount('waha', 'healthy-waha', [
+            'base_url' => 'https://healthy-waha.test',
+            'session' => 'default',
+            'api_key' => 'healthy-secret',
+        ]);
+        DB::table('provider_accounts')
+            ->where('id', $openProvider['id'])
+            ->update(['circuit_open_until' => now()->addMinutes(5)]);
+        $this->createRoutingPolicy(
+            $client['id'],
+            [$openProvider['id'], $healthyProvider['id']],
+            routeKey: 'healthy-route',
+            operation: 'number_check',
+        );
+        $deletedPolicy = $this->createRoutingPolicy(
+            $client['id'],
+            [$openProvider['id']],
+            routeKey: 'deleted-route',
+            operation: 'number_check',
+        );
+        DB::table('routing_policies')->where('id', $deletedPolicy)->update(['deleted_at' => now()]);
+        Http::fake([
+            'healthy-waha.test/*' => Http::response(['numberExists' => true]),
+            '*' => Http::response(['numberExists' => false]),
+        ]);
+
+        $this->postJson('/api/v1/number-checks', [
+            'recipient' => ['type' => 'phone', 'value' => '081234567890'],
+            'route_key' => 'healthy-route',
+        ], [
+            'Authorization' => "Bearer {$client['token']}",
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'registered')
+            ->assertJsonPath('data.checks.0.provider', 'open-waha')
+            ->assertJsonPath('data.checks.0.status', 'skipped')
+            ->assertJsonPath('data.checks.0.reason_code', 'provider_circuit_open')
+            ->assertJsonPath('data.checks.1.provider', 'healthy-waha');
+
+        Http::assertSentCount(1);
+
+        $this->postJson('/api/v1/number-checks', [
+            'recipient' => ['type' => 'phone', 'value' => '081234567890'],
+            'route_key' => 'deleted-route',
+        ], [
+            'Authorization' => "Bearer {$client['token']}",
+        ])
+            ->assertServiceUnavailable()
+            ->assertJsonPath('error.code', 'route_unavailable');
+    }
+
+    public function test_message_delivery_never_uses_a_number_check_route(): void
+    {
+        $client = $this->createClientApplication(['messages:send', 'numbers:check']);
+        $provider = $this->createProviderAccount('waha', 'check-only-waha', [
+            'base_url' => 'https://check-only.test',
+            'session' => 'default',
+            'api_key' => 'check-secret',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$provider['id']], operation: 'number_check');
+        Http::fake();
+
+        $this->postMessage($client['token'], 'check-route-isolation', $this->messagePayload('sync'))
+            ->assertServiceUnavailable()
+            ->assertJsonPath('error.code', 'route_unavailable');
+
+        Http::assertNothingSent();
     }
 }
