@@ -120,6 +120,12 @@ class ProviderAccountResource extends Resource
                                 ->required(fn (Get $get): bool => $get('driver') === 'fonnte')
                                 ->default('https://api.fonnte.com/send')
                                 ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.validate_endpoint')
+                                ->label('Endpoint validasi nomor')
+                                ->url()
+                                ->required(fn (Get $get): bool => $get('driver') === 'fonnte')
+                                ->default('https://api.fonnte.com/validate')
+                                ->dehydratedWhenHidden(false),
                             TextInput::make('configuration.token')
                                 ->label('Token')
                                 ->password()
@@ -162,7 +168,7 @@ class ProviderAccountResource extends Resource
                         ->visible(fn (Get $get): bool => $get('driver') === 'gowa')
                         ->columns(['md' => 2]),
                     Section::make('Koneksi WABA')
-                        ->description('WhatsApp Business Platform resmi melalui Meta Cloud API.')
+                        ->description('Meta Cloud API resmi. Lookup registrasi nomor tidak tersedia; pengecekan akan berstatus unsupported.')
                         ->schema([
                             TextInput::make('configuration.base_url')
                                 ->label('Graph API Base URL')

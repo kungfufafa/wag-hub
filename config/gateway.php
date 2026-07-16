@@ -36,6 +36,7 @@ return [
             ],
             'fonnte' => [
                 'endpoint' => env('GATEWAY_SEED_FONNTE_ENDPOINT', 'https://api.fonnte.com/send'),
+                'validate_endpoint' => env('GATEWAY_SEED_FONNTE_VALIDATE_ENDPOINT', 'https://api.fonnte.com/validate'),
                 'token' => env('GATEWAY_SEED_FONNTE_TOKEN'),
             ],
             'gowa' => [

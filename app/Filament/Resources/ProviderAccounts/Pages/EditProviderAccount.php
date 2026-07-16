@@ -33,7 +33,7 @@ class EditProviderAccount extends EditRecord
         $driver = $data['driver'];
         $allowedKeys = match ($driver) {
             'waha' => ['base_url', 'session', 'api_key'],
-            'fonnte' => ['endpoint', 'token'],
+            'fonnte' => ['endpoint', 'validate_endpoint', 'token'],
             'gowa' => ['base_url', 'username', 'password', 'device_id'],
             'waba' => ['base_url', 'api_version', 'phone_number_id', 'access_token'],
             default => [],

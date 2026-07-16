@@ -3,8 +3,10 @@
 namespace App\Infrastructure\WhatsApp;
 
 use App\Contracts\WhatsApp\ProviderDriver;
+use App\Contracts\WhatsApp\ProviderNumberChecker;
 use App\Domain\Delivery\OutboundText;
 use App\Domain\Delivery\ProviderResult;
+use App\Domain\NumberCheck\NumberCheckResult;
 use App\Models\ProviderAccount;
 
 final readonly class ProviderDriverManager
@@ -39,5 +41,16 @@ final readonly class ProviderDriverManager
             'waba' => $this->waba,
             default => null,
         };
+    }
+
+    public function checkNumber(ProviderAccount $account, string $recipient): NumberCheckResult
+    {
+        $driver = $this->resolve((string) $account->driver);
+
+        if (! $driver instanceof ProviderNumberChecker) {
+            return NumberCheckResult::unsupported();
+        }
+
+        return $driver->checkNumber($account, $recipient);
     }
 }

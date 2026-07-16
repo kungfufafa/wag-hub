@@ -137,6 +137,9 @@ class GatewayHubManagementSeeder extends Seeder
                     'driver' => 'fonnte',
                     'configuration' => [
                         'endpoint' => $this->value($fonnte['endpoint']),
+                        'validate_endpoint' => $this->value(
+                            $fonnte['validate_endpoint'] ?? 'https://api.fonnte.com/validate',
+                        ),
                         'token' => $this->value($fonnte['token']),
                     ],
                     'is_active' => true,
@@ -154,6 +157,7 @@ class GatewayHubManagementSeeder extends Seeder
                     'driver' => 'fonnte',
                     'configuration' => [
                         'endpoint' => 'https://api.fonnte.com/send',
+                        'validate_endpoint' => 'https://api.fonnte.com/validate',
                     ],
                     'is_active' => false,
                     'health_status' => 'unknown',

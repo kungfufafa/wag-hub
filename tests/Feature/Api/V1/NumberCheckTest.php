@@ -44,27 +44,33 @@ final class NumberCheckTest extends TestCase
     public function test_number_check_queries_waha_fonnte_and_gowa_without_sending_a_waba_message(): void
     {
         $client = $this->createClientApplication(['numbers:check']);
-        $this->createProviderAccount('waha', 'waha-primary', [
+        $waha = $this->createProviderAccount('waha', 'waha-primary', [
             'base_url' => 'https://waha-check.test',
             'session' => 'default',
             'api_key' => 'waha-secret',
         ]);
-        $this->createProviderAccount('fonnte', 'fonnte-primary', [
+        $fonnte = $this->createProviderAccount('fonnte', 'fonnte-primary', [
             'endpoint' => 'https://fonnte-check.test/send',
             'validate_endpoint' => 'https://fonnte-check.test/validate',
             'token' => 'fonnte-secret',
         ]);
-        $this->createProviderAccount('gowa', 'gowa-primary', [
+        $gowa = $this->createProviderAccount('gowa', 'gowa-primary', [
             'base_url' => 'https://gowa-check.test',
             'username' => 'gateway',
             'password' => 'gowa-secret',
             'device_id' => 'device-main',
         ]);
-        $this->createProviderAccount('waba', 'waba-primary', [
+        $waba = $this->createProviderAccount('waba', 'waba-primary', [
             'base_url' => 'https://graph-meta.test',
             'api_version' => 'v25.0',
             'phone_number_id' => '123456789012345',
             'access_token' => 'meta-token',
+        ]);
+        $this->createRoutingPolicy($client['id'], [
+            $waha['id'],
+            $fonnte['id'],
+            $gowa['id'],
+            $waba['id'],
         ]);
 
         Http::fake([
@@ -111,7 +117,9 @@ final class NumberCheckTest extends TestCase
             && $request->hasHeader('X-Api-Key', 'waha-secret'));
         Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
             && $request->url() === 'https://fonnte-check.test/validate'
-            && $request->hasHeader('Authorization', 'fonnte-secret'));
+            && $request->hasHeader('Authorization', 'fonnte-secret')
+            && $request->hasFile('target', '6281234567890')
+            && $request->hasFile('countryCode', '62'));
         Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
             && $request->url() === 'https://gowa-check.test/user/check?phone=6281234567890'
             && $request->hasHeader('Authorization', 'Basic '.base64_encode('gateway:gowa-secret'))
@@ -122,11 +130,12 @@ final class NumberCheckTest extends TestCase
     public function test_provider_failures_are_unknown_instead_of_false(): void
     {
         $client = $this->createClientApplication(['numbers:check']);
-        $this->createProviderAccount('fonnte', 'fonnte-primary', [
+        $provider = $this->createProviderAccount('fonnte', 'fonnte-primary', [
             'endpoint' => 'https://fonnte-check.test/send',
             'validate_endpoint' => 'https://fonnte-check.test/validate',
             'token' => 'fonnte-secret',
         ]);
+        $this->createRoutingPolicy($client['id'], [$provider['id']]);
         Http::fake([
             'fonnte-check.test/*' => Http::response([
                 'status' => false,
@@ -163,5 +172,39 @@ final class NumberCheckTest extends TestCase
         ])
             ->assertServiceUnavailable()
             ->assertJsonPath('error.code', 'provider_unavailable');
+    }
+
+    public function test_number_check_does_not_query_another_applications_provider(): void
+    {
+        $owner = $this->createClientApplication(['numbers:check']);
+        $other = $this->createClientApplication(['numbers:check']);
+        $ownerProvider = $this->createProviderAccount('waha', 'owner-waha', [
+            'base_url' => 'https://owner-waha.test',
+            'session' => 'default',
+            'api_key' => 'owner-secret',
+        ]);
+        $otherProvider = $this->createProviderAccount('waha', 'other-waha', [
+            'base_url' => 'https://other-waha.test',
+            'session' => 'default',
+            'api_key' => 'other-secret',
+        ]);
+        $this->createRoutingPolicy($owner['id'], [$ownerProvider['id']]);
+        $this->createRoutingPolicy($other['id'], [$otherProvider['id']]);
+        Http::fake([
+            'owner-waha.test/*' => Http::response(['numberExists' => true]),
+            'other-waha.test/*' => Http::response(['numberExists' => false]),
+        ]);
+
+        $this->postJson('/api/v1/number-checks', [
+            'recipient' => ['type' => 'phone', 'value' => '081234567890'],
+        ], [
+            'Authorization' => "Bearer {$owner['token']}",
+        ])
+            ->assertOk()
+            ->assertJsonCount(1, 'data.checks')
+            ->assertJsonPath('data.checks.0.provider', 'owner-waha');
+
+        Http::assertSentCount(1);
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'other-waha.test'));
     }
 }

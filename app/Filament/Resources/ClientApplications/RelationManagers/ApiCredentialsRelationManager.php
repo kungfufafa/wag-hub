@@ -205,6 +205,7 @@ class ApiCredentialsRelationManager extends RelationManager
                             ->options([
                                 'messages:send' => 'Kirim pesan',
                                 'messages:read' => 'Baca status pesan',
+                                'numbers:check' => 'Cek nomor WhatsApp',
                             ])
                             ->default(['messages:send', 'messages:read'])
                             ->required()

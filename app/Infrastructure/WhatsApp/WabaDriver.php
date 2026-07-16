@@ -3,14 +3,16 @@
 namespace App\Infrastructure\WhatsApp;
 
 use App\Contracts\WhatsApp\ProviderDriver;
+use App\Contracts\WhatsApp\ProviderNumberChecker;
 use App\Domain\Delivery\OutboundText;
 use App\Domain\Delivery\ProviderResult;
+use App\Domain\NumberCheck\NumberCheckResult;
 use App\Models\ProviderAccount;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 
-final readonly class WabaDriver implements ProviderDriver
+final readonly class WabaDriver implements ProviderDriver, ProviderNumberChecker
 {
     public function __construct(
         private WabaResponseClassifier $responses,
@@ -73,6 +75,11 @@ final readonly class WabaDriver implements ProviderDriver
         }
 
         return $this->responses->classify($response->status(), $response->body());
+    }
+
+    public function checkNumber(ProviderAccount $account, string $recipient): NumberCheckResult
+    {
+        return NumberCheckResult::unsupported();
     }
 
     private function nonEmptyString(mixed $value): ?string

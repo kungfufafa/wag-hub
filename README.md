@@ -117,6 +117,7 @@ Jangan menyalin credential lama dari source code. Credential provider yang perna
 
 - GOWA memakai `POST /send/message`, Basic Auth, dan `X-Device-Id` opsional untuk server multi-device.
 - WABA memakai Meta Cloud API resmi dengan Phone Number ID dan System User Access Token.
+- Lookup registrasi nomor tersedia untuk WAHA, Fonnte, dan GOWA. Meta WABA tidak menyediakan lookup penerima tanpa mengirim pesan, sehingga hasil WABA adalah `unsupported`.
 - Driver WABA saat ini mengirim pesan teks bebas. Meta hanya mengizinkannya dalam customer-service window yang berlaku; pesan di luar window harus memakai template, yang belum menjadi bagian kontrak message Hub saat ini.
 - `GATEWAY_SEED_WABA_API_VERSION` dapat dinaikkan tanpa perubahan kode ketika versi Graph API berubah.
 
@@ -150,6 +151,35 @@ curl http://localhost:8000/api/v1/messages/UUID_PESAN \
   -H 'Accept: application/json' \
   -H 'Authorization: Bearer wgh_CONTOH_TOKEN'
 ```
+
+## Mengecek nomor WhatsApp
+
+Terbitkan credential dengan ability `numbers:check`. Hub hanya memanggil provider
+aktif yang tercantum pada routing policy aktif milik aplikasi tersebut.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/number-checks \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer wgh_CONTOH_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "recipient": {"type": "phone", "value": "081234567890"}
+  }'
+```
+
+Hasil agregat:
+
+| Status | Makna |
+|---|---|
+| `registered` | Sedikitnya satu provider memastikan nomor terdaftar, tanpa hasil negatif. |
+| `not_registered` | Sedikitnya satu provider memastikan nomor tidak terdaftar, tanpa hasil positif. |
+| `conflict` | Provider memberi hasil positif dan negatif yang bertentangan. |
+| `unknown` | Provider gagal, tidak tersedia, atau responsnya tidak dapat dipastikan. Bukan berarti nomor invalid. |
+| `unsupported` | Seluruh provider pada rute tidak mendukung lookup tanpa efek samping. |
+
+Respons juga berisi `checks` per provider. Client tidak dapat memilih provider atau
+credential secara langsung. Endpoint memakai autentikasi dan rate limit aplikasi
+yang sama dengan API pesan.
 
 ## Arti status
 
