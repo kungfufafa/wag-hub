@@ -8,6 +8,7 @@ use App\Filament\Resources\GatewayMessages\GatewayMessageResource;
 use App\Filament\Resources\GatewayMessages\Pages\ListGatewayMessages;
 use App\Filament\Resources\GatewayMessages\Pages\ViewGatewayMessage;
 use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
+use App\Filament\Resources\ProviderAccounts\Pages\CreateProviderAccount;
 use App\Filament\Resources\RoutingPolicies\Pages\CreateRoutingPolicy;
 use App\Filament\Widgets\GatewayStatsOverview;
 use App\Jobs\DispatchGatewayMessage;
@@ -390,6 +391,80 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertSchemaStateSet(['configuration.endpoint' => 'https://api.fonnte.com/send'])
             ->assertSchemaStateSet(['configuration.token' => null])
             ->assertDontSee('existing-fonnte-token');
+    }
+
+    public function test_admin_can_create_a_gowa_provider_with_encrypted_credentials(): void
+    {
+        Livewire::test(CreateProviderAccount::class)
+            ->fillForm([
+                'name' => 'GOWA Primary',
+                'slug' => 'gowa-primary',
+                'driver' => 'gowa',
+                'configuration' => [
+                    'base_url' => 'https://gowa.internal.example',
+                    'username' => 'gateway',
+                    'password' => 'gowa-admin-secret',
+                    'device_id' => 'device-main',
+                ],
+                'is_active' => true,
+                'timeout_seconds' => 15,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $provider = ProviderAccount::query()->where('slug', 'gowa-primary')->sole();
+
+        $this->assertSame('gowa', $provider->driver);
+        $this->assertSame('device-main', $provider->configuration['device_id']);
+        $this->assertSame('gowa-admin-secret', $provider->configuration['password']);
+        $this->assertStringNotContainsString(
+            'gowa-admin-secret',
+            DB::table('provider_accounts')->where('id', $provider->id)->value('configuration'),
+        );
+    }
+
+    public function test_blank_waba_access_token_on_edit_preserves_existing_secret(): void
+    {
+        $provider = ProviderAccount::forceCreate([
+            'name' => 'WABA Primary',
+            'slug' => 'waba-primary',
+            'driver' => 'waba',
+            'configuration' => [
+                'base_url' => 'https://graph.facebook.com',
+                'api_version' => 'v25.0',
+                'phone_number_id' => '123456789012345',
+                'access_token' => 'existing-meta-token',
+            ],
+            'is_active' => true,
+            'health_status' => 'healthy',
+            'timeout_seconds' => 15,
+        ]);
+
+        Livewire::test(EditProviderAccount::class, ['record' => $provider->getKey()])
+            ->assertSchemaStateSet([
+                'configuration.base_url' => 'https://graph.facebook.com',
+                'configuration.api_version' => 'v25.0',
+                'configuration.phone_number_id' => '123456789012345',
+                'configuration.access_token' => null,
+            ])
+            ->assertDontSee('existing-meta-token')
+            ->fillForm([
+                'name' => 'WABA Primary',
+                'slug' => 'waba-primary',
+                'driver' => 'waba',
+                'configuration' => [
+                    'base_url' => 'https://graph.facebook.com',
+                    'api_version' => 'v25.0',
+                    'phone_number_id' => '123456789012345',
+                    'access_token' => '',
+                ],
+                'is_active' => true,
+                'timeout_seconds' => 15,
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('existing-meta-token', $provider->fresh()->configuration['access_token']);
     }
 
     public function test_routing_policy_rejects_the_same_provider_twice(): void

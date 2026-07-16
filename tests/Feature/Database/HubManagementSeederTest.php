@@ -18,7 +18,7 @@ class HubManagementSeederTest extends TestCase
 
     public function test_it_seeds_the_default_administrator_when_no_seed_credentials_are_configured(): void
     {
-        config()->set('gateway.seed.providers', ['waha' => [], 'fonnte' => []]);
+        config()->set('gateway.seed.providers', ['waha' => [], 'fonnte' => [], 'gowa' => [], 'waba' => []]);
         config()->set('gateway.seed.credentials', []);
 
         $this->seed(GatewayHubManagementSeeder::class);
@@ -47,6 +47,18 @@ class HubManagementSeederTest extends TestCase
                     'endpoint' => 'https://api.fonnte.com/send',
                     'token' => 'fonnte-seed-token',
                 ],
+                'gowa' => [
+                    'base_url' => 'https://gowa.example.test',
+                    'username' => 'gateway',
+                    'password' => 'gowa-seed-password',
+                    'device_id' => 'device-main',
+                ],
+                'waba' => [
+                    'base_url' => 'https://graph.facebook.com',
+                    'api_version' => 'v25.0',
+                    'phone_number_id' => '123456789012345',
+                    'access_token' => 'waba-seed-token',
+                ],
             ],
             'credentials' => [
                 'web-shelf' => 'wgh_shelf_seed_token',
@@ -64,7 +76,10 @@ class HubManagementSeederTest extends TestCase
             ['appscript-ft', 'web-helpdesk', 'web-sam', 'web-shelf'],
             ClientApplication::query()->orderBy('slug')->pluck('slug')->all(),
         );
-        $this->assertSame(['fonnte-primary', 'waha-primary'], ProviderAccount::query()->orderBy('slug')->pluck('slug')->all());
+        $this->assertSame(
+            ['fonnte-primary', 'gowa-primary', 'waba-primary', 'waha-primary'],
+            ProviderAccount::query()->orderBy('slug')->pluck('slug')->all(),
+        );
 
         $shelf = ClientApplication::query()->where('slug', 'web-shelf')->sole();
         $policy = RoutingPolicy::query()
@@ -72,7 +87,10 @@ class HubManagementSeederTest extends TestCase
             ->where('key', 'shelf-notifications')
             ->sole();
 
-        $this->assertSame(['waha-primary', 'fonnte-primary'], $policy->steps->pluck('providerAccount.slug')->all());
+        $this->assertSame(
+            ['waha-primary', 'fonnte-primary', 'gowa-primary', 'waba-primary'],
+            $policy->steps->pluck('providerAccount.slug')->all(),
+        );
 
         $credential = ApiCredential::query()->where('client_application_id', $shelf->id)->sole();
         $this->assertTrue(hash_equals(hash('sha256', 'wgh_shelf_seed_token'), $credential->getRawOriginal('token_hash')));
@@ -87,7 +105,7 @@ class HubManagementSeederTest extends TestCase
                 'email' => 'gateway.admin@example.test',
                 'password' => 'Seeder-Administrator-123!',
             ],
-            'providers' => ['waha' => [], 'fonnte' => []],
+            'providers' => ['waha' => [], 'fonnte' => [], 'gowa' => [], 'waba' => []],
             'credentials' => [],
         ]);
 
@@ -96,10 +114,12 @@ class HubManagementSeederTest extends TestCase
 
         $this->assertDatabaseCount('users', 1);
         $this->assertDatabaseCount('client_applications', 4);
-        $this->assertDatabaseCount('provider_accounts', 2);
+        $this->assertDatabaseCount('provider_accounts', 4);
         $this->assertDatabaseCount('routing_policies', 4);
         $this->assertDatabaseCount('api_credentials', 0);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'waha-primary')->sole()->is_active);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'fonnte-primary')->sole()->is_active);
+        $this->assertFalse(ProviderAccount::query()->where('slug', 'gowa-primary')->sole()->is_active);
+        $this->assertFalse(ProviderAccount::query()->where('slug', 'waba-primary')->sole()->is_active);
     }
 }
