@@ -14,7 +14,7 @@ class EnforceClientRateLimit
     /**
      * @param  Closure(Request): Response  $next
      */
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, string $bucket = 'general'): Response
     {
         $application = $request->attributes->get('client_application');
 
@@ -23,7 +23,8 @@ class EnforceClientRateLimit
         }
 
         $maximumAttempts = max(1, min(6000, (int) $application->rate_limit_per_minute));
-        $key = "gateway-api:application:{$application->getKey()}";
+        $bucket = preg_replace('/[^a-z0-9_-]+/', '-', strtolower($bucket)) ?: 'general';
+        $key = "gateway-api:application:{$application->getKey()}:{$bucket}";
 
         $response = RateLimiter::attempt(
             $key,

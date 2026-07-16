@@ -163,6 +163,7 @@ final readonly class GatewayMessageDispatcher
         if ($message->routing_policy_id !== null) {
             $existing = DB::table('routing_policies')
                 ->where('id', $message->routing_policy_id)
+                ->where('operation', 'message')
                 ->where('is_active', true)
                 ->whereNull('deleted_at')
                 ->value('id');
@@ -201,6 +202,7 @@ final readonly class GatewayMessageDispatcher
     private function policyQuery(GatewayMessage $message, mixed $applicationId): Builder
     {
         $query = DB::table('routing_policies')
+            ->where('operation', 'message')
             ->where('is_active', true)
             ->whereNull('deleted_at')
             ->where(function (Builder $query) use ($message): void {

@@ -16,6 +16,13 @@ final class CheckWhatsAppNumberRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! $this->exists('route_key')) {
+            $this->merge(['route_key' => 'default']);
+        }
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -37,6 +44,8 @@ final class CheckWhatsAppNumberRequest extends FormRequest
                     }
                 },
             ],
+            'route_key' => ['required', 'string', 'min:1', 'max:80', 'regex:/\A[a-zA-Z0-9._:-]+\z/'],
+            'purpose' => ['prohibited'],
             'provider' => ['prohibited'],
             'provider_id' => ['prohibited'],
             'provider_account_id' => ['prohibited'],
@@ -48,6 +57,11 @@ final class CheckWhatsAppNumberRequest extends FormRequest
     public function canonicalRecipient(): string
     {
         return app(PhoneNormalizer::class)->normalize((string) $this->validated('recipient.value'));
+    }
+
+    public function routeKey(): string
+    {
+        return (string) $this->validated('route_key');
     }
 
     protected function failedValidation(ValidatorContract $validator): never

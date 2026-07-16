@@ -154,8 +154,9 @@ curl http://localhost:8000/api/v1/messages/UUID_PESAN \
 
 ## Mengecek nomor WhatsApp
 
-Terbitkan credential dengan ability `numbers:check`. Hub hanya memanggil provider
-aktif yang tercantum pada routing policy aktif milik aplikasi tersebut.
+Terbitkan credential dengan ability `numbers:check`. Buat **Aturan Rute** dengan
+jenis alur **Cek nomor WhatsApp**. Rute ini terpisah dari rute **Kirim pesan**;
+provider diperiksa berurutan dan berhenti ketika hasilnya sudah definitif.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/number-checks \
@@ -163,7 +164,8 @@ curl -X POST http://localhost:8000/api/v1/number-checks \
   -H 'Authorization: Bearer wgh_CONTOH_TOKEN' \
   -H 'Content-Type: application/json' \
   -d '{
-    "recipient": {"type": "phone", "value": "081234567890"}
+    "recipient": {"type": "phone", "value": "081234567890"},
+    "route_key": "default"
   }'
 ```
 
@@ -173,13 +175,12 @@ Hasil agregat:
 |---|---|
 | `registered` | Sedikitnya satu provider memastikan nomor terdaftar, tanpa hasil negatif. |
 | `not_registered` | Sedikitnya satu provider memastikan nomor tidak terdaftar, tanpa hasil positif. |
-| `conflict` | Provider memberi hasil positif dan negatif yang bertentangan. |
 | `unknown` | Provider gagal, tidak tersedia, atau responsnya tidak dapat dipastikan. Bukan berarti nomor invalid. |
 | `unsupported` | Seluruh provider pada rute tidak mendukung lookup tanpa efek samping. |
 
-Respons juga berisi `checks` per provider. Client tidak dapat memilih provider atau
-credential secara langsung. Endpoint memakai autentikasi dan rate limit aplikasi
-yang sama dengan API pesan.
+Respons juga berisi `checks` sesuai urutan percobaan provider. Client tidak dapat
+memilih provider atau credential secara langsung. Pengecekan memiliki bucket
+rate-limit sendiri sehingga tidak mengurangi kuota pengiriman pesan.
 
 ## Arti status
 

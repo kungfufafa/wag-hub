@@ -257,6 +257,7 @@ class GatewayHubManagementSeeder extends Seeder
             $policy = RoutingPolicy::query()->updateOrCreate(
                 [
                     'client_application_id' => $application->id,
+                    'operation' => 'message',
                     'key' => $routeKey,
                     'purpose' => null,
                 ],
@@ -275,6 +276,38 @@ class GatewayHubManagementSeeder extends Seeder
                     ],
                     [
                         'position' => $position + 1,
+                        'is_active' => true,
+                    ],
+                );
+            }
+
+            $numberCheckPolicy = RoutingPolicy::query()->updateOrCreate(
+                [
+                    'client_application_id' => $application->id,
+                    'operation' => 'number_check',
+                    'key' => 'default',
+                    'purpose' => null,
+                ],
+                [
+                    'name' => $application->name.' WhatsApp number-check route',
+                    'is_default' => true,
+                    'is_active' => true,
+                ],
+            );
+            $checkPosition = 1;
+
+            foreach ($providers as $provider) {
+                if ((string) $provider->driver === 'waba') {
+                    continue;
+                }
+
+                RoutingStep::query()->updateOrCreate(
+                    [
+                        'routing_policy_id' => $numberCheckPolicy->id,
+                        'provider_account_id' => $provider->id,
+                    ],
+                    [
+                        'position' => $checkPosition++,
                         'is_active' => true,
                     ],
                 );

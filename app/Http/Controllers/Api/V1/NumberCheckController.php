@@ -17,14 +17,19 @@ final class NumberCheckController extends Controller
         $recipient = $request->canonicalRecipient();
         /** @var ClientApplication $application */
         $application = $request->attributes->get('client_application');
-        $result = $this->checker->check($application, $recipient);
+        $routeKey = $request->routeKey();
+        $result = $this->checker->check($application, $recipient, $routeKey);
         $requestId = (string) $request->attributes->get('request_id');
 
-        if ($result === null) {
+        if (isset($result['error_code'])) {
+            $errorCode = (string) $result['error_code'];
+
             return response()->json([
-                'message' => 'No active provider is available for number checking.',
+                'message' => $errorCode === 'route_unavailable'
+                    ? 'No active number-check route is available.'
+                    : 'No usable provider is available for number checking.',
                 'error' => [
-                    'code' => 'provider_unavailable',
+                    'code' => $errorCode,
                     'retryable' => true,
                 ],
                 'request_id' => $requestId,
@@ -37,6 +42,7 @@ final class NumberCheckController extends Controller
                     'type' => 'phone',
                     'value' => $recipient,
                 ],
+                'route_key' => $routeKey,
                 ...$result,
             ],
             'request_id' => $requestId,

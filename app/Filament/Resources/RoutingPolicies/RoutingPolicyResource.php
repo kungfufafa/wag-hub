@@ -38,11 +38,11 @@ class RoutingPolicyResource extends Resource
 
     protected static ?int $navigationSort = 30;
 
-    protected static ?string $navigationLabel = 'Aturan Pengiriman';
+    protected static ?string $navigationLabel = 'Aturan Rute';
 
-    protected static ?string $modelLabel = 'Aturan Pengiriman';
+    protected static ?string $modelLabel = 'Aturan Rute';
 
-    protected static ?string $pluralModelLabel = 'Aturan Pengiriman';
+    protected static ?string $pluralModelLabel = 'Aturan Rute';
 
     protected static ?string $recordTitleAttribute = 'name';
 
@@ -68,6 +68,15 @@ class RoutingPolicyResource extends Resource
                                 ->label('Nama')
                                 ->required()
                                 ->maxLength(120),
+                            Select::make('operation')
+                                ->label('Jenis alur')
+                                ->options([
+                                    'message' => 'Kirim pesan',
+                                    'number_check' => 'Cek nomor WhatsApp',
+                                ])
+                                ->default('message')
+                                ->required()
+                                ->live(),
                             TextInput::make('key')
                                 ->label('Kunci rute')
                                 ->required()
@@ -77,7 +86,11 @@ class RoutingPolicyResource extends Resource
                                     ignoreRecord: true,
                                     modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query
                                         ->where('client_application_id', $get('client_application_id'))
-                                        ->where('purpose', $get('purpose')),
+                                        ->where('operation', $get('operation'))
+                                        ->where(
+                                            'purpose',
+                                            $get('operation') === 'number_check' ? null : $get('purpose'),
+                                        ),
                                 )
                                 ->maxLength(80),
                             Select::make('purpose')
@@ -87,7 +100,9 @@ class RoutingPolicyResource extends Resource
                                     'transactional' => 'Transaksional',
                                     'notification' => 'Notifikasi',
                                 ])
-                                ->placeholder('Semua tujuan'),
+                                ->placeholder('Semua tujuan')
+                                ->visible(fn (Get $get): bool => $get('operation') !== 'number_check')
+                                ->dehydratedWhenHidden(false),
                             Toggle::make('is_default')
                                 ->label('Rute default')
                                 ->default(false),
@@ -98,7 +113,7 @@ class RoutingPolicyResource extends Resource
                         ])
                         ->columns(['md' => 2]),
                     Section::make('Urutan provider')
-                        ->description('Seret provider ke urutan cadangan. Satu provider hanya boleh muncul sekali.')
+                        ->description('Seret provider ke urutan percobaan. Satu provider hanya boleh muncul sekali.')
                         ->schema([
                             Repeater::make('steps')
                                 ->relationship()
@@ -129,18 +144,18 @@ class RoutingPolicyResource extends Resource
                     'default' => 'full',
                     'lg' => 2,
                 ]),
-                Section::make('Urutan pengiriman')
-                    ->description('Hub mencoba provider dari atas ke bawah.')
+                Section::make('Cara kerja rute')
+                    ->description('Jenis alur menentukan endpoint yang boleh memakai rute ini.')
                     ->schema([
                         Placeholder::make('route_scope')
                             ->label('1. Tentukan aplikasi')
                             ->content('Pilih aplikasi agar rute ini tidak memengaruhi aplikasi lain.'),
                         Placeholder::make('route_match')
                             ->label('2. Tentukan kunci rute')
-                            ->content('Gunakan default bila aplikasi hanya memiliki satu jalur pengiriman.'),
+                            ->content('Gunakan default bila aplikasi hanya memiliki satu rute untuk jenis alur ini.'),
                         Placeholder::make('route_fallback')
                             ->label('3. Susun cadangan')
-                            ->content('Taruh provider utama di urutan pertama, lalu provider cadangan setelahnya.'),
+                            ->content('Provider dicoba dari atas ke bawah sampai mendapat hasil definitif.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -161,6 +176,14 @@ class RoutingPolicyResource extends Resource
                     ->label('Aplikasi')
                     ->placeholder('Global')
                     ->searchable(),
+                TextColumn::make('operation')
+                    ->label('Jenis alur')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'message' => 'Kirim pesan',
+                        'number_check' => 'Cek nomor',
+                        default => $state,
+                    }),
                 TextColumn::make('key')
                     ->label('Kunci rute')
                     ->badge(),
@@ -196,6 +219,12 @@ class RoutingPolicyResource extends Resource
                         'otp' => 'OTP',
                         'transactional' => 'Transaksional',
                         'notification' => 'Notifikasi',
+                    ]),
+                SelectFilter::make('operation')
+                    ->label('Jenis alur')
+                    ->options([
+                        'message' => 'Kirim pesan',
+                        'number_check' => 'Cek nomor WhatsApp',
                     ]),
                 TernaryFilter::make('is_active')->label('Aktif'),
             ])

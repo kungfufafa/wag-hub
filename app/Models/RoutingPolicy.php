@@ -16,6 +16,7 @@ class RoutingPolicy extends Model
     protected $fillable = [
         'uuid',
         'client_application_id',
+        'operation',
         'name',
         'key',
         'purpose',

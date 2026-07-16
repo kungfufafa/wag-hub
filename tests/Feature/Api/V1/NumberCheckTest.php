@@ -240,6 +240,10 @@ final class NumberCheckTest extends TestCase
             routeKey: 'deleted-route',
             operation: 'number_check',
         );
+        DB::table('routing_policies')
+            ->whereIn('id', [$deletedPolicy])
+            ->orWhere('key', 'healthy-route')
+            ->update(['is_default' => false]);
         DB::table('routing_policies')->where('id', $deletedPolicy)->update(['deleted_at' => now()]);
         Http::fake([
             'healthy-waha.test/*' => Http::response(['numberExists' => true]),

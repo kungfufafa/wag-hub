@@ -7,6 +7,7 @@
 | 2026-07-15 | Harden delivery and operational boundaries | Codex + parallel read-only security/ops reviews | Code, tests, provider contracts | Classify ambiguity safely; recover queue/stale state; protect endpoints/secrets; circuit health | 154 Hub tests GREEN; allowlist, encryption, rate limit, deterministic routes, recovery, stable Shelf idempotency |
 | 2026-07-16 | Add GOWA and WABA providers | Codex, Graphify, TDD, official GOWA and Meta contracts | Provider engine, admin, seed, docs | Add GOWA Basic Auth/device scoping and WABA Meta Cloud API text delivery | 201 Hub tests GREEN; 894 assertions; dependency audits clean |
 | 2026-07-16 | Add WhatsApp number checks | Codex, Graphify, TDD, official WAHA/Fonnte/GOWA/Meta contracts | API, provider engine, admin, seed, docs | Add tenant-scoped number lookup with dedicated ability; WABA safely reports unsupported | 207 Hub tests GREEN; 932 assertions |
+| 2026-07-16 | Separate message and number-check routing | Codex, Graphify, TDD | Routing, rate limits, admin, seed, docs | Add explicit route operation, ordered number-check fallback, circuit/deletion guards, and isolated rate-limit buckets | Focused regression GREEN |
 | 2026-07-15 | Validate executable MVP | Codex + local browser + build/audit tools | Filament runtime, migrations, routes, scheduler, Hub/Shelf suites | Verify rendered admin and release evidence | Browser pass/no console error; build/audits clean; Shelf targeted 29/106 GREEN |
 
 ## Reproducibility notes

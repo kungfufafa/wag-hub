@@ -3,8 +3,8 @@
 namespace Tests\Feature\Api\V1;
 
 use Illuminate\Foundation\Testing\DatabaseMigrations;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;

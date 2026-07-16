@@ -11,4 +11,13 @@ class EditRoutingPolicy extends EditRecord
     protected static string $resource = RoutingPolicyResource::class;
 
     protected Width|string|null $maxContentWidth = Width::Full;
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        if (($data['operation'] ?? 'message') === 'number_check') {
+            $data['purpose'] = null;
+        }
+
+        return $data;
+    }
 }
