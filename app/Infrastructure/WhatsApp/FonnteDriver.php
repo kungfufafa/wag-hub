@@ -104,18 +104,18 @@ final readonly class FonnteDriver implements ProviderDriver, ProviderNumberCheck
         }
 
         if (! $response->successful() || $response->json('status') !== true) {
-            return NumberCheckResult::unknown('provider_unavailable');
+            return NumberCheckResult::unknown('provider_unavailable', $response->status());
         }
 
         if ($this->containsRecipient($response->json('registered'), $recipient)) {
-            return NumberCheckResult::registered();
+            return NumberCheckResult::registered($response->status());
         }
 
         if ($this->containsRecipient($response->json('not_registered'), $recipient)) {
-            return NumberCheckResult::notRegistered();
+            return NumberCheckResult::notRegistered($response->status());
         }
 
-        return NumberCheckResult::unknown();
+        return NumberCheckResult::unknown(httpStatus: $response->status());
     }
 
     /**

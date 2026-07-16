@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class ApiCredential extends Model
@@ -68,6 +69,11 @@ class ApiCredential extends Model
     public function clientApplication(): BelongsTo
     {
         return $this->belongsTo(ClientApplication::class)->withTrashed();
+    }
+
+    public function numberCheckRequests(): HasMany
+    {
+        return $this->hasMany(NumberCheckRequest::class);
     }
 
     public function isUsable(): bool

@@ -106,13 +106,13 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
         }
 
         if (! $response->successful()) {
-            return NumberCheckResult::unknown('provider_unavailable');
+            return NumberCheckResult::unknown('provider_unavailable', $response->status());
         }
 
         return match ($response->json('results.is_on_whatsapp')) {
-            true => NumberCheckResult::registered(),
-            false => NumberCheckResult::notRegistered(),
-            default => NumberCheckResult::unknown(),
+            true => NumberCheckResult::registered($response->status()),
+            false => NumberCheckResult::notRegistered($response->status()),
+            default => NumberCheckResult::unknown(httpStatus: $response->status()),
         };
     }
 

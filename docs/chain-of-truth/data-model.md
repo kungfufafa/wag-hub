@@ -5,7 +5,7 @@ Derived from: UC-001–UC-004 0.1.0 (implementation exception approved)
 
 ## Domain overview
 
-Empat konteks saling terhubung: Client Access (`ClientApplication`, `ApiCredential`), Provider Configuration (`ProviderAccount`), Routing (`RoutingPolicy`, `RoutingStep`), dan Delivery Ledger (`GatewayMessage`, `MessageAttempt`, `MessageEvent`). Queue job hanya membawa message ID; plaintext body dan credential dibaca oleh worker pada saat diperlukan.
+Lima konteks saling terhubung: Client Access (`ClientApplication`, `ApiCredential`), Provider Configuration (`ProviderAccount`), Routing (`RoutingPolicy`, `RoutingStep`), Delivery Ledger (`GatewayMessage`, `MessageAttempt`, `MessageEvent`), dan Number Check Ledger (`NumberCheckRequest`, `NumberCheckAttempt`). Queue job hanya membawa message ID; plaintext body dan credential dibaca oleh worker pada saat diperlukan.
 
 ## Entities
 
@@ -71,6 +71,7 @@ Used by: UC-001, UC-002, UC-003
 |---|---|---|---|---|
 | id, uuid | bigint, uuid | yes | PK + unique | Internal/public ID |
 | client_application_id | FK | no | null = global | Internal |
+| operation | string(24) | yes | message/number_check | Internal |
 | name | string(120) | yes | required | Internal |
 | key | string(80) | yes | unique per application scope | Internal |
 | purpose | string(40) | no | otp/transactional/notification/null | Internal |
@@ -160,6 +161,40 @@ Used by: UC-001, UC-002, UC-004
 | occurred_at | datetime | yes | now/provider timestamp | Internal |
 | created_at | datetime | yes | append timestamp | Internal |
 
+### ENT-009 — NumberCheckRequest
+
+Purpose: Audit agregat satu request pengecekan registrasi nomor tanpa membuat pesan.
+Used by: Number check API
+
+| Field | Type | Required | Validation/default | Sensitivity |
+|---|---|---|---|---|
+| id, uuid | bigint, uuid | yes | PK + unique/public audit ID | Internal/public ID |
+| client_application_id, api_credential_id | FK | yes | requester identity | Internal |
+| routing_policy_id, resolved_provider_account_id | FK | no | selected route/final provider | Internal |
+| correlation_id, route_key | string | yes | bounded | Public/internal |
+| recipient | encrypted text | yes | canonical phone | PII secret |
+| recipient_hash, recipient_last4 | char(64)/char(4) | yes | keyed HMAC/masked display | Sensitive-derived |
+| status | string(32) | yes | processing/registered/not_registered/unknown/unsupported/failed | Internal/public |
+| registered | boolean | no | definitive result or null | Internal/public |
+| last_error_code | string(120) | no | normalized | Internal |
+| started_at, finished_at, timestamps | datetime | yes/no | lifecycle | Internal |
+
+### ENT-010 — NumberCheckAttempt
+
+Purpose: Append-oriented audit setiap provider yang diperiksa atau dilewati.
+Used by: Number check API
+
+| Field | Type | Required | Validation/default | Sensitivity |
+|---|---|---|---|---|
+| id | bigint | yes | PK | Internal |
+| number_check_request_id, provider_account_id | FK | yes | audit/provider | Internal |
+| sequence | unsigned int | yes | unique per request | Internal |
+| status | string(32) | yes | registered/not_registered/unknown/unsupported/skipped | Internal |
+| registered | boolean | no | provider result or null | Internal |
+| http_status, latency_ms | unsigned int | no | transport metrics | Internal |
+| reason_code | string(120) | no | normalized; no raw response | Internal |
+| started_at, finished_at, timestamps | datetime | yes | lifecycle | Internal |
+
 ## Relationships
 
 | From | Relationship | To | Cardinality | Rule |
@@ -171,6 +206,9 @@ Used by: UC-001, UC-002, UC-004
 | ENT-001 | creates | ENT-006 | 1:N | idempotency unique per app |
 | ENT-006 | records | ENT-007 | 1:N | sequence append-only |
 | ENT-006 | records | ENT-008 | 1:N | event append-only |
+| ENT-001/002 | requests through | ENT-009 | 1:N | application and credential remain traceable |
+| ENT-009 | records | ENT-010 | 1:N | provider sequence append-oriented |
+| ENT-003 | participates through | ENT-010 | 1:N | result or skip reason is retained |
 
 ## State transitions
 

@@ -182,6 +182,19 @@ Respons juga berisi `checks` sesuai urutan percobaan provider. Client tidak dapa
 memilih provider atau credential secara langsung. Pengecekan memiliki bucket
 rate-limit sendiri sehingga tidak mengurangi kuota pengiriman pesan.
 
+Setiap request valid memiliki `data.id` sebagai ID audit. Bila route/provider tidak
+tersedia, ID yang sama dikembalikan melalui `error.audit_id`. Riwayat dapat dilihat
+di **Operasi → Pengecekan Nomor** (`/admin/number-checks`) dan mencatat:
+
+- aplikasi serta credential peminta;
+- ID korelasi, route, waktu mulai dan selesai;
+- nomor terenkripsi, hash pencarian, dan empat digit terakhir untuk tampilan;
+- hasil akhir serta provider yang memberi hasil definitif;
+- urutan attempt, status, kode alasan, HTTP status, dan latency setiap provider.
+
+Audit pengecekan disimpan pada ledger tersendiri dan tidak membuat
+`gateway_messages`, `message_attempts`, atau `message_events`.
+
 ## Arti status
 
 | Status | Makna |

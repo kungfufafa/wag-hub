@@ -51,4 +51,9 @@ class RoutingPolicy extends Model
     {
         return $this->hasMany(GatewayMessage::class);
     }
+
+    public function numberCheckRequests(): HasMany
+    {
+        return $this->hasMany(NumberCheckRequest::class);
+    }
 }

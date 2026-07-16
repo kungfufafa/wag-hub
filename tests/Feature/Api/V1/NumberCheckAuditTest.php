@@ -91,6 +91,7 @@ final class NumberCheckAuditTest extends TestCase
             ['provider_check_unsupported', 'provider_unavailable', null],
             $attempts->pluck('reason_code')->all(),
         );
+        $this->assertSame([null, 503, 200], $attempts->pluck('http_status')->all());
         $this->assertNotNull($attempts[0]->latency_ms);
         $this->assertNotNull($attempts[1]->latency_ms);
         $this->assertNotNull($attempts[2]->latency_ms);

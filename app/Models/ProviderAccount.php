@@ -59,4 +59,14 @@ class ProviderAccount extends Model
     {
         return $this->hasMany(GatewayMessage::class, 'accepted_provider_account_id');
     }
+
+    public function numberCheckAttempts(): HasMany
+    {
+        return $this->hasMany(NumberCheckAttempt::class);
+    }
+
+    public function resolvedNumberCheckRequests(): HasMany
+    {
+        return $this->hasMany(NumberCheckRequest::class, 'resolved_provider_account_id');
+    }
 }
