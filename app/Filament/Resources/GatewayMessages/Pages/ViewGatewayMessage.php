@@ -35,7 +35,9 @@ class ViewGatewayMessage extends ViewRecord
                 ->color('warning')
                 ->requiresConfirmation()
                 ->modalHeading('Masukkan pesan ini ke antrian ulang?')
-                ->modalDescription('Riwayat percobaan tetap disimpan dan rute dievaluasi ulang.')
+                ->modalDescription(fn (): string => $this->getRecord()->status === 'outcome_unknown'
+                    ? 'Hasil kirim sebelumnya tidak pasti. Riwayat tetap disimpan dan rute dievaluasi ulang. Ada risiko penerima menerima pesan ganda.'
+                    : 'Riwayat percobaan tetap disimpan dan rute dievaluasi ulang.')
                 ->visible(fn (): bool => $this->getRecord()->isSafeToRetry())
                 ->action(function (): void {
                     try {

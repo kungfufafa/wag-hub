@@ -21,6 +21,13 @@ class GatewayMessageRetryTest extends TestCase
         $this->assertTrue($message->isSafeToRetry());
     }
 
+    public function test_outcome_unknown_non_expired_message_is_safe_to_retry(): void
+    {
+        $message = $this->createMessage('outcome_unknown', now()->addMinute());
+
+        $this->assertTrue($message->isSafeToRetry());
+    }
+
     public function test_failed_message_past_its_expiry_is_not_safe_to_retry(): void
     {
         $message = $this->createMessage('failed', now()->subSecond());
@@ -29,7 +36,7 @@ class GatewayMessageRetryTest extends TestCase
     }
 
     #[DataProvider('unsafeStatusProvider')]
-    public function test_non_failed_status_is_not_safe_to_retry(string $status): void
+    public function test_non_retryable_status_is_not_safe_to_retry(string $status): void
     {
         $message = $this->createMessage($status, now()->addMinute());
 
@@ -53,6 +60,24 @@ class GatewayMessageRetryTest extends TestCase
 
         $this->expectException(DomainException::class);
         $staleCopy->queueForRetry();
+    }
+
+    public function test_queue_for_retry_clears_outcome_unknown_markers(): void
+    {
+        $message = $this->createMessage('outcome_unknown', now()->addMinute());
+        $message->forceFill([
+            'outcome_unknown_at' => now()->subMinute(),
+            'last_error_code' => 'indeterminate_provider_response',
+            'last_error_message' => 'WAHA mengembalikan respons yang tidak dapat dipastikan.',
+        ])->save();
+
+        $message->queueForRetry();
+
+        $reloaded = $message->fresh();
+        $this->assertSame('queued', $reloaded->status);
+        $this->assertNull($reloaded->outcome_unknown_at);
+        $this->assertNull($reloaded->last_error_code);
+        $this->assertNull($reloaded->last_error_message);
     }
 
     #[DataProvider('guardedMessageProvider')]
@@ -79,7 +104,6 @@ class GatewayMessageRetryTest extends TestCase
             'queued' => ['queued'],
             'processing' => ['processing'],
             'accepted' => ['provider_accepted'],
-            'unknown outcome' => ['outcome_unknown'],
             'expired' => ['expired'],
             'dead letter' => ['dead_letter'],
         ];
@@ -90,8 +114,8 @@ class GatewayMessageRetryTest extends TestCase
         return [
             'already queued' => ['queued', false],
             'provider accepted' => ['provider_accepted', false],
-            'outcome unknown' => ['outcome_unknown', false],
             'failed but expired' => ['failed', true],
+            'outcome unknown but expired' => ['outcome_unknown', true],
         ];
     }
 

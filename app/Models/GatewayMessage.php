@@ -103,25 +103,25 @@ class GatewayMessage extends Model
 
     public function isSafeToRetry(): bool
     {
-        return $this->status === 'failed'
+        return in_array($this->status, ['failed', 'outcome_unknown'], true)
             && ($this->expires_at === null || $this->expires_at->isFuture());
     }
 
     /**
-     * Atomically move a safely failed message back to the queue.
+     * Atomically move a failed or uncertain message back to the queue.
      *
      * @throws DomainException
      */
     public function queueForRetry(): void
     {
         if (! $this->exists) {
-            throw new DomainException('Only a persisted failed message can be retried.');
+            throw new DomainException('Only a persisted failed or uncertain message can be retried.');
         }
 
         $queuedAt = now();
         $updated = static::query()
             ->whereKey($this->getKey())
-            ->where('status', 'failed')
+            ->whereIn('status', ['failed', 'outcome_unknown'])
             ->where(function ($query) use ($queuedAt): void {
                 $query->whereNull('expires_at')
                     ->orWhere('expires_at', '>', $queuedAt);
@@ -131,6 +131,7 @@ class GatewayMessage extends Model
                 'queued_at' => $queuedAt,
                 'processing_at' => null,
                 'failed_at' => null,
+                'outcome_unknown_at' => null,
                 'last_error_code' => null,
                 'last_error_message' => null,
                 'updated_at' => $queuedAt,

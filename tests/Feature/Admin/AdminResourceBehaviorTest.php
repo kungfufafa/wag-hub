@@ -7,8 +7,8 @@ use App\Filament\Resources\ClientApplications\RelationManagers\ApiCredentialsRel
 use App\Filament\Resources\GatewayMessages\GatewayMessageResource;
 use App\Filament\Resources\GatewayMessages\Pages\ListGatewayMessages;
 use App\Filament\Resources\GatewayMessages\Pages\ViewGatewayMessage;
-use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\CreateProviderAccount;
+use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
 use App\Filament\Resources\RoutingPolicies\Pages\CreateRoutingPolicy;
 use App\Filament\Widgets\GatewayStatsOverview;
 use App\Jobs\DispatchGatewayMessage;
@@ -522,14 +522,34 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertSee('33.3%');
     }
 
+    public function test_outcome_unknown_message_can_be_retried_from_the_message_detail(): void
+    {
+        Queue::fake();
+        $message = $this->createMessage('outcome_unknown', now()->addMinute());
+        $message->forceFill(['outcome_unknown_at' => now()->subMinute()])->save();
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertActionVisible('retry')
+            ->callAction('retry')
+            ->assertHasNoActionErrors()
+            ->assertNotified('Kirim ulang masuk antrian');
+
+        $this->assertDatabaseHas('gateway_messages', [
+            'id' => $message->getKey(),
+            'status' => 'queued',
+            'outcome_unknown_at' => null,
+        ]);
+        Queue::assertPushed(DispatchGatewayMessage::class);
+    }
+
     public static function unsafeRetryProvider(): array
     {
         return [
             'queued' => ['queued', false],
             'processing' => ['processing', false],
             'accepted' => ['provider_accepted', false],
-            'unknown outcome' => ['outcome_unknown', false],
             'expired failure' => ['failed', true],
+            'expired unknown outcome' => ['outcome_unknown', true],
         ];
     }
 

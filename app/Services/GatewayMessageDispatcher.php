@@ -49,6 +49,11 @@ final readonly class GatewayMessageDispatcher
         }
 
         $message = $this->markProcessing($message);
+
+        if ((string) $message->purpose === ProviderAccountTester::PURPOSE) {
+            return $this->dispatchAdminTest($message);
+        }
+
         $policyId = $this->resolveRoutingPolicyId($message);
 
         if ($policyId === null) {
@@ -145,6 +150,67 @@ final readonly class GatewayMessageDispatcher
             errorCode: $lastResult?->errorCode ?? 'providers_failed',
             errorMessage: $lastResult?->errorMessage ?? 'Semua provider gagal menerima pesan.',
         );
+    }
+
+    private function dispatchAdminTest(GatewayMessage $message): GatewayMessage
+    {
+        $provider = $this->resolveAdminTestProvider($message);
+
+        if ($provider === null) {
+            return $this->markFailed(
+                $message,
+                errorCode: 'provider_unavailable',
+                errorMessage: 'Provider uji admin tidak ditemukan untuk dikirim ulang.',
+            );
+        }
+
+        $attemptId = $this->startAttempt($message, $provider);
+        $startedAt = hrtime(true);
+        $result = $this->send($provider, $message);
+        $latencyMs = max(0, (int) floor((hrtime(true) - $startedAt) / 1_000_000));
+
+        $this->finishAttempt($attemptId, $result, $latencyMs);
+        $this->health->record($provider, $result);
+
+        if ($result->outcome === ProviderOutcome::Accepted) {
+            return $this->markAccepted($message, $provider, $result);
+        }
+
+        if ($result->outcome === ProviderOutcome::OutcomeUnknown) {
+            return $this->markOutcomeUnknown($message, $result);
+        }
+
+        return $this->markFailed(
+            $message,
+            errorCode: $result->errorCode ?? 'providers_failed',
+            errorMessage: $result->errorMessage ?? 'Provider uji admin gagal menerima pesan.',
+        );
+    }
+
+    private function resolveAdminTestProvider(GatewayMessage $message): ?ProviderAccount
+    {
+        $providerId = data_get($message->metadata, 'provider_account_id');
+
+        if (is_numeric($providerId)) {
+            $provider = ProviderAccount::query()->withTrashed()->find((int) $providerId);
+
+            if ($provider !== null && ! $provider->trashed()) {
+                return $provider;
+            }
+        }
+
+        $attemptProviderId = MessageAttempt::query()
+            ->where('gateway_message_id', $message->getKey())
+            ->orderByDesc('sequence')
+            ->value('provider_account_id');
+
+        if (! is_numeric($attemptProviderId)) {
+            return null;
+        }
+
+        $provider = ProviderAccount::query()->withTrashed()->find((int) $attemptProviderId);
+
+        return $provider !== null && ! $provider->trashed() ? $provider : null;
     }
 
     private function markProcessing(GatewayMessage $message): GatewayMessage
