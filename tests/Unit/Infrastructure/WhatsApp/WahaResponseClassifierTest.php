@@ -42,6 +42,66 @@ final class WahaResponseClassifierTest extends TestCase
         self::assertNull($result->providerMessageId);
     }
 
+    public function test_it_accepts_noweb_pending_response_with_key_id(): void
+    {
+        $result = (new WahaResponseClassifier)->classify(
+            httpStatus: 201,
+            body: json_encode([
+                'key' => [
+                    'remoteJid' => '6281234567890@s.whatsapp.net',
+                    'fromMe' => true,
+                    'id' => '3EB00EA4283A734B87CFEE',
+                ],
+                'message' => [
+                    'extendedTextMessage' => ['text' => 'Hi there!'],
+                ],
+                'messageTimestamp' => '1719917825',
+                'status' => 'PENDING',
+            ], JSON_THROW_ON_ERROR),
+        );
+
+        self::assertSame(ProviderOutcome::Accepted, $result->outcome);
+        self::assertSame('3EB00EA4283A734B87CFEE', $result->providerMessageId);
+    }
+
+    public function test_it_builds_composite_id_when_only_key_parts_are_present_without_scalar_key_id(): void
+    {
+        $result = (new WahaResponseClassifier)->classify(
+            httpStatus: 201,
+            body: json_encode([
+                'key' => [
+                    'remoteJid' => '6281234567890@s.whatsapp.net',
+                    'fromMe' => true,
+                    'id' => ['id' => '3EB00EA4283A734B87CFEE'],
+                ],
+                'status' => 'PENDING',
+            ], JSON_THROW_ON_ERROR),
+        );
+
+        self::assertSame(ProviderOutcome::Accepted, $result->outcome);
+        self::assertSame('3EB00EA4283A734B87CFEE', $result->providerMessageId);
+    }
+
+    public function test_it_accepts_webjs_object_id_with_serialized_value(): void
+    {
+        $result = (new WahaResponseClassifier)->classify(
+            httpStatus: 201,
+            body: json_encode([
+                'id' => [
+                    'fromMe' => true,
+                    'remote' => '6281234567890@c.us',
+                    'id' => 'ABC123',
+                    '_serialized' => 'true_6281234567890@c.us_ABC123',
+                ],
+                'ack' => 1,
+                'body' => 'Hi there!',
+            ], JSON_THROW_ON_ERROR),
+        );
+
+        self::assertSame(ProviderOutcome::Accepted, $result->outcome);
+        self::assertSame('true_6281234567890@c.us_ABC123', $result->providerMessageId);
+    }
+
     #[DataProvider('ambiguousSuccessfulResponses')]
     public function test_an_indeterminate_2xx_response_is_unknown_and_cannot_fallback(string $body): void
     {

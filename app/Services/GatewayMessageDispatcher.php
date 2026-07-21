@@ -23,7 +23,10 @@ final readonly class GatewayMessageDispatcher
         'dead_letter',
     ];
 
-    public function __construct(private ProviderDriverManager $drivers) {}
+    public function __construct(
+        private ProviderDriverManager $drivers,
+        private ProviderHealthRecorder $health,
+    ) {}
 
     public function dispatch(GatewayMessage $message): GatewayMessage
     {
@@ -101,7 +104,7 @@ final readonly class GatewayMessageDispatcher
             $latencyMs = max(0, (int) floor((hrtime(true) - $startedAt) / 1_000_000));
 
             $this->finishAttempt($attemptId, $result, $latencyMs);
-            $this->recordProviderOutcome($provider, $result);
+            $this->health->record($provider, $result);
             $lastResult = $result;
 
             if ($result->outcome === ProviderOutcome::Accepted) {
@@ -325,59 +328,6 @@ final readonly class GatewayMessageDispatcher
             'error_message' => $this->sanitize($result->errorMessage, 500),
             'finished_at' => now(),
         ])->save();
-    }
-
-    private function recordProviderOutcome(
-        ProviderAccount $provider,
-        ProviderResult $result,
-    ): void {
-        if (! in_array($result->outcome, [
-            ProviderOutcome::Accepted,
-            ProviderOutcome::ProviderFailed,
-            ProviderOutcome::OutcomeUnknown,
-        ], true)) {
-            return;
-        }
-
-        DB::transaction(function () use ($provider, $result): void {
-            $lockedProvider = ProviderAccount::query()
-                ->lockForUpdate()
-                ->find($provider->getKey());
-
-            if ($lockedProvider === null) {
-                return;
-            }
-
-            if ($result->outcome === ProviderOutcome::Accepted) {
-                $lockedProvider->forceFill([
-                    'consecutive_failures' => 0,
-                    'health_status' => 'healthy',
-                    'circuit_open_until' => null,
-                ])->save();
-
-                return;
-            }
-
-            $failureCount = (int) $lockedProvider->consecutive_failures + 1;
-            $failureThreshold = max(
-                1,
-                (int) config('gateway.provider_health.failure_threshold', 3),
-            );
-            $circuitSeconds = max(
-                1,
-                (int) config('gateway.provider_health.circuit_open_seconds', 300),
-            );
-
-            $lockedProvider->forceFill([
-                'consecutive_failures' => $failureCount,
-                'health_status' => $failureCount >= $failureThreshold
-                    ? 'unavailable'
-                    : 'degraded',
-                'circuit_open_until' => $failureCount >= $failureThreshold
-                    ? now()->addSeconds($circuitSeconds)
-                    : null,
-            ])->save();
-        });
     }
 
     private function markAccepted(

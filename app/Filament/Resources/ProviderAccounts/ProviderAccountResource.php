@@ -6,23 +6,30 @@ use App\Filament\Resources\ProviderAccounts\Pages\CreateProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\ListProviderAccounts;
 use App\Models\ProviderAccount;
+use App\Services\ProviderAccountTester;
+use App\Support\PhoneNormalizer;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use InvalidArgumentException;
 use UnitEnum;
 
 class ProviderAccountResource extends Resource
@@ -214,7 +221,7 @@ class ProviderAccountResource extends Resource
                             ->content('API key atau token disimpan terenkripsi dan tidak dapat dilihat kembali.'),
                         Placeholder::make('provider_activation')
                             ->label('3. Aktifkan lalu uji')
-                            ->content('Provider aktif akan dipakai oleh rute yang menempatkannya pada urutan cadangan.'),
+                            ->content('Setelah disimpan, uji koneksi dari daftar Akun Provider lewat aksi Uji (kirim pesan atau cek nomor).'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -288,6 +295,90 @@ class ProviderAccountResource extends Resource
                 TernaryFilter::make('is_active')->label('Aktif'),
             ])
             ->recordActions([
+                Action::make('test')
+                    ->label('Uji')
+                    ->icon(Heroicon::OutlinedBeaker)
+                    ->color('gray')
+                    ->slideOver()
+                    ->modalWidth(Width::Medium)
+                    ->modalHeading(fn (ProviderAccount $record): string => "Uji provider {$record->name}")
+                    ->modalDescription('Panggil driver akun ini langsung. Hasil disimpan sebagai jejak uji admin dan memperbarui kesehatan provider.')
+                    ->modalSubmitActionLabel('Jalankan uji')
+                    ->schema(fn (ProviderAccount $record): array => [
+                        Select::make('type')
+                            ->label('Jenis uji')
+                            ->options(
+                                $record->driver === 'waba'
+                                    ? ['send' => 'Kirim pesan']
+                                    : [
+                                        'send' => 'Kirim pesan',
+                                        'check_number' => 'Cek nomor',
+                                    ],
+                            )
+                            ->default('send')
+                            ->required()
+                            ->live()
+                            ->columnSpanFull(),
+                        TextInput::make('recipient')
+                            ->label('Nomor tujuan')
+                            ->tel()
+                            ->required()
+                            ->maxLength(32)
+                            ->helperText('Contoh: 081234567890 atau 6281234567890')
+                            ->rule(function (): \Closure {
+                                return function (string $attribute, mixed $value, \Closure $fail): void {
+                                    try {
+                                        app(PhoneNormalizer::class)->normalize((string) $value);
+                                    } catch (InvalidArgumentException $exception) {
+                                        $fail($exception->getMessage());
+                                    }
+                                };
+                            })
+                            ->columnSpanFull(),
+                        Textarea::make('body')
+                            ->label('Isi pesan')
+                            ->rows(3)
+                            ->default('Pesan uji dari Gateway Hub.')
+                            ->maxLength(10000)
+                            ->visible(fn (Get $get): bool => $get('type') === 'send')
+                            ->required(fn (Get $get): bool => $get('type') === 'send')
+                            ->columnSpanFull(),
+                    ])
+                    ->action(function (ProviderAccount $record, array $data, ProviderAccountTester $tester): void {
+                        try {
+                            $result = match ($data['type']) {
+                                'check_number' => $tester->checkNumber(
+                                    $record,
+                                    (string) $data['recipient'],
+                                    auth()->id(),
+                                ),
+                                default => $tester->send(
+                                    $record,
+                                    (string) $data['recipient'],
+                                    (string) ($data['body'] ?? ''),
+                                    auth()->id(),
+                                ),
+                            };
+                        } catch (InvalidArgumentException $exception) {
+                            Notification::make()
+                                ->title('Uji provider gagal')
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        $notification = Notification::make()
+                            ->title($result->title)
+                            ->body($result->body);
+
+                        if ($result->success) {
+                            $notification->success()->send();
+                        } else {
+                            $notification->danger()->send();
+                        }
+                    }),
                 EditAction::make(),
             ])
             ->defaultSort('name');

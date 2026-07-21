@@ -99,6 +99,7 @@ class GatewayMessageResource extends Resource
                         'otp' => 'OTP',
                         'transactional' => 'Transaksional',
                         'notification' => 'Notifikasi',
+                        'admin_test' => 'Uji admin',
                     ]),
                 SelectFilter::make('accepted_provider_account_id')
                     ->label('Provider yang menerima')
@@ -401,6 +402,7 @@ class GatewayMessageResource extends Resource
             'otp' => 'OTP',
             'transactional' => 'Transaksional',
             'notification' => 'Notifikasi',
+            'admin_test' => 'Uji admin',
             default => $purpose ?? '—',
         };
     }

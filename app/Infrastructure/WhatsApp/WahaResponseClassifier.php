@@ -80,7 +80,17 @@ final class WahaResponseClassifier
 
         $status = strtolower(trim((string) ($payload['status'] ?? '')));
 
-        return in_array($status, ['success', 'sent', 'ok'], true);
+        // WAHA engines vary: WEBJS often uses success/sent; NOWEB/GOWS commonly return PENDING.
+        return in_array($status, [
+            'success',
+            'sent',
+            'ok',
+            'pending',
+            'server_ack',
+            'device',
+            'read',
+            'played',
+        ], true);
     }
 
     /**
@@ -88,9 +98,66 @@ final class WahaResponseClassifier
      */
     private function providerMessageId(array $payload): ?string
     {
-        $id = $payload['id'] ?? data_get($payload, '_data.id') ?? data_get($payload, 'key.id');
+        $candidates = [
+            $payload['id'] ?? null,
+            data_get($payload, '_data.id'),
+            data_get($payload, 'key.id'),
+        ];
 
-        return is_scalar($id) && trim((string) $id) !== '' ? mb_substr((string) $id, 0, 255) : null;
+        foreach ($candidates as $candidate) {
+            $resolved = $this->stringifyMessageId($candidate);
+
+            if ($resolved !== null) {
+                return $resolved;
+            }
+        }
+
+        return $this->compositeKeyMessageId($payload['key'] ?? null);
+    }
+
+    private function stringifyMessageId(mixed $id): ?string
+    {
+        if (is_scalar($id) && trim((string) $id) !== '') {
+            return mb_substr((string) $id, 0, 255);
+        }
+
+        if (! is_array($id) || $id === []) {
+            return null;
+        }
+
+        foreach (['_serialized', 'id', '_serialized_id'] as $key) {
+            $value = $id[$key] ?? null;
+
+            if (is_scalar($value) && trim((string) $value) !== '') {
+                return mb_substr((string) $value, 0, 255);
+            }
+        }
+
+        return null;
+    }
+
+    private function compositeKeyMessageId(mixed $key): ?string
+    {
+        if (! is_array($key)) {
+            return null;
+        }
+
+        $messageId = $this->stringifyMessageId($key['id'] ?? null);
+        $remoteJid = is_scalar($key['remoteJid'] ?? null) ? trim((string) $key['remoteJid']) : '';
+
+        if ($messageId === null || $remoteJid === '') {
+            return null;
+        }
+
+        $fromMe = filter_var($key['fromMe'] ?? false, FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        $parts = [$fromMe, $remoteJid, $messageId];
+        $participant = is_scalar($key['participant'] ?? null) ? trim((string) $key['participant']) : '';
+
+        if ($participant !== '') {
+            $parts[] = $participant;
+        }
+
+        return mb_substr(implode('_', $parts), 0, 255);
     }
 
     /**
@@ -101,7 +168,10 @@ final class WahaResponseClassifier
     {
         return array_filter([
             'status' => is_scalar($payload['status'] ?? null) ? $payload['status'] : null,
-            'timestamp' => is_scalar($payload['timestamp'] ?? null) ? $payload['timestamp'] : null,
+            'timestamp' => is_scalar($payload['timestamp'] ?? null)
+                ? $payload['timestamp']
+                : (is_scalar($payload['messageTimestamp'] ?? null) ? $payload['messageTimestamp'] : null),
+            'ack' => is_scalar($payload['ack'] ?? null) ? $payload['ack'] : null,
         ], static fn (mixed $value): bool => $value !== null);
     }
 
