@@ -26,6 +26,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use UnitEnum;
 
 class RoutingPolicyResource extends Resource
@@ -118,6 +119,16 @@ class RoutingPolicyResource extends Resource
                             Repeater::make('steps')
                                 ->relationship()
                                 ->orderColumn('position')
+                                ->saveRelationshipsUsing(function (Repeater $component): void {
+                                    // Filament rewrites order one row at a time. Free the unique
+                                    // (routing_policy_id, position) slots first, then reload models
+                                    // so Eloquent dirty-checks see the temporary positions.
+                                    $component->getRelationship()->getQuery()->update([
+                                        'position' => DB::raw('position + 100000'),
+                                    ]);
+                                    $component->clearCachedExistingRecords();
+                                    $component->saveToRelationship();
+                                })
                                 ->schema([
                                     Select::make('provider_account_id')
                                         ->label('Provider')
