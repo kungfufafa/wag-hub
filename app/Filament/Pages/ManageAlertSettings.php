@@ -28,9 +28,9 @@ class ManageAlertSettings extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBellAlert;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Konfigurasi';
+    protected static string|UnitEnum|null $navigationGroup = 'Alert';
 
-    protected static ?int $navigationSort = 25;
+    protected static ?int $navigationSort = 10;
 
     protected static ?string $navigationLabel = 'Pengaturan Alert';
 

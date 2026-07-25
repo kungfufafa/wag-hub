@@ -28,9 +28,9 @@ class MyAlertPreferences extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBell;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Konfigurasi';
+    protected static string|UnitEnum|null $navigationGroup = 'Alert';
 
-    protected static ?int $navigationSort = 26;
+    protected static ?int $navigationSort = 20;
 
     protected static ?string $navigationLabel = 'Preferensi Alert';
 

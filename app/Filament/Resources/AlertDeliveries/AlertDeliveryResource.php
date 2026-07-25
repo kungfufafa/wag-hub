@@ -29,7 +29,7 @@ class AlertDeliveryResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBellAlert;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Operasi';
+    protected static string|UnitEnum|null $navigationGroup = 'Alert';
 
     protected static ?int $navigationSort = 30;
 
