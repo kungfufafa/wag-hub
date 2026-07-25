@@ -24,4 +24,5 @@ Homestead.yaml
 Thumbs.db
 
 /.codex
+/.worktrees
 /graphify-out
