@@ -3,7 +3,7 @@
 namespace App\Providers;
 
 use App\Events\ProviderHealthChanged;
-use App\Listeners\SendProviderHealthAlerts;
+use App\Services\Alerts\SendProviderHealthAlerts;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 

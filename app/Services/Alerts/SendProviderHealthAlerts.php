@@ -1,13 +1,12 @@
 <?php
 
-namespace App\Listeners;
+namespace App\Services\Alerts;
 
 use App\Events\ProviderHealthChanged;
 use App\Jobs\DeliverProviderHealthAlert;
 use App\Models\AlertDelivery;
 use App\Models\AlertSetting;
 use App\Models\User;
-use App\Services\Alerts\AlertCooldownStore;
 
 final class SendProviderHealthAlerts
 {
