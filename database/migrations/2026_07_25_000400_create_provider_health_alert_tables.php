@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -22,6 +23,15 @@ return new class extends Migration
             $table->text('telegram_bot_token')->nullable();
             $table->timestamps();
         });
+
+        $now = now();
+        DB::table('alert_settings')->insert([
+            'id' => 1,
+            'is_enabled' => false,
+            'cooldown_seconds' => 300,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
 
         Schema::create('user_alert_preferences', function (Blueprint $table): void {
             $table->id();

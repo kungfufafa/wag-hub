@@ -13,6 +13,18 @@ class AlertSettingsModelTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_current_returns_seeded_singleton_row(): void
+    {
+        $this->assertSame(1, AlertSetting::query()->count());
+
+        $settings = AlertSetting::current();
+
+        $this->assertSame(1, $settings->id);
+        $this->assertFalse($settings->is_enabled);
+        $this->assertSame(300, $settings->cooldown_seconds);
+        $this->assertTrue($settings->is(AlertSetting::current()));
+    }
+
     public function test_alert_setting_secrets_are_encrypted_at_rest(): void
     {
         $settings = AlertSetting::current();

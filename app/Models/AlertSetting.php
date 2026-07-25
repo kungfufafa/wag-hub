@@ -26,10 +26,7 @@ class AlertSetting extends Model
 
     public static function current(): self
     {
-        return static::query()->firstOrCreate([], [
-            'is_enabled' => false,
-            'cooldown_seconds' => 300,
-        ]);
+        return static::query()->sole();
     }
 
     protected function casts(): array

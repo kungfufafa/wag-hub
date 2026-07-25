@@ -20,10 +20,6 @@ final class AlertMailerFactory
                 'password' => $settings->smtp_password,
                 'timeout' => 30,
             ],
-            'mail.from' => [
-                'address' => $settings->smtp_from_address,
-                'name' => $settings->smtp_from_name ?: 'WhatsApp Gateway Hub',
-            ],
         ]);
 
         app('mail.manager')->purge(self::MAILER_NAME);

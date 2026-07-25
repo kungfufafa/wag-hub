@@ -90,7 +90,7 @@ class ManageAlertSettings extends Page
                             ->required()
                             ->minValue(0)
                             ->maxValue(86400)
-                            ->helperText('Jeda minimum sebelum alert untuk status yang sama dikirim lagi.'),
+                            ->helperText('Jeda minimum antar alert untuk provider yang sama (semua perubahan status).'),
                     ])
                     ->columns(['md' => 2]),
                 Section::make('SMTP')

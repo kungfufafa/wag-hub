@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Filament\Resources\ProviderAccounts\ProviderAccountResource;
+use App\Models\AlertSetting;
 use App\Models\ProviderAccount;
 use App\Services\Alerts\AlertMailerFactory;
 use Illuminate\Bus\Queueable;
@@ -37,10 +38,15 @@ final class ProviderHealthChangedNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
+        $settings = AlertSetting::current();
         $body = $this->buildBody();
 
         return (new MailMessage)
             ->mailer(AlertMailerFactory::MAILER_NAME)
+            ->from(
+                (string) $settings->smtp_from_address,
+                (string) ($settings->smtp_from_name ?: 'WhatsApp Gateway Hub'),
+            )
             ->subject($this->subjectLine())
             ->line($body);
     }

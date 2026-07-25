@@ -74,6 +74,8 @@ class DeliverProviderHealthAlertTest extends TestCase
     {
         Notification::fake();
 
+        $globalFromBefore = config('mail.from');
+
         AlertSetting::current()->forceFill([
             'is_enabled' => true,
             'smtp_host' => 'smtp.alerts.test',
@@ -119,13 +121,21 @@ class DeliverProviderHealthAlertTest extends TestCase
         Notification::assertSentTo(
             $user,
             ProviderHealthChangedNotification::class,
-            function ($notification, $channels) {
-                return $channels === ['mail'];
+            function ($notification, $channels) use ($user) {
+                if ($channels !== ['mail']) {
+                    return false;
+                }
+
+                $mail = $notification->toMail($user);
+
+                return ($mail->from[0] ?? null) === 'alerts@gateway.test'
+                    && ($mail->from[1] ?? null) === 'WAG Hub';
             },
         );
         $this->assertSame('sent', $delivery->fresh()->status);
         $this->assertSame('smtp.alerts.test', config('mail.mailers.provider_health_alerts.host'));
         $this->assertSame('smtp', config('mail.mailers.provider_health_alerts.transport'));
+        $this->assertSame($globalFromBefore, config('mail.from'));
     }
 
     public function test_telegram_http_failure_marks_delivery_failed_with_reason(): void
