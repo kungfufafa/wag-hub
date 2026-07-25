@@ -35,6 +35,9 @@ class AdminResourceSmokeTest extends TestCase
             'routing policies' => ['/panel/routing-policies'],
             'message ledger' => ['/panel/messages'],
             'number check ledger' => ['/panel/number-checks'],
+            'alert settings' => ['/panel/alert-settings'],
+            'my alert preferences' => ['/panel/my-alert-preferences'],
+            'alert deliveries' => ['/panel/alert-deliveries'],
         ];
     }
 
