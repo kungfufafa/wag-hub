@@ -64,4 +64,18 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->hasOne(UserAlertPreference::class);
     }
+
+    public function routeNotificationForMail(mixed $notification = null): ?string
+    {
+        $override = $this->alertPreference?->email_address;
+
+        return filled($override) ? (string) $override : $this->email;
+    }
+
+    public function routeNotificationForTelegram(mixed $notification = null): ?string
+    {
+        $chatId = $this->alertPreference?->telegram_chat_id;
+
+        return filled($chatId) ? (string) $chatId : null;
+    }
 }
