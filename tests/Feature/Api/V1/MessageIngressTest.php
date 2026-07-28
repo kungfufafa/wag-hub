@@ -7,12 +7,15 @@ use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
 use App\Support\PayloadHasher;
 use App\Support\PhoneNormalizer;
+use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Mockery;
+use RuntimeException;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
 
@@ -368,5 +371,248 @@ class MessageIngressTest extends TestCase
             ->getJson("/api/v1/messages/{$messageId}")
             ->assertStatus(403)
             ->assertJsonPath('error.code', 'forbidden');
+    }
+
+    public function test_async_mode_with_global_sync_dispatch_returns_accepted_after_inline_send(): void
+    {
+        config(['gateway.dispatch' => 'sync']);
+
+        $client = $this->createClientApplication();
+        $provider = $this->createProviderAccount('waha', 'waha-global-sync-accept', [
+            'base_url' => 'https://waha-global-sync-accept.test',
+            'api_key' => 'waha-secret',
+            'session' => 'default',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$provider['id']]);
+
+        Http::fake([
+            'waha-global-sync-accept.test/*' => Http::response(['id' => 'waha-inline-001'], 201),
+        ]);
+
+        $this->postMessage($client['token'], 'async-global-sync-ok', $this->messagePayload())
+            ->assertStatus(201)
+            ->assertJsonPath('data.status', 'provider_accepted')
+            ->assertJsonPath('data.mode', 'async')
+            ->assertJsonPath('data.provider_message_id', 'waha-inline-001')
+            ->assertJsonPath('data.duplicate', false);
+
+        $this->assertDatabaseHas('gateway_messages', [
+            'idempotency_key' => 'async-global-sync-ok',
+            'status' => 'provider_accepted',
+            'mode' => 'async',
+        ]);
+        $this->assertDatabaseMissing('message_events', [
+            'type' => 'enqueue_failed',
+        ]);
+    }
+
+    public function test_async_mode_with_global_sync_dispatch_surfaces_provider_failure(): void
+    {
+        config(['gateway.dispatch' => 'sync']);
+
+        $client = $this->createClientApplication();
+        $provider = $this->createProviderAccount('waha', 'waha-global-sync-fail', [
+            'base_url' => 'https://waha-global-sync-fail.test',
+            'api_key' => 'waha-secret',
+            'session' => 'default',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$provider['id']]);
+
+        Http::fake([
+            'waha-global-sync-fail.test/*' => Http::response(['error' => 'rejected'], 401),
+        ]);
+
+        $this->postMessage($client['token'], 'async-global-sync-fail', $this->messagePayload())
+            ->assertStatus(503)
+            ->assertJsonPath('error.code', 'providers_failed')
+            ->assertJsonPath('data.status', 'failed')
+            ->assertJsonPath('data.mode', 'async');
+
+        $this->assertDatabaseHas('gateway_messages', [
+            'idempotency_key' => 'async-global-sync-fail',
+            'status' => 'failed',
+            'mode' => 'async',
+        ]);
+        $this->assertDatabaseMissing('message_events', [
+            'type' => 'enqueue_failed',
+        ]);
+    }
+
+    public function test_gateway_dispatch_config_defaults_to_async_when_env_unset(): void
+    {
+        $previousEnv = $_ENV['GATEWAY_DISPATCH'] ?? null;
+        $previousServer = $_SERVER['GATEWAY_DISPATCH'] ?? null;
+
+        unset($_ENV['GATEWAY_DISPATCH'], $_SERVER['GATEWAY_DISPATCH']);
+        putenv('GATEWAY_DISPATCH');
+
+        try {
+            $config = require config_path('gateway.php');
+            $this->assertSame('async', $config['dispatch']);
+        } finally {
+            if ($previousEnv === null) {
+                unset($_ENV['GATEWAY_DISPATCH']);
+            } else {
+                $_ENV['GATEWAY_DISPATCH'] = $previousEnv;
+            }
+
+            if ($previousServer === null) {
+                unset($_SERVER['GATEWAY_DISPATCH']);
+            } else {
+                $_SERVER['GATEWAY_DISPATCH'] = $previousServer;
+            }
+
+            if ($previousEnv !== null) {
+                putenv('GATEWAY_DISPATCH='.$previousEnv);
+            } else {
+                putenv('GATEWAY_DISPATCH');
+            }
+        }
+    }
+
+    public function test_async_mode_with_global_sync_dispatch_fails_when_inline_job_leaves_message_queued(): void
+    {
+        config(['gateway.dispatch' => 'sync']);
+
+        $client = $this->createClientApplication();
+        $this->createRoutingPolicy(
+            $client['id'],
+            [$this->createProviderAccount('waha', 'waha-global-sync-noop', [
+                'base_url' => 'https://waha-global-sync-noop.test',
+                'api_key' => 'waha-secret',
+                'session' => 'default',
+            ])['id']],
+        );
+
+        $bus = Mockery::mock(BusDispatcher::class);
+        $bus->shouldReceive('dispatchSync')
+            ->once()
+            ->with(Mockery::type(DispatchGatewayMessage::class))
+            ->andReturnNull();
+        $this->app->instance(BusDispatcher::class, $bus);
+
+        $this->postMessage($client['token'], 'async-global-sync-noop', $this->messagePayload())
+            ->assertStatus(503)
+            ->assertJsonPath('error.code', 'queue_unavailable')
+            ->assertJsonPath('data.status', 'queued')
+            ->assertJsonPath('data.mode', 'async');
+
+        $message = GatewayMessage::query()->where('idempotency_key', 'async-global-sync-noop')->sole();
+        $this->assertDatabaseHas('message_events', [
+            'gateway_message_id' => $message->getKey(),
+            'type' => 'enqueue_failed',
+            'source' => 'api',
+        ]);
+    }
+
+    public function test_async_mode_with_global_sync_dispatch_records_enqueue_failed_on_handoff_throw(): void
+    {
+        config(['gateway.dispatch' => 'sync']);
+
+        $client = $this->createClientApplication();
+        $this->createRoutingPolicy(
+            $client['id'],
+            [$this->createProviderAccount('waha', 'waha-global-sync-throw', [
+                'base_url' => 'https://waha-global-sync-throw.test',
+                'api_key' => 'waha-secret',
+                'session' => 'default',
+            ])['id']],
+        );
+
+        $bus = Mockery::mock(BusDispatcher::class);
+        $bus->shouldReceive('dispatchSync')
+            ->once()
+            ->with(Mockery::type(DispatchGatewayMessage::class))
+            ->andThrow(new RuntimeException('Inline dispatch unavailable.'));
+        $this->app->instance(BusDispatcher::class, $bus);
+
+        $this->postMessage($client['token'], 'async-global-sync-throw', $this->messagePayload())
+            ->assertStatus(503)
+            ->assertJsonPath('error.code', 'queue_unavailable')
+            ->assertJsonPath('data.status', 'queued');
+
+        $message = GatewayMessage::query()->where('idempotency_key', 'async-global-sync-throw')->sole();
+        $this->assertDatabaseHas('message_events', [
+            'gateway_message_id' => $message->getKey(),
+            'type' => 'enqueue_failed',
+            'source' => 'api',
+        ]);
+    }
+
+    public function test_idempotent_replay_recovers_enqueue_failure_under_global_sync_dispatch(): void
+    {
+        config(['gateway.dispatch' => 'sync']);
+
+        $client = $this->createClientApplication();
+        $provider = $this->createProviderAccount('waha', 'waha-global-sync-recover', [
+            'base_url' => 'https://waha-global-sync-recover.test',
+            'api_key' => 'waha-secret',
+            'session' => 'default',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$provider['id']]);
+
+        $payload = $this->messagePayload();
+        $canonicalRecipient = app(PhoneNormalizer::class)->normalize($payload['recipient']['value']);
+        $canonicalPayload = [
+            'recipient' => ['type' => 'phone', 'value' => $canonicalRecipient],
+            'message' => ['type' => 'text', 'text' => $payload['message']['text']],
+            'purpose' => $payload['purpose'],
+            'mode' => $payload['mode'],
+            'route_key' => $payload['route_key'],
+            'expires_at' => null,
+            'client_reference' => $payload['client_reference'],
+            'metadata' => $payload['metadata'],
+        ];
+
+        $message = GatewayMessage::query()->forceCreate([
+            'uuid' => (string) Str::uuid(),
+            'client_application_id' => $client['id'],
+            'idempotency_key' => 'async-global-sync-recover',
+            'payload_hash' => app(PayloadHasher::class)->hash($canonicalPayload, (string) config('app.key')),
+            'correlation_id' => (string) Str::uuid(),
+            'client_reference' => $payload['client_reference'],
+            'recipient' => $canonicalRecipient,
+            'recipient_hash' => hash_hmac('sha256', $canonicalRecipient, (string) config('app.key')),
+            'recipient_last4' => substr($canonicalRecipient, -4),
+            'body' => $payload['message']['text'],
+            'purpose' => $payload['purpose'],
+            'route_key' => $payload['route_key'],
+            'mode' => 'async',
+            'priority' => 10,
+            'status' => 'queued',
+            'metadata' => $payload['metadata'],
+            'queued_at' => now(),
+        ]);
+
+        MessageEvent::query()->forceCreate([
+            'gateway_message_id' => $message->getKey(),
+            'type' => 'queued',
+            'source' => 'api',
+            'occurred_at' => now(),
+        ]);
+        MessageEvent::query()->forceCreate([
+            'gateway_message_id' => $message->getKey(),
+            'type' => 'enqueue_failed',
+            'source' => 'api',
+            'occurred_at' => now(),
+        ]);
+
+        Http::fake([
+            'waha-global-sync-recover.test/*' => Http::response(['id' => 'waha-recovered-001'], 201),
+        ]);
+
+        $this->postMessage($client['token'], 'async-global-sync-recover', $payload)
+            ->assertStatus(201)
+            ->assertJsonPath('data.status', 'provider_accepted')
+            ->assertJsonPath('data.duplicate', true)
+            ->assertJsonPath('data.provider_message_id', 'waha-recovered-001');
+
+        $message->refresh();
+        $this->assertSame('provider_accepted', $message->status);
+        $this->assertDatabaseHas('message_events', [
+            'gateway_message_id' => $message->getKey(),
+            'type' => 'enqueue_recovered',
+            'source' => 'api',
+        ]);
     }
 }

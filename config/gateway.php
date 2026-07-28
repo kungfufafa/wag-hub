@@ -28,6 +28,11 @@ return [
         'delivery' => env('GATEWAY_ALERT_DELIVERY', 'sync') === 'async' ? 'async' : 'sync',
     ],
 
+    // Global dispatch for message jobs (async API intake, admin retry, stale recovery).
+    // async = masuk antrian database/redis (butuh queue:work) — default production-safe.
+    // sync = jalankan DispatchGatewayMessage langsung (tanpa queue:work) — cocok lokal/dev saja.
+    'dispatch' => env('GATEWAY_DISPATCH', 'async') === 'sync' ? 'sync' : 'async',
+
     'seed' => [
         'administrator' => [
             'name' => env('GATEWAY_SEED_ADMIN_NAME') ?: 'Gateway Administrator',

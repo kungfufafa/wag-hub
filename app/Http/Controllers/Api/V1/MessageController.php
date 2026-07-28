@@ -64,6 +64,12 @@ class MessageController extends Controller
                 return $enqueueFailure;
             }
 
+            $message->refresh();
+
+            if (! $this->enqueuer->usesAsyncDispatch()) {
+                return $this->inlineDispatchResponse($request, $message, false);
+            }
+
             return response()->json([
                 'data' => $this->messageData($message, false),
                 'request_id' => $this->requestId($request),
@@ -188,6 +194,12 @@ class MessageController extends Controller
             if ($enqueueFailure !== null) {
                 return $enqueueFailure;
             }
+
+            $message->refresh();
+
+            if (! $this->enqueuer->usesAsyncDispatch()) {
+                return $this->inlineDispatchResponse($request, $message, true);
+            }
         }
 
         return response()->json([
@@ -202,6 +214,13 @@ class MessageController extends Controller
         bool $duplicate,
     ): ?JsonResponse {
         if (! $this->enqueuer->enqueue($message, 'api')) {
+            $message->refresh();
+
+            if (! $this->enqueuer->usesAsyncDispatch()
+                && $this->statusValue($message->status) !== 'queued') {
+                return $this->dispatchFailureResponse($request, $message);
+            }
+
             return response()->json([
                 'message' => 'The message was saved, but the queue is currently unavailable.',
                 'error' => [
@@ -214,6 +233,33 @@ class MessageController extends Controller
         }
 
         return null;
+    }
+
+    private function inlineDispatchResponse(
+        Request $request,
+        GatewayMessage $message,
+        bool $duplicate,
+    ): JsonResponse {
+        if ($this->statusValue($message->status) === 'provider_accepted') {
+            return response()->json([
+                'data' => $this->messageData($message, $duplicate),
+                'request_id' => $this->requestId($request),
+            ], 201);
+        }
+
+        if ($this->statusValue($message->status) === 'queued') {
+            return response()->json([
+                'message' => 'The message was saved, but the queue is currently unavailable.',
+                'error' => [
+                    'code' => 'queue_unavailable',
+                    'retryable' => true,
+                ],
+                'data' => $this->messageData($message, $duplicate),
+                'request_id' => $this->requestId($request),
+            ], 503);
+        }
+
+        return $this->dispatchFailureResponse($request, $message);
     }
 
     private function dispatchFailureResponse(Request $request, GatewayMessage $message): JsonResponse

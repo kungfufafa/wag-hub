@@ -83,4 +83,85 @@ final class AdminTestMessageRetryTest extends TestCase
             MessageAttempt::query()->where('gateway_message_id', $message->getKey())->orderByDesc('sequence')->value('status'),
         );
     }
+
+    public function test_retry_runs_inline_when_global_dispatch_is_sync(): void
+    {
+        config(['gateway.dispatch' => 'sync']);
+
+        $provider = $this->createProviderAccount('waha', 'waha-admin-sync-retry', [
+            'base_url' => 'https://waha-admin-sync-retry.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+
+        Http::fake([
+            'waha-admin-sync-retry.test/*' => Http::sequence()
+                ->push(['error' => 'temporary'], 503)
+                ->push(['id' => 'waha-sync-retry-ok'], 201),
+        ]);
+
+        $first = app(ProviderAccountTester::class)->send(
+            ProviderAccount::query()->findOrFail($provider['id']),
+            '081234567890',
+            'Pesan uji sync retry',
+            1,
+        );
+        $this->assertFalse($first->success);
+
+        $message = GatewayMessage::query()
+            ->where('purpose', ProviderAccountTester::PURPOSE)
+            ->sole();
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertActionVisible('retry')
+            ->callAction('retry')
+            ->assertNotified('Kirim ulang diproses');
+
+        $message->refresh();
+        $this->assertSame('provider_accepted', $message->status);
+        $this->assertSame('waha-sync-retry-ok', $message->provider_message_id);
+        $this->assertDatabaseCount('message_attempts', 2);
+    }
+
+    public function test_sync_retry_does_not_success_notify_when_delivery_fails(): void
+    {
+        config(['gateway.dispatch' => 'sync']);
+
+        $provider = $this->createProviderAccount('waha', 'waha-admin-sync-retry-fail', [
+            'base_url' => 'https://waha-admin-sync-retry-fail.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+
+        Http::fake([
+            'waha-admin-sync-retry-fail.test/*' => Http::sequence()
+                ->push(['error' => 'temporary'], 503)
+                ->push(['error' => 'still down'], 503),
+        ]);
+
+        $first = app(ProviderAccountTester::class)->send(
+            ProviderAccount::query()->findOrFail($provider['id']),
+            '081234567890',
+            'Pesan uji sync retry gagal',
+            1,
+        );
+        $this->assertFalse($first->success);
+
+        $message = GatewayMessage::query()
+            ->where('purpose', ProviderAccountTester::PURPOSE)
+            ->sole();
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertActionVisible('retry')
+            ->callAction('retry')
+            ->assertNotified('Kirim ulang selesai dengan status outcome_unknown');
+
+        $message->refresh();
+        $this->assertSame('outcome_unknown', $message->status);
+        $this->assertDatabaseCount('message_attempts', 2);
+        $this->assertDatabaseMissing('message_events', [
+            'gateway_message_id' => $message->getKey(),
+            'type' => 'enqueue_failed',
+        ]);
+    }
 }

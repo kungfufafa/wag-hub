@@ -9,18 +9,68 @@ use Throwable;
 
 final class GatewayMessageEnqueuer
 {
+    private const TERMINAL_STATUSES = [
+        'provider_accepted',
+        'failed',
+        'dead_letter',
+        'outcome_unknown',
+        'expired',
+    ];
+
     public function enqueue(GatewayMessage $message, string $source): bool
     {
         $recovering = $this->hasUnrecoveredFailure($message);
 
         try {
-            DispatchGatewayMessage::dispatch($message->getKey());
+            if ($this->usesAsyncDispatch()) {
+                DispatchGatewayMessage::dispatch($message->getKey());
+            } else {
+                DispatchGatewayMessage::dispatchSync($message->getKey());
+            }
         } catch (Throwable) {
-            if (! $recovering) {
-                $this->recordEvent($message, 'enqueue_failed', $source);
+            if ($this->usesAsyncDispatch()) {
+                if (! $recovering) {
+                    $this->recordEvent($message, 'enqueue_failed', $source);
+                }
+
+                return false;
+            }
+
+            $message->refresh();
+            $status = (string) $message->status;
+
+            // Job never started — treat as handoff failure.
+            if ($status === 'queued') {
+                if (! $recovering) {
+                    $this->recordEvent($message, 'enqueue_failed', $source);
+                }
+
+                return false;
+            }
+
+            // Job reached the dispatcher; caller should inspect the message status.
+            if (in_array($status, self::TERMINAL_STATUSES, true)) {
+                if ($recovering) {
+                    $this->recordEvent($message, 'enqueue_recovered', $source);
+                }
+
+                return true;
             }
 
             return false;
+        }
+
+        if (! $this->usesAsyncDispatch()) {
+            $message->refresh();
+
+            // Overlap skip / no-op left the message queued — no worker will pick it up.
+            if ((string) $message->status === 'queued') {
+                if (! $recovering) {
+                    $this->recordEvent($message, 'enqueue_failed', $source);
+                }
+
+                return false;
+            }
         }
 
         if ($recovering) {
@@ -28,6 +78,11 @@ final class GatewayMessageEnqueuer
         }
 
         return true;
+    }
+
+    public function usesAsyncDispatch(): bool
+    {
+        return (string) config('gateway.dispatch', 'async') === 'async';
     }
 
     public function hasUnrecoveredFailure(GatewayMessage $message): bool

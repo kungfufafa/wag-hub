@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\IntegrationDocumentation;
 use App\Filament\Widgets\GatewayStatsOverview;
 use Apriansyahrs\MekayaTheme\MekayaPlugin;
 use Filament\Http\Middleware\Authenticate;
@@ -28,7 +29,14 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('panel')
-            ->plugin(MekayaPlugin::make())
+            ->plugin(
+                MekayaPlugin::make()
+                    ->documentation(
+                        url: '/panel/'.IntegrationDocumentation::getSlug(),
+                        label: 'Dokumentasi Integrasi',
+                        newTab: false,
+                    ),
+            )
             ->registration(null)
             ->passwordReset(null)
             ->brandName('WhatsApp Gateway Hub')

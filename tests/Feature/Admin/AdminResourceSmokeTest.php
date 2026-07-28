@@ -38,7 +38,31 @@ class AdminResourceSmokeTest extends TestCase
             'alert settings' => ['/panel/alert-settings'],
             'my alert preferences' => ['/panel/my-alert-preferences'],
             'alert deliveries' => ['/panel/alert-deliveries'],
+            'integration documentation' => ['/panel/dokumentasi-integrasi'],
         ];
+    }
+
+    public function test_sidebar_documentation_button_is_enabled_for_integration_docs(): void
+    {
+        $administrator = User::factory()->create([
+            'is_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($administrator)
+            ->get('/panel')
+            ->assertOk()
+            ->assertSee('Dokumentasi Integrasi')
+            ->assertSee('/panel/dokumentasi-integrasi', false);
+
+        $this->actingAs($administrator)
+            ->get('/panel/dokumentasi-integrasi')
+            ->assertOk()
+            ->assertSee('Siapkan aplikasi sumber')
+            ->assertSee('Endpoint cepat')
+            ->assertSee('POST /api/v1/messages')
+            ->assertSee('Checklist')
+            ->assertSee('GATEWAY_DISPATCH=async');
     }
 
     #[DataProvider('configurationCreatePages')]
