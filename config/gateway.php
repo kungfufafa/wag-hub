@@ -22,6 +22,12 @@ return [
         'circuit_open_seconds' => (int) env('GATEWAY_PROVIDER_CIRCUIT_SECONDS', 300),
     ],
 
+    'alerts' => [
+        // sync = kirim tanpa queue worker (web: afterResponse; console/tests: langsung).
+        // async = dispatch ke queue (butuh php artisan queue:work).
+        'delivery' => env('GATEWAY_ALERT_DELIVERY', 'sync') === 'async' ? 'async' : 'sync',
+    ],
+
     'seed' => [
         'administrator' => [
             'name' => env('GATEWAY_SEED_ADMIN_NAME') ?: 'Gateway Administrator',

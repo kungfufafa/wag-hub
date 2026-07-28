@@ -140,6 +140,37 @@ final class ProviderAccountTestActionTest extends TestCase
         $this->assertSame('outcome_unknown', $message->status);
     }
 
+    public function test_rejected_send_test_does_not_penalize_provider_health(): void
+    {
+        config()->set('gateway.provider_health.failure_threshold', 1);
+
+        $provider = $this->createProviderAccount('waha', 'waha-admin-reject', [
+            'base_url' => 'https://waha-admin-reject.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+        Http::fake([
+            'waha-admin-reject.test/*' => Http::response(['error' => 'Invalid chatId'], 422),
+        ]);
+
+        Livewire::test(ListProviderAccounts::class)
+            ->callTableAction('test', $provider['id'], data: [
+                'type' => 'send',
+                'recipient' => '081234567890',
+                'body' => 'Pesan uji reject',
+            ])
+            ->assertNotified('Uji kirim gagal');
+
+        $freshProvider = ProviderAccount::query()->findOrFail($provider['id']);
+        $this->assertSame('healthy', $freshProvider->health_status);
+        $this->assertSame(0, $freshProvider->consecutive_failures);
+        $this->assertNull($freshProvider->circuit_open_until);
+
+        $message = GatewayMessage::query()->where('purpose', ProviderAccountTester::PURPOSE)->sole();
+        $this->assertSame('failed', $message->status);
+        $this->assertSame('invalid_message', $message->last_error_code);
+    }
+
     public function test_waba_number_check_test_is_unsupported_and_skips_health_penalty(): void
     {
         $account = ProviderAccount::query()->findOrFail(

@@ -41,7 +41,7 @@ final class WabaResponseClassifierTest extends TestCase
         self::assertTrue($result->allowsFallback());
     }
 
-    public function test_invalid_recipient_is_rejected_without_fallback(): void
+    public function test_invalid_recipient_is_rejected_with_safe_fallback(): void
     {
         $result = (new WabaResponseClassifier)->classify(
             400,
@@ -49,7 +49,8 @@ final class WabaResponseClassifierTest extends TestCase
         );
 
         self::assertSame(ProviderOutcome::Rejected, $result->outcome);
-        self::assertFalse($result->allowsFallback());
+        self::assertSame(RetryDisposition::FallbackAllowed, $result->retryDisposition);
+        self::assertTrue($result->allowsFallback());
     }
 
     public function test_server_failure_is_unknown_without_blind_fallback(): void

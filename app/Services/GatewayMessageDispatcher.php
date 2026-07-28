@@ -170,7 +170,11 @@ final readonly class GatewayMessageDispatcher
         $latencyMs = max(0, (int) floor((hrtime(true) - $startedAt) / 1_000_000));
 
         $this->finishAttempt($attemptId, $result, $latencyMs);
-        $this->health->record($provider, $result);
+
+        // Admin rejection probes must not open production circuits or spam ops alerts.
+        if ($result->outcome !== ProviderOutcome::Rejected) {
+            $this->health->record($provider, $result);
+        }
 
         if ($result->outcome === ProviderOutcome::Accepted) {
             return $this->markAccepted($message, $provider, $result);

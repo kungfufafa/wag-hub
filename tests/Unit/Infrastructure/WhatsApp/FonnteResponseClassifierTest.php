@@ -41,8 +41,8 @@ final class FonnteResponseClassifierTest extends TestCase
         );
 
         self::assertSame(ProviderOutcome::Rejected, $result->outcome);
-        self::assertSame(RetryDisposition::DoNotRetry, $result->retryDisposition);
-        self::assertFalse($result->allowsFallback());
+        self::assertSame(RetryDisposition::FallbackAllowed, $result->retryDisposition);
+        self::assertTrue($result->allowsFallback());
     }
 
     /**
@@ -78,7 +78,7 @@ final class FonnteResponseClassifierTest extends TestCase
         yield 'non-boolean success marker' => ['{"status":"true"}'];
     }
 
-    public function test_a_client_payload_error_is_a_message_rejection_without_fallback(): void
+    public function test_a_client_payload_error_is_a_message_rejection_with_safe_fallback(): void
     {
         $result = (new FonnteResponseClassifier)->classify(
             httpStatus: 422,
@@ -86,8 +86,8 @@ final class FonnteResponseClassifierTest extends TestCase
         );
 
         self::assertSame(ProviderOutcome::Rejected, $result->outcome);
-        self::assertSame(RetryDisposition::DoNotRetry, $result->retryDisposition);
-        self::assertFalse($result->allowsFallback());
+        self::assertSame(RetryDisposition::FallbackAllowed, $result->retryDisposition);
+        self::assertTrue($result->allowsFallback());
     }
 
     public function test_a_server_error_is_ambiguous_and_never_triggers_blind_fallback(): void

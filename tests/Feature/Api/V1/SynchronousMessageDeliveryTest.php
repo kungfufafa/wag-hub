@@ -169,6 +169,125 @@ class SynchronousMessageDeliveryTest extends TestCase
         );
     }
 
+    public function test_a_primary_message_rejection_falls_back_to_the_next_provider(): void
+    {
+        $client = $this->createClientApplication();
+        $primary = $this->createProviderAccount('waha', 'waha-primary', [
+            'base_url' => 'https://waha-primary.test',
+            'api_key' => 'primary-secret',
+            'session' => 'default',
+        ]);
+        $secondary = $this->createProviderAccount('fonnte', 'fonnte-secondary', [
+            'endpoint' => 'https://fonnte-secondary.test/send',
+            'token' => 'secondary-secret',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$primary['id'], $secondary['id']]);
+
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), 'waha-primary.test')) {
+                return Http::response(['error' => 'Invalid chatId'], 422);
+            }
+
+            return Http::response([
+                'status' => true,
+                'id' => 'fonnte-remote-rejection-fallback',
+                'process' => 'pending',
+            ], 200);
+        });
+
+        $response = $this->postMessage(
+            $client['token'],
+            'sync-rejection-fallback-1',
+            $this->messagePayload('sync'),
+        );
+
+        $response
+            ->assertStatus(201)
+            ->assertJsonPath('data.status', 'provider_accepted')
+            ->assertJsonPath('data.provider', 'fonnte-secondary')
+            ->assertJsonPath('data.provider_message_id', 'fonnte-remote-rejection-fallback');
+
+        $message = DB::table('gateway_messages')->where('uuid', $response->json('data.id'))->first();
+        $this->assertSame('provider_accepted', $message->status);
+        $this->assertSame($secondary['id'], $message->accepted_provider_account_id);
+
+        $attempts = DB::table('message_attempts')
+            ->where('gateway_message_id', $message->id)
+            ->orderBy('sequence')
+            ->get();
+        $this->assertCount(2, $attempts);
+
+        $this->assertSame($primary['id'], $attempts[0]->provider_account_id);
+        $this->assertSame('rejected', $attempts[0]->status);
+        $this->assertSame('not_sent', $attempts[0]->delivery_certainty);
+        $this->assertSame('fallback_allowed', $attempts[0]->retry_disposition);
+        $this->assertSame(422, $attempts[0]->http_status);
+        $this->assertSame('invalid_message', $attempts[0]->error_code);
+
+        $this->assertSame($secondary['id'], $attempts[1]->provider_account_id);
+        $this->assertSame('accepted', $attempts[1]->status);
+        $this->assertSame('fonnte-remote-rejection-fallback', $attempts[1]->provider_message_id);
+
+        $events = DB::table('message_events')
+            ->where('gateway_message_id', $message->id)
+            ->pluck('type')
+            ->all();
+        $this->assertContains('fallback_started', $events);
+        $this->assertContains('provider_accepted', $events);
+        $this->assertNotContains('failed', $events);
+        Http::assertSentCount(2);
+    }
+
+    public function test_all_providers_rejecting_the_message_fails_after_every_step(): void
+    {
+        $client = $this->createClientApplication();
+        $primary = $this->createProviderAccount('waha', 'waha-primary', [
+            'base_url' => 'https://waha-primary.test',
+            'api_key' => 'primary-secret',
+            'session' => 'default',
+        ]);
+        $secondary = $this->createProviderAccount('fonnte', 'fonnte-secondary', [
+            'endpoint' => 'https://fonnte-secondary.test/send',
+            'token' => 'secondary-secret',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$primary['id'], $secondary['id']]);
+
+        Http::fake(function (Request $request) {
+            if (str_contains($request->url(), 'waha-primary.test')) {
+                return Http::response(['error' => 'Invalid chatId'], 422);
+            }
+
+            return Http::response([
+                'status' => false,
+                'reason' => 'Invalid target',
+            ], 422);
+        });
+
+        $this->postMessage(
+            $client['token'],
+            'sync-all-rejected-1',
+            $this->messagePayload('sync'),
+        )
+            ->assertStatus(503)
+            ->assertJsonPath('error.code', 'providers_failed');
+
+        $message = DB::table('gateway_messages')
+            ->where('idempotency_key', 'sync-all-rejected-1')
+            ->sole();
+
+        $this->assertSame('failed', $message->status);
+        $this->assertSame('invalid_message', $message->last_error_code);
+        $this->assertSame(2, DB::table('message_attempts')
+            ->where('gateway_message_id', $message->id)
+            ->where('status', 'rejected')
+            ->count());
+        $this->assertDatabaseHas('message_events', [
+            'gateway_message_id' => $message->id,
+            'type' => 'fallback_started',
+        ]);
+        Http::assertSentCount(2);
+    }
+
     public function test_an_ambiguous_provider_response_becomes_outcome_unknown_without_fallback(): void
     {
         $client = $this->createClientApplication();

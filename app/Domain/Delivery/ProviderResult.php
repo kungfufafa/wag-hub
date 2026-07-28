@@ -44,7 +44,7 @@ final readonly class ProviderResult
         return new self(
             outcome: ProviderOutcome::Rejected,
             deliveryCertainty: DeliveryCertainty::NotSent,
-            retryDisposition: RetryDisposition::DoNotRetry,
+            retryDisposition: RetryDisposition::FallbackAllowed,
             httpStatus: $httpStatus,
             errorCode: $errorCode,
             errorMessage: $errorMessage,

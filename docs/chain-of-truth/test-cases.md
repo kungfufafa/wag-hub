@@ -23,7 +23,7 @@ Status: Reviewed
 | TC-017 | Integration | FR-005/AC-008 | queued message | run worker/job twice | one provider dispatch; terminal rerun no-op | P0 |
 | TC-018 | Integration | FR-006 | primary accepts | dispatch | one attempt; fallback untouched | P0 |
 | TC-019 | Integration | FR-006/AC-002 | safe primary provider failure | dispatch | secondary attempted and accepted | P0 |
-| TC-020 | Integration | FR-006 | invalid recipient rejection | dispatch | stop failed; no fallback | P0 |
+| TC-020 | Integration | FR-006 | invalid recipient rejection | dispatch | fallback next NotSent step; fail only after all steps reject | P0 |
 | TC-021 | Integration | FR-006 | disabled/circuit-open step | dispatch | skip event and next healthy step | P1 |
 | TC-022 | Unit | FR-007/BR-005 | WAHA classifier | 2xx valid JSON | accepted and remote ID when present | P0 |
 | TC-023 | Unit | FR-007/BR-005 | Fonnte classifier | 2xx status true/id/process | accepted metadata | P0 |
@@ -31,7 +31,7 @@ Status: Reviewed
 | TC-025 | Unit | FR-007/BR-004 | either driver | empty/malformed/indeterminate 2xx | outcome_unknown | P0 |
 | TC-026 | Unit | FR-007/BR-004 | connection exception | cURL connect refusal | provider_failed + fallback allowed | P0 |
 | TC-027 | Unit | FR-007/BR-004 | connection exception | timeout/reset after possible write | outcome_unknown + reconcile only | P0 |
-| TC-028 | Unit | FR-007 | HTTP errors | invalid payload vs provider auth/rate failure | message rejection stops; account failure may fallback | P0 |
+| TC-028 | Unit | FR-007 | HTTP errors | invalid payload vs provider auth/rate failure | message rejection and account failure may fallback when NotSent | P0 |
 | TC-029 | Contract | FR-007 | fake HTTP | inspect WAHA/Fonnte/GOWA/WABA requests | correct endpoint/header/payload; no cross-driver leak | P0 |
 | TC-030 | Integration | FR-008 | success dispatch | inspect DB | message, attempt, events consistent | P0 |
 | TC-031 | Integration | FR-008 | fallback dispatch | inspect DB | ordered attempts, HTTP status, latency, disposition retained | P0 |

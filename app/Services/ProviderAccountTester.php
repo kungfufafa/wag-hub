@@ -155,7 +155,10 @@ final readonly class ProviderAccountTester
             ]);
         });
 
-        $this->health->record($account, $result);
+        // Admin rejection probes must not open production circuits or spam ops alerts.
+        if ($result->outcome !== ProviderOutcome::Rejected) {
+            $this->health->record($account, $result);
+        }
 
         $success = $result->outcome === ProviderOutcome::Accepted;
 

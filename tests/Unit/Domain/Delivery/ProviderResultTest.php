@@ -27,7 +27,7 @@ final class ProviderResultTest extends TestCase
         self::assertFalse($result->allowsFallback());
     }
 
-    public function test_a_message_rejection_stops_the_route(): void
+    public function test_a_message_rejection_allows_safe_fallback_when_not_sent(): void
     {
         $result = ProviderResult::rejected(
             httpStatus: 422,
@@ -37,9 +37,9 @@ final class ProviderResultTest extends TestCase
 
         self::assertSame(ProviderOutcome::Rejected, $result->outcome);
         self::assertSame(DeliveryCertainty::NotSent, $result->deliveryCertainty);
-        self::assertSame(RetryDisposition::DoNotRetry, $result->retryDisposition);
+        self::assertSame(RetryDisposition::FallbackAllowed, $result->retryDisposition);
         self::assertSame('invalid_recipient', $result->errorCode);
-        self::assertFalse($result->allowsFallback());
+        self::assertTrue($result->allowsFallback());
     }
 
     public function test_a_definitive_provider_failure_allows_safe_fallback(): void

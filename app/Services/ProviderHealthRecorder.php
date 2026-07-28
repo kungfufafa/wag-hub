@@ -16,6 +16,7 @@ final readonly class ProviderHealthRecorder
     {
         if (! in_array($result->outcome, [
             ProviderOutcome::Accepted,
+            ProviderOutcome::Rejected,
             ProviderOutcome::ProviderFailed,
             ProviderOutcome::OutcomeUnknown,
         ], true)) {

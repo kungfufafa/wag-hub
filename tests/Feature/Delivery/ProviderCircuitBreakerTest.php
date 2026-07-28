@@ -185,4 +185,69 @@ class ProviderCircuitBreakerTest extends TestCase
             'status' => 'skipped',
         ]);
     }
+
+    public function test_repeated_message_rejections_open_the_circuit_and_alert_path_via_health_change(): void
+    {
+        $client = $this->createClientApplication();
+        $primary = $this->createProviderAccount('waha', 'waha-reject-circuit-primary', [
+            'base_url' => 'https://waha-reject-circuit-primary.test',
+            'api_key' => 'primary-secret',
+            'session' => 'default',
+        ]);
+        $secondary = $this->createProviderAccount('fonnte', 'fonnte-reject-circuit-secondary', [
+            'endpoint' => 'https://fonnte-reject-circuit-secondary.test/send',
+            'token' => 'secondary-secret',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$primary['id'], $secondary['id']]);
+
+        $primaryCalls = 0;
+        $secondaryCalls = 0;
+        Http::fake(function (Request $request) use (&$primaryCalls, &$secondaryCalls) {
+            if (str_contains($request->url(), 'waha-reject-circuit-primary.test')) {
+                $primaryCalls++;
+
+                return Http::response(['error' => 'Invalid chatId'], 422);
+            }
+
+            $secondaryCalls++;
+
+            return Http::response([
+                'status' => true,
+                'id' => 'secondary-after-reject-'.$secondaryCalls,
+            ]);
+        });
+
+        foreach (range(1, 3) as $sequence) {
+            $this->postMessage(
+                $client['token'],
+                "reject-circuit-failure-{$sequence}",
+                $this->messagePayload('sync'),
+            )->assertCreated();
+        }
+
+        $openedPrimary = ProviderAccount::query()->findOrFail($primary['id']);
+        $this->assertSame(3, $openedPrimary->consecutive_failures);
+        $this->assertSame('unavailable', $openedPrimary->health_status);
+        $this->assertTrue($openedPrimary->circuit_open_until->isFuture());
+        $this->assertSame(3, $primaryCalls);
+        $this->assertSame(3, $secondaryCalls);
+
+        $fourth = $this->postMessage(
+            $client['token'],
+            'reject-circuit-skips-open-primary',
+            $this->messagePayload('sync'),
+        )->assertCreated();
+
+        $this->assertSame(3, $primaryCalls);
+        $this->assertSame(4, $secondaryCalls);
+
+        $fourthMessageId = DB::table('gateway_messages')
+            ->where('uuid', $fourth->json('data.id'))
+            ->value('id');
+        $this->assertDatabaseHas('message_attempts', [
+            'gateway_message_id' => $fourthMessageId,
+            'provider_account_id' => $primary['id'],
+            'status' => 'skipped',
+        ]);
+    }
 }

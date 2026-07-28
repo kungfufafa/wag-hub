@@ -220,8 +220,8 @@ queue handoff recovery: queued + enqueue_failed -> enqueue_recovered
 ```
 
 - `provider_accepted`, `outcome_unknown`, dan `expired` tidak otomatis retry.
-- Attempt `provider_failed + fallback_allowed` dapat diikuti attempt berikutnya.
-- Attempt `rejected + do_not_retry` dan `outcome_unknown + reconcile_only` menghentikan route.
+- Attempt `provider_failed + fallback_allowed` dan `rejected + fallback_allowed` dapat diikuti attempt berikutnya.
+- Attempt `outcome_unknown + reconcile_only` menghentikan route.
 - `fallback` dan `retry` adalah event, bukan status message utama.
 
 ## Persistence and lifecycle
