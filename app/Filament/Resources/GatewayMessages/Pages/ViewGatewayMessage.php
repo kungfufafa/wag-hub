@@ -114,6 +114,16 @@ class ViewGatewayMessage extends ViewRecord
                         return;
                     }
 
+                    if ($status === 'outcome_unknown') {
+                        Notification::make()
+                            ->title('Kirim ulang selesai dengan status outcome_unknown')
+                            ->body('Pengiriman langsung selesai, namun tidak dapat dipastikan apakah provider menerima pesan atau tidak.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
                     Notification::make()
                         ->title('Kirim ulang selesai dengan status '.$status)
                         ->body('Pengiriman langsung selesai, tetapi pesan belum diterima provider.')

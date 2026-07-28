@@ -33,10 +33,12 @@ final class WahaResponseClassifier
         $message = $this->errorMessage($body);
 
         if ($httpStatus === 408 || ($httpStatus >= 300 && $httpStatus < 400) || $httpStatus >= 500) {
+            $baseMessage = 'WAHA gagal setelah request mungkin sudah diproses.';
+
             return ProviderResult::outcomeUnknown(
                 httpStatus: $httpStatus,
                 errorCode: 'ambiguous_provider_http_error',
-                errorMessage: 'WAHA gagal setelah request mungkin sudah diproses.',
+                errorMessage: $message !== 'WAHA menolak request.' ? $baseMessage . ' Respons: ' . $message : $baseMessage,
             );
         }
 
