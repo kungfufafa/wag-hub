@@ -136,16 +136,16 @@ final class WahaResponseClassifierTest extends TestCase
         self::assertTrue($result->allowsFallback());
     }
 
-    public function test_a_server_error_is_ambiguous_and_never_triggers_blind_fallback(): void
+    public function test_a_server_error_triggers_provider_failed(): void
     {
         $result = (new WahaResponseClassifier)->classify(
             httpStatus: 503,
             body: '{"error":"Upstream failed after processing began"}',
         );
 
-        self::assertSame(ProviderOutcome::OutcomeUnknown, $result->outcome);
-        self::assertSame(RetryDisposition::ReconcileOnly, $result->retryDisposition);
-        self::assertFalse($result->allowsFallback());
+        self::assertSame(ProviderOutcome::ProviderFailed, $result->outcome);
+        self::assertSame(RetryDisposition::FallbackAllowed, $result->retryDisposition);
+        self::assertTrue($result->allowsFallback());
     }
 
     #[DataProvider('providerAccountFailureStatuses')]

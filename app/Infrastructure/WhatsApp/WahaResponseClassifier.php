@@ -32,12 +32,22 @@ final class WahaResponseClassifier
 
         $message = $this->errorMessage($body);
 
-        if ($httpStatus === 408 || ($httpStatus >= 300 && $httpStatus < 400) || $httpStatus >= 500) {
-            $baseMessage = 'WAHA gagal setelah request mungkin sudah diproses.';
+        if ($httpStatus === 408 || ($httpStatus >= 300 && $httpStatus < 400)) {
+            $baseMessage = 'WAHA gagal setelah request mungkin sudah diproses (Timeout/Redirect).';
 
             return ProviderResult::outcomeUnknown(
                 httpStatus: $httpStatus,
                 errorCode: 'ambiguous_provider_http_error',
+                errorMessage: $message !== 'WAHA menolak request.' ? $baseMessage . ' Respons: ' . $message : $baseMessage,
+            );
+        }
+
+        if ($httpStatus >= 500) {
+            $baseMessage = 'WAHA mengalami internal server error.';
+
+            return ProviderResult::providerFailed(
+                httpStatus: $httpStatus,
+                errorCode: 'provider_server_error',
                 errorMessage: $message !== 'WAHA menolak request.' ? $baseMessage . ' Respons: ' . $message : $baseMessage,
             );
         }
@@ -180,11 +190,20 @@ final class WahaResponseClassifier
     private function errorMessage(string $body): string
     {
         $payload = json_decode($body, true);
-        $message = is_array($payload)
-            ? ($payload['error'] ?? $payload['message'] ?? 'WAHA menolak request.')
-            : 'WAHA menolak request.';
+        
+        if (is_array($payload)) {
+            $message = $payload['error'] ?? $payload['message'] ?? null;
+            if (is_scalar($message) && trim((string) $message) !== '') {
+                return mb_substr(trim((string) $message), 0, 500);
+            }
+        }
 
-        return mb_substr(is_scalar($message) ? (string) $message : 'WAHA menolak request.', 0, 500);
+        $trimmedBody = trim($body);
+        if ($trimmedBody !== '') {
+            return mb_substr($trimmedBody, 0, 500);
+        }
+
+        return 'WAHA menolak request.';
     }
 
     private function providerErrorCode(int $httpStatus): string
