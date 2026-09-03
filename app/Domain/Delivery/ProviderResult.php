@@ -81,6 +81,11 @@ final readonly class ProviderResult
         );
     }
 
+    public function isAccepted(): bool
+    {
+        return $this->outcome === ProviderOutcome::Accepted;
+    }
+
     public function allowsFallback(): bool
     {
         return $this->retryDisposition === RetryDisposition::FallbackAllowed;

@@ -59,7 +59,7 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
 
         try {
             $response = $request->post($endpoint, [
-                'phone' => $message->recipient.'@s.whatsapp.net',
+                'phone' => $message->gowaPhone(),
                 'message' => $message->body,
             ]);
         } catch (ConnectionException $exception) {

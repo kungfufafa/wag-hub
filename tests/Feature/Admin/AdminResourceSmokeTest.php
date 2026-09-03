@@ -30,6 +30,7 @@ class AdminResourceSmokeTest extends TestCase
     public static function resourcePages(): array
     {
         return [
+            'whatsapp inbox' => ['/panel/inbox'],
             'client applications' => ['/panel/client-applications'],
             'provider accounts' => ['/panel/provider-accounts'],
             'routing policies' => ['/panel/routing-policies'],

@@ -78,9 +78,13 @@ class ApiCredential extends Model
 
     public function isUsable(): bool
     {
+        $application = $this->clientApplication;
+
         return $this->revoked_at === null
             && ($this->expires_at === null || $this->expires_at->isFuture())
-            && (bool) $this->clientApplication?->is_active;
+            && $application !== null
+            && ! $application->trashed()
+            && (bool) $application->is_active;
     }
 
     public function hasAbility(string $ability): bool

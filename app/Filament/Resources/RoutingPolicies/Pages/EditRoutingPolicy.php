@@ -12,6 +12,23 @@ class EditRoutingPolicy extends EditRecord
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
+    public function getSubheading(): ?string
+    {
+        return 'Ubah cakupan rute, urutan cadangan, atau hapus aturan yang tidak dipakai.';
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            RoutingPolicyResource::deleteAction(),
+        ];
+    }
+
+    protected function getSavedNotificationTitle(): ?string
+    {
+        return 'Aturan rute disimpan';
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
         if (($data['operation'] ?? 'message') === 'number_check') {

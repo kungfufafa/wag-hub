@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ReleasesUniqueIdentifierOnSoftDelete;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RoutingPolicy extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasFactory;
+    use HasUuids;
+    use ReleasesUniqueIdentifierOnSoftDelete;
+    use SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -27,6 +31,11 @@ class RoutingPolicy extends Model
     public function uniqueIds(): array
     {
         return ['uuid'];
+    }
+
+    protected function uniqueIdentifierColumn(): string
+    {
+        return 'key';
     }
 
     protected function casts(): array

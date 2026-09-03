@@ -14,6 +14,24 @@ class EditProviderAccount extends EditRecord
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
+    public function getSubheading(): ?string
+    {
+        return 'Perbarui koneksi, uji akun, atau hapus provider yang tidak dipakai.';
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            ProviderAccountResource::testAction(),
+            ProviderAccountResource::deleteAction(),
+        ];
+    }
+
+    protected function getSavedNotificationTitle(): ?string
+    {
+        return 'Akun provider disimpan';
+    }
+
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $configuration = $this->record->configuration ?? [];
@@ -23,6 +41,7 @@ class EditProviderAccount extends EditRecord
             'token',
             'password',
             'access_token',
+            'webhook_secret',
         ]);
 
         return $data;
@@ -32,10 +51,10 @@ class EditProviderAccount extends EditRecord
     {
         $driver = $data['driver'];
         $allowedKeys = match ($driver) {
-            'waha' => ['base_url', 'session', 'api_key'],
-            'fonnte' => ['endpoint', 'validate_endpoint', 'token'],
-            'gowa' => ['base_url', 'username', 'password', 'device_id'],
-            'waba' => ['base_url', 'api_version', 'phone_number_id', 'access_token'],
+            'waha' => ['base_url', 'session', 'api_key', 'webhook_secret'],
+            'fonnte' => ['endpoint', 'validate_endpoint', 'token', 'webhook_secret'],
+            'gowa' => ['base_url', 'username', 'password', 'device_id', 'webhook_secret'],
+            'waba' => ['base_url', 'api_version', 'phone_number_id', 'access_token', 'webhook_secret'],
             default => [],
         };
         $existing = $this->record->driver === $driver

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GeneratesSlugFromName;
+use App\Models\Concerns\ReleasesUniqueIdentifierOnSoftDelete;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +12,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ProviderAccount extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use GeneratesSlugFromName;
+    use HasFactory;
+    use HasUuids;
+    use ReleasesUniqueIdentifierOnSoftDelete;
+    use SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -32,6 +38,11 @@ class ProviderAccount extends Model
     public function uniqueIds(): array
     {
         return ['uuid'];
+    }
+
+    protected function uniqueIdentifierColumn(): string
+    {
+        return 'slug';
     }
 
     protected function casts(): array
@@ -68,5 +79,10 @@ class ProviderAccount extends Model
     public function resolvedNumberCheckRequests(): HasMany
     {
         return $this->hasMany(NumberCheckRequest::class, 'resolved_provider_account_id');
+    }
+
+    public function inboxConversations(): HasMany
+    {
+        return $this->hasMany(InboxConversation::class);
     }
 }

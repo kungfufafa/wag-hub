@@ -101,6 +101,19 @@ class GatewayMessage extends Model
         return $this->hasMany(MessageEvent::class)->orderBy('occurred_at');
     }
 
+    public function plaintextBody(): string
+    {
+        $this->makeVisible(['body']);
+
+        if (filled($this->getAttribute('body'))) {
+            return (string) $this->getAttribute('body');
+        }
+
+        $fresh = static::query()->find($this->getKey());
+
+        return (string) ($fresh?->makeVisible(['body'])->getAttribute('body') ?? '');
+    }
+
     public function isSafeToRetry(): bool
     {
         return in_array($this->status, ['failed', 'outcome_unknown'], true)

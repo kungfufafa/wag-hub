@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GeneratesSlugFromName;
+use App\Models\Concerns\ReleasesUniqueIdentifierOnSoftDelete;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +12,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ClientApplication extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use GeneratesSlugFromName;
+    use HasFactory;
+    use HasUuids;
+    use ReleasesUniqueIdentifierOnSoftDelete;
+    use SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -23,6 +29,27 @@ class ClientApplication extends Model
     public function uniqueIds(): array
     {
         return ['uuid'];
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (ClientApplication $application): void {
+            if ($application->isForceDeleting()) {
+                return;
+            }
+
+            $application->apiCredentials()
+                ->whereNull('revoked_at')
+                ->update(['revoked_at' => now()]);
+
+            $application->routingPolicies
+                ->each(fn (RoutingPolicy $policy) => $policy->delete());
+        });
+    }
+
+    protected function uniqueIdentifierColumn(): string
+    {
+        return 'slug';
     }
 
     protected function casts(): array

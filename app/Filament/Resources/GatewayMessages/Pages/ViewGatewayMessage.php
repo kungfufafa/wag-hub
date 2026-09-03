@@ -3,12 +3,14 @@
 namespace App\Filament\Resources\GatewayMessages\Pages;
 
 use App\Filament\Resources\GatewayMessages\GatewayMessageResource;
+use App\Filament\Support\CopiesToClipboard;
 use App\Models\GatewayMessage;
 use App\Services\GatewayMessageEnqueuer;
 use DomainException;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\DB;
 
@@ -16,14 +18,31 @@ class ViewGatewayMessage extends ViewRecord
 {
     protected static string $resource = GatewayMessageResource::class;
 
+    protected Width|string|null $maxContentWidth = Width::Full;
+
     public function getTitle(): string
     {
-        return 'Detail pesan';
+        return GatewayMessageResource::statusLabel($this->getRecord()->status);
     }
 
     public function getHeading(): string
     {
-        return 'Detail pesan';
+        return GatewayMessageResource::statusLabel($this->getRecord()->status);
+    }
+
+    public function getSubheading(): ?string
+    {
+        $record = $this->getRecord();
+        $application = $record->clientApplication?->name ?? 'Aplikasi tidak diketahui';
+        $purpose = GatewayMessageResource::purposeLabel($record->purpose);
+        $createdAt = $record->created_at?->timezone(config('app.timezone'))->translatedFormat('d M Y H.i');
+
+        return collect([$application, $purpose, $createdAt])->filter()->implode(' · ');
+    }
+
+    public function getBreadcrumb(): string
+    {
+        return 'Detail';
     }
 
     protected function getHeaderActions(): array
@@ -31,6 +50,12 @@ class ViewGatewayMessage extends ViewRecord
         $asyncDispatch = app(GatewayMessageEnqueuer::class)->usesAsyncDispatch();
 
         return [
+            Action::make('copyBody')
+                ->label('Salin isi pesan')
+                ->icon(Heroicon::OutlinedClipboardDocument)
+                ->color('gray')
+                ->visible(fn (): bool => filled($this->getRecord()->plaintextBody()))
+                ->alpineClickHandler(fn (): string => CopiesToClipboard::alpine($this->getRecord()->plaintextBody())),
             Action::make('retry')
                 ->label('Coba kirim ulang')
                 ->icon(Heroicon::OutlinedArrowPath)

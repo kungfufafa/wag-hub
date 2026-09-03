@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\RoutingPolicies\Pages;
 
 use App\Filament\Resources\RoutingPolicies\RoutingPolicyResource;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Support\Enums\Width;
 
@@ -18,6 +19,18 @@ class CreateRoutingPolicy extends CreateRecord
             $data['purpose'] = null;
         }
 
+        if (blank($data['key'] ?? null)) {
+            $data['key'] = 'default';
+        }
+
         return $data;
+    }
+
+    protected function getCreatedNotification(): ?Notification
+    {
+        return Notification::make()
+            ->success()
+            ->title('Aturan rute dibuat')
+            ->body('Provider akan dicoba dari atas ke bawah sampai mendapat hasil definitif.');
     }
 }

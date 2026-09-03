@@ -15,6 +15,7 @@ use App\Jobs\DispatchGatewayMessage;
 use App\Models\ApiCredential;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
+use App\Models\MessageAttempt;
 use App\Models\ProviderAccount;
 use App\Models\User;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
@@ -65,6 +66,8 @@ class AdminResourceBehaviorTest extends TestCase
 
         Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
             ->assertSee('Diterima provider')
+            ->assertSee('Tidak perlu tindakan')
+            ->assertDontSee('Belum dapat dipastikan')
             ->assertDontSee('Hasil tidak diketahui');
     }
 
@@ -72,12 +75,21 @@ class AdminResourceBehaviorTest extends TestCase
     {
         $message = $this->createMessage('provider_accepted', now()->addMinute());
 
-        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+        $page = Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
             ->assertSee('Detail teknis')
             ->assertSee('Isi pesan')
             ->assertSee('Sensitive gateway body')
+            ->assertSee('Salin isi pesan')
+            ->assertSee('Salin untuk WhatsApp')
+            ->assertSee('Tempel di WhatsApp')
             ->assertSee('Ringkasan')
-            ->assertSee('Perjalanan');
+            ->assertSee('Perjalanan')
+            ->assertSee('Langkah berikutnya')
+            ->assertActionVisible('copyBody');
+
+        $html = $page->html();
+        $this->assertStringContainsString('copyWithEvent', $html);
+        $this->assertStringContainsString('data-message-body', $html);
     }
 
     public function test_message_view_shows_compact_lifecycle_timeline_without_empty_stages(): void
@@ -95,7 +107,7 @@ class AdminResourceBehaviorTest extends TestCase
         $timeline = GatewayMessageResource::lifecycleTimeline($message->fresh());
 
         $this->assertSame(
-            ['Dibuat', 'Diproses', 'Diterima provider', 'Kedaluwarsa'],
+            ['Dibuat', 'Diproses', 'Diterima provider'],
             array_column($timeline, 'label'),
         );
 
@@ -104,10 +116,65 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertSee('Dibuat')
             ->assertSee('Diproses')
             ->assertSee('Diterima provider')
-            ->assertSee('Kedaluwarsa')
+            ->assertSee('Batas waktu')
             ->assertDontSee('Masuk antrian')
             ->assertDontSee('Dead letter')
+            ->assertDontSee('Dihentikan')
+            ->assertDontSee('Belum dapat dipastikan')
             ->assertDontSee('Hasil tidak diketahui');
+    }
+
+    public function test_failed_message_detail_explains_the_next_step_in_plain_language(): void
+    {
+        $message = $this->createMessage('failed', now()->addMinute());
+        $message->forceFill([
+            'failed_at' => now(),
+            'last_error_message' => 'Nomor tidak terdaftar di WhatsApp.',
+        ])->save();
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertSee('Gagal')
+            ->assertSee('Bisa dikirim ulang')
+            ->assertSee('Coba kirim ulang')
+            ->assertSee('Langkah berikutnya')
+            ->assertSee('Nomor tidak terdaftar di WhatsApp.')
+            ->assertSee('Belum ada percobaan ke provider.')
+            ->assertActionVisible('retry');
+    }
+
+    public function test_message_detail_lists_provider_attempts_in_plain_language(): void
+    {
+        $message = $this->createMessage('failed', now()->addMinute());
+        $provider = ProviderAccount::forceCreate([
+            'name' => 'Fonnte Cadangan',
+            'slug' => 'fonnte-cadangan-detail',
+            'driver' => 'fonnte',
+            'configuration' => [
+                'endpoint' => 'https://api.fonnte.com/send',
+                'token' => 'detail-token',
+            ],
+            'is_active' => true,
+            'health_status' => 'healthy',
+            'timeout_seconds' => 15,
+        ]);
+        MessageAttempt::query()->create([
+            'gateway_message_id' => $message->getKey(),
+            'provider_account_id' => $provider->getKey(),
+            'sequence' => 1,
+            'status' => 'rejected',
+            'delivery_certainty' => 'not_sent',
+            'retry_disposition' => 'fallback_allowed',
+            'error_message' => 'Nomor tidak terdaftar di WhatsApp.',
+            'started_at' => now()->subSeconds(2),
+            'finished_at' => now(),
+        ]);
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertSee('Fonnte Cadangan')
+            ->assertSee('Ditolak')
+            ->assertSee('Coba provider cadangan')
+            ->assertSee('Nomor tidak terdaftar di WhatsApp.')
+            ->assertDontSee('Belum ada percobaan ke provider.');
     }
 
     public function test_safe_retry_queues_one_job_and_appends_an_admin_event(): void
