@@ -41,16 +41,16 @@ class WhatsAppInboxTest extends TestCase
             ->assertOk()
             ->assertSee('wa-inbox', false)
             ->assertSee('Percakapan')
-            ->assertSee('Cari nama, nomor, atau akun')
-            ->assertSee('Tulis pesan')
-            ->assertSee('Kirim')
+            ->assertSee('Belum ada akun wrapping')
             ->assertSee('Obrolan baru')
             ->assertSee('Muat ulang')
-            ->assertSee('Kirim dan baca chat langsung dari akun WAHA, GOWA, Fonnte, dan WABA.')
+            ->assertSee('Baca dan balas percakapan dari akun wrapping.')
             ->assertDontSee('>Kanal<', false)
+            ->assertDontSee('Pilih percakapan di kiri', false)
+            ->assertDontSee('Mulai obrolan baru, atau tunggu', false)
+            ->assertDontSee('Tulis pesan')
             ->getContent();
 
-        $this->assertIdleComposerIsCompact($html);
         $this->assertMatchesRegularExpression(
             '/class="[^"]*wa-inbox-thread-title[^"]*"/',
             $html,
@@ -63,7 +63,17 @@ class WhatsAppInboxTest extends TestCase
 
     public function test_idle_composer_keeps_lampiran_collapsed_until_an_attachment_is_chosen(): void
     {
-        $page = Livewire::test(WhatsAppInbox::class);
+        $provider = $this->createProviderAccount('waha', 'waha-composer', [
+            'base_url' => 'https://waha-composer.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+
+        Http::fake(['waha-composer.test/*' => Http::response([])]);
+
+        $page = Livewire::test(WhatsAppInbox::class)
+            ->set('providerId', $provider['id'])
+            ->call('startNewChat');
 
         $this->assertIdleComposerIsCompact($page->html());
 
@@ -153,8 +163,10 @@ class WhatsAppInboxTest extends TestCase
             ->set('providerId', $provider['id'])
             ->assertSee('Budi')
             ->assertSee('Halo Hub')
+            ->assertSee('Cari percakapan')
             ->assertSee('wa-inbox-item-preview', false)
-            ->assertSee('wa-inbox-item-foot', false)
+            ->assertSee('wa-inbox-item-time', false)
+            ->assertSee('>BU<', false)
             ->call('selectChat', '6281234567890@c.us', 'Budi')
             ->assertSee('Siap')
             ->assertSee('Balasan pelanggan')
@@ -302,7 +314,7 @@ class WhatsAppInboxTest extends TestCase
 
         $page = Livewire::test(WhatsAppInbox::class)
             ->set('providerId', $provider['id'])
-            ->assertSee('Belum ada percakapan')
+            ->assertSee('Tidak ada percakapan')
             ->assertDontSee('tidak menarik riwayat')
             ->call('startNewChat')
             ->assertSet('composingNew', true)
@@ -315,7 +327,7 @@ class WhatsAppInboxTest extends TestCase
         );
     }
 
-    public function test_inbox_lists_chats_from_every_wrapped_account_together(): void
+    public function test_inbox_waits_for_a_provider_before_loading_chats(): void
     {
         $waha = $this->createProviderAccount('waha', 'waha-wrap', [
             'base_url' => 'https://waha-wrap.test',
@@ -350,19 +362,89 @@ class WhatsAppInboxTest extends TestCase
             'name' => 'Sinta',
         ])->assertOk();
 
-        Livewire::test(WhatsAppInbox::class)
+        $this->get('/panel/inbox')
+            ->assertOk()
+            ->assertSee('Pilih akun wrapping')
+            ->assertDontSee('Cari percakapan')
+            ->assertDontSee('Budi')
+            ->assertDontSee('Sinta');
+
+        Http::assertNothingSent();
+
+        $page = Livewire::test(WhatsAppInbox::class)
+            ->assertSet('providerId', null)
+            ->assertSet('chats', [])
+            ->call('startNewChat')
+            ->assertNotified('Pilih akun wrapping dulu.')
+            ->assertSet('composingNew', false)
+            ->set('providerId', $waha['id'])
             ->assertSee('Budi')
             ->assertSee('Halo Hub')
+            ->assertDontSee('Sinta')
+            ->assertDontSee('Dari Fonnte');
+
+        $this->assertTrue(collect($page->get('chats'))->contains(
+            fn (array $chat): bool => $chat['title'] === 'Budi' && $chat['provider_id'] === $waha['id'],
+        ));
+        $this->assertFalse(collect($page->get('chats'))->contains(
+            fn (array $chat): bool => $chat['title'] === 'Sinta',
+        ));
+
+        $page->set('providerId', $fonnte->id)
             ->assertSee('Sinta')
             ->assertSee('Dari Fonnte')
-            ->assertSee('WAHA')
-            ->assertSee('Fonnte')
+            ->assertDontSee('Budi')
             ->call('selectChat', '628555444333', 'Sinta', $fonnte->id)
             ->assertSee('Dari Fonnte')
             ->assertSee('wa-bubble is-in', false)
             ->assertSet('providerId', $fonnte->id);
 
         $this->assertNotSame($waha['id'], $fonnte->id);
+    }
+
+    public function test_inbox_query_provider_loads_only_that_account(): void
+    {
+        $waha = $this->createProviderAccount('waha', 'waha-wrap-query', [
+            'base_url' => 'https://waha-wrap-query.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+        $fonnte = ProviderAccount::query()->findOrFail(
+            $this->createProviderAccount('fonnte', 'fonnte-wrap-query', [
+                'endpoint' => 'https://api.fonnte.com/send',
+                'token' => 'fonnte-secret',
+            ])['id'],
+        );
+
+        Http::fake([
+            'waha-wrap-query.test/*' => Http::response([
+                [
+                    'id' => '6281234567890@c.us',
+                    'name' => 'Budi',
+                    'lastMessage' => [
+                        'id' => 'in-1',
+                        'body' => 'Halo Hub',
+                        'fromMe' => false,
+                        'timestamp' => 1_700_000_000,
+                    ],
+                ],
+            ]),
+        ]);
+
+        $this->postJson('/webhooks/whatsapp/'.$fonnte->uuid, [
+            'sender' => '628555444333',
+            'message' => 'Dari Fonnte',
+            'name' => 'Sinta',
+        ])->assertOk();
+
+        $this->get('/panel/inbox?provider='.$waha['id'])
+            ->assertOk()
+            ->assertSee('Budi')
+            ->assertSee('Halo Hub')
+            ->assertDontSee('Sinta')
+            ->assertDontSee('Dari Fonnte');
+
+        Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'waha-wrap-query.test'));
     }
 
     public function test_inbound_webhook_appears_in_the_inbox_thread(): void
@@ -571,6 +653,7 @@ class WhatsAppInboxTest extends TestCase
         ])->assertOk();
 
         $page = Livewire::test(WhatsAppInbox::class)
+            ->set('providerId', $provider->id)
             ->assertSee('Gowa User')
             ->assertSee('Ping GOWA')
             ->call('selectChat', '628777666555@s.whatsapp.net', 'Gowa User', $provider->id)
@@ -624,6 +707,7 @@ class WhatsAppInboxTest extends TestCase
         ])->assertOk();
 
         $page = Livewire::test(WhatsAppInbox::class)
+            ->set('providerId', $provider->id)
             ->assertSee('Meta User')
             ->assertSee('Halo WABA')
             ->call('selectChat', '628321321321', 'Meta User', $provider->id)

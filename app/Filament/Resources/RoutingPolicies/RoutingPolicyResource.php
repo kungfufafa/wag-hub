@@ -68,8 +68,12 @@ class RoutingPolicyResource extends Resource
             ->components([
                 Group::make([
                     Section::make('Aturan rute')
-                        ->description('Aturan khusus aplikasi menimpa rute global.')
                         ->schema([
+                            TextInput::make('name')
+                                ->label('Nama')
+                                ->placeholder('Contoh: Notifikasi Shelf')
+                                ->required()
+                                ->maxLength(120),
                             Select::make('client_application_id')
                                 ->label('Aplikasi')
                                 ->relationship('clientApplication', 'name')
@@ -77,17 +81,10 @@ class RoutingPolicyResource extends Resource
                                 ->preload()
                                 ->native(false)
                                 ->live()
-                                ->placeholder('Rute global')
-                                ->helperText('Kosongkan untuk rute yang berlaku ke semua aplikasi.')
+                                ->placeholder('Semua aplikasi')
                                 ->default(fn (): ?int => static::requestedClientApplicationId()),
-                            TextInput::make('name')
-                                ->label('Nama')
-                                ->placeholder('Contoh: Notifikasi Shelf')
-                                ->required()
-                                ->maxLength(120),
                             Select::make('operation')
-                                ->label('Jenis alur')
-                                ->helperText('Kirim pesan dan cek nomor memakai rute terpisah.')
+                                ->label('Jenis')
                                 ->options([
                                     'message' => 'Kirim pesan',
                                     'number_check' => 'Cek nomor WhatsApp',
@@ -96,13 +93,65 @@ class RoutingPolicyResource extends Resource
                                 ->required()
                                 ->native(false)
                                 ->live(),
+                        ]),
+                    Section::make('Provider')
+                        ->description('Atas dicoba dulu. Tambah baris untuk cadangan.')
+                        ->schema([
+                            Repeater::make('steps')
+                                ->hiddenLabel()
+                                ->relationship()
+                                ->orderColumn('position')
+                                ->compact()
+                                ->itemNumbers()
+                                ->itemHeaders(false)
+                                ->defaultItems(1)
+                                ->saveRelationshipsUsing(function (Repeater $component): void {
+                                    // Filament rewrites order one row at a time. Free the unique
+                                    // (routing_policy_id, position) slots first, then reload models
+                                    // so Eloquent dirty-checks see the temporary positions.
+                                    $component->getRelationship()->getQuery()->update([
+                                        'position' => DB::raw('position + 100000'),
+                                    ]);
+                                    $component->clearCachedExistingRecords();
+                                    $component->saveToRelationship();
+                                })
+                                ->mutateRelationshipDataBeforeCreateUsing(function (array $data): array {
+                                    $data['is_active'] = (bool) ($data['is_active'] ?? true);
+
+                                    return $data;
+                                })
+                                ->schema([
+                                    Select::make('provider_account_id')
+                                        ->hiddenLabel()
+                                        ->placeholder('Pilih provider')
+                                        ->options(fn (): array => static::providerOptions())
+                                        ->searchable()
+                                        ->preload()
+                                        ->native(false)
+                                        ->required()
+                                        ->live()
+                                        ->disableOptionsWhenSelectedInSiblingRepeaterItems(),
+                                    Toggle::make('is_active')
+                                        ->label('Aktif')
+                                        ->default(true)
+                                        ->hiddenOn('create'),
+                                ])
+                                ->minItems(1)
+                                ->required()
+                                ->reorderable()
+                                ->addActionLabel('Tambah cadangan'),
+                        ]),
+                    Section::make('Opsi lanjutan')
+                        ->description('Boleh dilewati. Default: kunci default, semua tujuan.')
+                        ->collapsed(fn (string $operation): bool => $operation === 'create')
+                        ->schema([
                             TextInput::make('key')
                                 ->label('Kunci rute')
                                 ->placeholder('default')
                                 ->default('default')
-                                ->helperText('Harus sama dengan route_key di aplikasi sumber. Gunakan default jika hanya ada satu rute.')
                                 ->required()
                                 ->alphaDash()
+                                ->live(onBlur: true)
                                 ->scopedUnique(
                                     model: RoutingPolicy::class,
                                     ignoreRecord: true,
@@ -127,95 +176,34 @@ class RoutingPolicyResource extends Resource
                                     'notification' => 'Notifikasi',
                                 ])
                                 ->placeholder('Semua tujuan')
-                                ->helperText('Kosongkan agar rute ini dipakai untuk semua tujuan.')
                                 ->native(false)
                                 ->live()
                                 ->visible(fn (Get $get): bool => $get('operation') !== 'number_check')
                                 ->dehydratedWhenHidden(false),
                             Toggle::make('is_default')
                                 ->label('Rute default')
-                                ->helperText('Dipakai jika aplikasi tidak mengirim route_key yang cocok.')
+                                ->helperText('Dipakai jika route_key dari aplikasi tidak cocok.')
                                 ->default(false),
                             Toggle::make('is_active')
                                 ->label('Aturan aktif')
-                                ->helperText('Nonaktifkan untuk berhenti memakai rute ini tanpa menghapusnya.')
                                 ->default(true)
                                 ->required(),
-                        ])
-                        ->columns(['md' => 2]),
-                    Section::make('Urutan provider')
-                        ->description('Seret provider ke urutan percobaan. Satu provider hanya boleh muncul sekali. Yang paling atas dicoba lebih dulu.')
-                        ->schema([
-                            Repeater::make('steps')
-                                ->relationship()
-                                ->orderColumn('position')
-                                ->saveRelationshipsUsing(function (Repeater $component): void {
-                                    // Filament rewrites order one row at a time. Free the unique
-                                    // (routing_policy_id, position) slots first, then reload models
-                                    // so Eloquent dirty-checks see the temporary positions.
-                                    $component->getRelationship()->getQuery()->update([
-                                        'position' => DB::raw('position + 100000'),
-                                    ]);
-                                    $component->clearCachedExistingRecords();
-                                    $component->saveToRelationship();
-                                })
-                                ->schema([
-                                    Select::make('provider_account_id')
-                                        ->label('Provider')
-                                        ->options(fn (): array => ProviderAccount::query()
-                                            ->orderBy('name')
-                                            ->get()
-                                            ->mapWithKeys(function (ProviderAccount $account): array {
-                                                $label = $account->name.' ('.strtoupper($account->driver).')';
-
-                                                if (! $account->is_active) {
-                                                    $label .= ' — nonaktif';
-                                                }
-
-                                                return [$account->id => $label];
-                                            })
-                                            ->all())
-                                        ->searchable()
-                                        ->preload()
-                                        ->native(false)
-                                        ->required()
-                                        ->disableOptionsWhenSelectedInSiblingRepeaterItems(),
-                                    Toggle::make('is_active')
-                                        ->label('Langkah aktif')
-                                        ->default(true)
-                                        ->required(),
-                                ])
-                                ->columns(2)
-                                ->minItems(1)
-                                ->required()
-                                ->reorderable()
-                                ->itemLabel(function (array $state): ?string {
-                                    $id = $state['provider_account_id'] ?? null;
-
-                                    if (! filled($id)) {
-                                        return 'Pilih provider';
-                                    }
-
-                                    return ProviderAccount::query()->find($id)?->name ?? 'Provider';
-                                })
-                                ->addActionLabel('Tambah cadangan'),
                         ]),
                 ])->columnSpan([
                     'default' => 'full',
                     'lg' => 2,
                 ]),
-                Section::make('Cara kerja rute')
-                    ->description('Jenis alur menentukan endpoint yang boleh memakai rute ini.')
+                Section::make('Ringkasan')
                     ->schema([
-                        Placeholder::make('route_scope')
-                            ->label('1. Tentukan aplikasi')
-                            ->content('Pilih aplikasi agar rute ini tidak memengaruhi aplikasi lain.'),
-                        Placeholder::make('route_match')
-                            ->label('2. Tentukan kunci rute')
-                            ->content('Gunakan default bila aplikasi hanya memiliki satu rute untuk jenis alur ini.'),
-                        Placeholder::make('route_fallback')
-                            ->label('3. Susun cadangan')
-                            ->content('Provider dicoba dari atas ke bawah sampai mendapat hasil definitif.'),
+                        Placeholder::make('summary_scope')
+                            ->label('Untuk')
+                            ->content(fn (Get $get): string => static::routeScopeSummary($get)),
+                        Placeholder::make('summary_match')
+                            ->label('Kunci')
+                            ->content(fn (Get $get): string => static::routeMatchSummary($get)),
+                        Placeholder::make('summary_providers')
+                            ->label('Urutan')
+                            ->content(fn (Get $get): string => static::routeProviderSummary($get)),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -412,6 +400,79 @@ class RoutingPolicyResource extends Resource
             ->modalDescription('Rute yang dipilih tidak dipakai lagi saat pengiriman. Riwayat pesan tetap tersimpan.')
             ->modalSubmitActionLabel('Hapus')
             ->successNotificationTitle('Aturan rute dihapus');
+    }
+
+    /**
+     * @return array<int|string, string>
+     */
+    public static function providerOptions(): array
+    {
+        return ProviderAccount::query()
+            ->orderBy('name')
+            ->get()
+            ->mapWithKeys(function (ProviderAccount $account): array {
+                $label = $account->name.' · '.match ($account->driver) {
+                    'waha' => 'WAHA',
+                    'gowa' => 'GOWA',
+                    'fonnte' => 'Fonnte',
+                    'waba' => 'WABA',
+                    default => strtoupper((string) $account->driver),
+                };
+
+                if (! $account->is_active) {
+                    $label .= ' (off)';
+                }
+
+                return [$account->id => $label];
+            })
+            ->all();
+    }
+
+    public static function routeScopeSummary(Get $get): string
+    {
+        $applicationId = $get('client_application_id');
+        $application = is_numeric($applicationId)
+            ? ClientApplication::query()->find($applicationId)?->name
+            : null;
+        $flow = $get('operation') === 'number_check' ? 'Cek nomor' : 'Kirim pesan';
+
+        return ($application ?: 'Semua aplikasi').' · '.$flow;
+    }
+
+    public static function routeMatchSummary(Get $get): string
+    {
+        $key = filled($get('key')) ? (string) $get('key') : 'default';
+
+        if ($get('operation') === 'number_check') {
+            return $key;
+        }
+
+        $purpose = match ($get('purpose')) {
+            'otp' => 'OTP',
+            'transactional' => 'transaksional',
+            'notification' => 'notifikasi',
+            default => 'semua tujuan',
+        };
+
+        return $key.' · '.$purpose;
+    }
+
+    public static function routeProviderSummary(Get $get): string
+    {
+        $ids = collect($get('steps') ?? [])
+            ->pluck('provider_account_id')
+            ->filter()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return 'Belum dipilih';
+        }
+
+        $labels = static::providerOptions();
+
+        return $ids
+            ->map(fn (mixed $id): string => $labels[$id] ?? 'Provider')
+            ->implode(' → ');
     }
 
     public static function requestedClientApplicationId(): ?int

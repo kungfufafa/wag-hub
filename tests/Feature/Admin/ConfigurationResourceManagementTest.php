@@ -309,6 +309,50 @@ class ConfigurationResourceManagementTest extends TestCase
             ]);
     }
 
+    public function test_create_routing_policy_page_keeps_advanced_matching_collapsed(): void
+    {
+        $this->get('/panel/routing-policies/create')
+            ->assertOk()
+            ->assertSee('Nama, aplikasi, lalu urutan provider')
+            ->assertSee('Ringkasan')
+            ->assertSee('Opsi lanjutan')
+            ->assertSee('Semua aplikasi')
+            ->assertDontSee('Cara kerja rute')
+            ->assertDontSee('Tentukan aplikasi')
+            ->assertDontSee('Harus sama dengan route_key')
+            ->assertDontSee('Langkah aktif');
+    }
+
+    public function test_admin_can_create_a_route_with_name_and_providers_only(): void
+    {
+        $provider = $this->createProvider('simple-route-provider');
+
+        Livewire::test(CreateRoutingPolicy::class)
+            ->fillForm([
+                'name' => 'Rute utama',
+                'steps' => [
+                    ['provider_account_id' => $provider->getKey()],
+                ],
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('routing_policies', [
+            'name' => 'Rute utama',
+            'client_application_id' => null,
+            'operation' => 'message',
+            'key' => 'default',
+            'purpose' => null,
+            'is_default' => false,
+            'is_active' => true,
+        ]);
+        $this->assertDatabaseHas('routing_steps', [
+            'provider_account_id' => $provider->getKey(),
+            'position' => 1,
+            'is_active' => true,
+        ]);
+    }
+
     private function createClient(string $slug): ClientApplication
     {
         return ClientApplication::forceCreate([

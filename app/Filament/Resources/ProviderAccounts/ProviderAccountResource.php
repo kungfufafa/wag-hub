@@ -2,13 +2,17 @@
 
 namespace App\Filament\Resources\ProviderAccounts;
 
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundAttachment;
 use App\Filament\Pages\WhatsAppInbox;
 use App\Filament\Resources\ProviderAccounts\Pages\CreateProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\ListProviderAccounts;
 use App\Filament\Support\ConfigurationListLayout;
 use App\Filament\Support\SyncsSlugFromName;
+use App\Http\Requests\StoreMessageRequest;
 use App\Models\ProviderAccount;
+use App\Services\AttachmentService;
 use App\Services\ProviderAccountTester;
 use App\Support\PhoneNormalizer;
 use BackedEnum;
@@ -17,6 +21,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -27,6 +32,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
@@ -40,6 +46,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\Rules\Unique;
 use InvalidArgumentException;
 use UnitEnum;
@@ -482,9 +489,9 @@ class ProviderAccountResource extends Resource
             ->icon(Heroicon::OutlinedBeaker)
             ->color('gray')
             ->slideOver()
-            ->modalWidth(Width::Medium)
+            ->modalWidth(Width::Large)
             ->modalHeading(fn (ProviderAccount $record): string => "Uji provider {$record->name}")
-            ->modalDescription('Panggil driver akun ini langsung. Hasil disimpan sebagai jejak uji admin dan memperbarui kesehatan provider.')
+            ->modalDescription('Panggil driver akun ini langsung, termasuk lampiran. Hasil disimpan sebagai jejak uji admin dan memperbarui kesehatan provider.')
             ->modalSubmitActionLabel('Jalankan uji')
             ->schema(fn (ProviderAccount $record): array => [
                 Select::make('type')
@@ -518,16 +525,98 @@ class ProviderAccountResource extends Resource
                     })
                     ->columnSpanFull(),
                 Textarea::make('body')
-                    ->label('Isi pesan')
+                    ->label('Isi pesan / caption')
                     ->rows(3)
                     ->default('Pesan uji dari Gateway Hub.')
-                    ->maxLength(10000)
+                    ->maxLength(fn (Get $get): int => static::testHasAttachment($get)
+                        ? StoreMessageRequest::CAPTION_MAX_LENGTH
+                        : 10000)
+                    ->helperText('Untuk lampiran, kolom ini menjadi caption (maks. 1.024 karakter). Audio tidak memakai caption.')
+                    ->visible(fn (Get $get): bool => $get('type') === 'send' && $get('attachment_kind') !== 'audio')
+                    ->required(fn (Get $get): bool => $get('type') === 'send' && ! static::testHasAttachment($get))
+                    ->columnSpanFull(),
+                FileUpload::make('attachment_file')
+                    ->label('Unggah lampiran')
+                    ->storeFiles(false)
+                    ->maxFiles(1)
+                    ->maxSize(16384)
+                    ->acceptedFileTypes(AttachmentService::acceptedMimeTypes())
+                    ->helperText('Satu file, maksimal 16 MB. Kosongkan jika memakai URL publik.')
                     ->visible(fn (Get $get): bool => $get('type') === 'send')
-                    ->required(fn (Get $get): bool => $get('type') === 'send')
+                    ->live()
+                    ->afterStateUpdated(function (mixed $state, Set $set): void {
+                        if (blank($state)) {
+                            return;
+                        }
+
+                        $set('attachment_url', null);
+                        $set('attachment_kind', null);
+
+                        $file = self::formUploadedFile($state);
+
+                        if ($file !== null && str_starts_with((string) $file->getMimeType(), 'audio/')) {
+                            $set('body', '');
+                        }
+                    })
+                    ->columnSpanFull(),
+                TextInput::make('attachment_url')
+                    ->label('URL lampiran publik')
+                    ->url()
+                    ->maxLength(2048)
+                    ->helperText('Alternatif unggah: URL HTTP(S) yang dapat diunduh provider.')
+                    ->visible(fn (Get $get): bool => $get('type') === 'send')
+                    ->live(onBlur: true)
+                    ->afterStateUpdated(function (?string $state, Set $set): void {
+                        if (filled($state)) {
+                            $set('attachment_file', null);
+                        }
+                    })
+                    ->rule(function (): \Closure {
+                        return function (string $attribute, mixed $value, \Closure $fail): void {
+                            if (! is_string($value) || trim($value) === '') {
+                                return;
+                            }
+
+                            try {
+                                app(AttachmentService::class)->assertPublicUrl($value);
+                            } catch (InvalidArgumentException $exception) {
+                                $fail($exception->getMessage());
+                            }
+                        };
+                    })
+                    ->columnSpanFull(),
+                Select::make('attachment_kind')
+                    ->label('Jenis lampiran')
+                    ->options([
+                        'image' => 'Gambar',
+                        'document' => 'Dokumen',
+                        'video' => 'Video',
+                        'audio' => 'Audio',
+                    ])
+                    ->native(false)
+                    ->live()
+                    ->visible(fn (Get $get): bool => $get('type') === 'send'
+                        && filled($get('attachment_url'))
+                        && blank($get('attachment_file')))
+                    ->required(fn (Get $get): bool => $get('type') === 'send' && filled($get('attachment_url')))
+                    ->afterStateUpdated(function (?string $state, Set $set): void {
+                        if ($state === AttachmentKind::Audio->value) {
+                            $set('body', '');
+                        }
+                    })
                     ->columnSpanFull(),
             ])
             ->action(function (ProviderAccount $record, array $data, ProviderAccountTester $tester): void {
                 try {
+                    $attachment = $data['type'] === 'check_number'
+                        ? null
+                        : static::testAttachmentFromForm($tester, $data, auth()->id());
+                    $body = (string) ($data['body'] ?? '');
+
+                    if ($attachment?->kind === AttachmentKind::Audio) {
+                        $body = '';
+                    }
+
                     $result = match ($data['type']) {
                         'check_number' => $tester->checkNumber(
                             $record,
@@ -537,8 +626,9 @@ class ProviderAccountResource extends Resource
                         default => $tester->send(
                             $record,
                             (string) $data['recipient'],
-                            (string) ($data['body'] ?? ''),
+                            $body,
                             auth()->id(),
+                            $attachment,
                         ),
                     };
                 } catch (InvalidArgumentException $exception) {
@@ -561,6 +651,56 @@ class ProviderAccountResource extends Resource
                     $notification->danger()->send();
                 }
             });
+    }
+
+    private static function testHasAttachment(Get $get): bool
+    {
+        return filled($get('attachment_file')) || filled($get('attachment_url'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private static function testAttachmentFromForm(
+        ProviderAccountTester $tester,
+        array $data,
+        ?int $administratorId,
+    ): ?OutboundAttachment {
+        $upload = self::formUploadedFile($data['attachment_file'] ?? null);
+        $url = is_string($data['attachment_url'] ?? null) ? trim((string) $data['attachment_url']) : '';
+
+        if ($upload !== null && $url !== '') {
+            throw new InvalidArgumentException('Isi tepat salah satu: unggah file atau URL lampiran.');
+        }
+
+        if ($upload !== null) {
+            return $tester->storeUpload($upload, $administratorId);
+        }
+
+        if ($url !== '') {
+            return $tester->attachmentFromPublicUrl($url, (string) ($data['attachment_kind'] ?? ''));
+        }
+
+        return null;
+    }
+
+    private static function formUploadedFile(mixed $state): ?UploadedFile
+    {
+        if ($state instanceof UploadedFile) {
+            return $state;
+        }
+
+        if (! is_array($state)) {
+            return null;
+        }
+
+        foreach ($state as $file) {
+            if ($file instanceof UploadedFile) {
+                return $file;
+            }
+        }
+
+        return null;
     }
 
     public static function deleteAction(): DeleteAction

@@ -93,7 +93,7 @@ class AdminResourceSmokeTest extends TestCase
         return [
             'client application' => ['/panel/client-applications/create', 'Langkah berikutnya', 'Aplikasi Klien'],
             'provider account' => ['/panel/provider-accounts/create', 'Sebelum menyimpan', 'Akun Provider'],
-            'routing policy' => ['/panel/routing-policies/create', 'Cara kerja rute', 'Aturan Rute'],
+            'routing policy' => ['/panel/routing-policies/create', 'Ringkasan', 'Aturan Rute'],
         ];
     }
 

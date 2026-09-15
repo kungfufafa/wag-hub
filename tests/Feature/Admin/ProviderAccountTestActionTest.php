@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundAttachment;
 use App\Filament\Resources\ProviderAccounts\Pages\ListProviderAccounts;
+use App\Models\Attachment;
 use App\Models\GatewayMessage;
 use App\Models\NumberCheckRequest;
 use App\Models\ProviderAccount;
@@ -10,7 +13,10 @@ use App\Models\User;
 use App\Services\ProviderAccountTester;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use InvalidArgumentException;
 use Livewire\Livewire;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -57,7 +63,10 @@ final class ProviderAccountTestActionTest extends TestCase
         $message = GatewayMessage::query()->where('purpose', ProviderAccountTester::PURPOSE)->sole();
         $this->assertSame(ProviderAccountTester::ROUTE_KEY, $message->route_key);
         $this->assertSame('provider_accepted', $message->status);
+        $this->assertSame('text', $message->message_type);
+        $this->assertNull($message->outboundAttachment());
         $this->assertSame($provider['id'], $message->accepted_provider_account_id);
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sendImage'));
         $this->assertDatabaseHas('message_attempts', [
             'gateway_message_id' => $message->getKey(),
             'provider_account_id' => $provider['id'],
@@ -199,5 +208,156 @@ final class ProviderAccountTestActionTest extends TestCase
         $account->refresh();
         $this->assertSame('healthy', $account->health_status);
         $this->assertSame(0, $account->consecutive_failures);
+    }
+
+    public function test_admin_can_send_an_attachment_url_from_the_provider_test_action(): void
+    {
+        $provider = $this->createProviderAccount('waha', 'waha-admin-attach-url', [
+            'base_url' => 'https://waha-admin-attach-url.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+        Http::fake([
+            'waha-admin-attach-url.test/*' => Http::response(['id' => 'waha-img-test-1'], 201),
+        ]);
+        $publicUrl = 'https://cdn.example.com/uji/banner.png';
+
+        Livewire::test(ListProviderAccounts::class)
+            ->callTableAction('test', $provider['id'], data: [
+                'type' => 'send',
+                'recipient' => '081234567890',
+                'body' => 'Caption uji lampiran',
+                'attachment_kind' => 'image',
+                'attachment_url' => $publicUrl,
+            ])
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('Uji kirim berhasil');
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://waha-admin-attach-url.test/api/sendImage'
+            && $request['chatId'] === '6281234567890@c.us'
+            && $request['caption'] === 'Caption uji lampiran'
+            && $request['file'] === [
+                'mimetype' => 'image/png',
+                'url' => $publicUrl,
+                'filename' => 'banner.png',
+            ]
+            && ! isset($request['text']));
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sendText'));
+
+        $message = GatewayMessage::query()->where('purpose', ProviderAccountTester::PURPOSE)->sole();
+        $this->assertSame('provider_accepted', $message->status);
+        $this->assertSame('image', $message->message_type);
+        $this->assertSame('Caption uji lampiran', $message->plaintextBody());
+        $this->assertSame($publicUrl, $message->outboundAttachment()?->url);
+        $this->assertSame('waha-img-test-1', $message->provider_message_id);
+        $this->assertSame('healthy', ProviderAccount::query()->findOrFail($provider['id'])->health_status);
+    }
+
+    public function test_admin_can_upload_an_attachment_from_the_provider_test_action(): void
+    {
+        Storage::fake('local');
+        $provider = $this->createProviderAccount('waha', 'waha-admin-attach-file', [
+            'base_url' => 'https://waha-admin-attach-file.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+        Http::fake([
+            'waha-admin-attach-file.test/*' => Http::response(['id' => 'waha-img-upload-1'], 201),
+        ]);
+
+        Livewire::test(ListProviderAccounts::class)
+            ->callTableAction('test', $provider['id'], data: [
+                'type' => 'send',
+                'recipient' => '081234567890',
+                'body' => 'Caption unggahan',
+                'attachment_file' => UploadedFile::fake()->image('dashboard.png', 80, 80),
+            ])
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('Uji kirim berhasil');
+
+        $message = GatewayMessage::query()->where('purpose', ProviderAccountTester::PURPOSE)->sole();
+        $this->assertSame('image', $message->message_type);
+        $this->assertSame('Caption unggahan', $message->plaintextBody());
+        $attachmentId = $message->outboundAttachment()?->attachmentId;
+        $this->assertNotNull($attachmentId);
+
+        $stored = Attachment::query()->where('uuid', $attachmentId)->firstOrFail();
+        $this->assertSame('active', $stored->status);
+        $this->assertSame('dashboard.png', $stored->original_filename);
+        $this->assertNotNull($stored->last_referenced_at);
+        $this->assertNotNull($stored->expires_at);
+        $this->assertSame(auth()->id(), $stored->user_id);
+
+        Http::assertSent(function (Request $request) use ($attachmentId): bool {
+            $url = is_array($request['file'] ?? null) ? ($request['file']['url'] ?? null) : null;
+
+            return $request->url() === 'https://waha-admin-attach-file.test/api/sendImage'
+                && is_string($url)
+                && str_contains($url, (string) $attachmentId)
+                && ! str_contains($url, 'attachment://')
+                && ($request['caption'] ?? null) === 'Caption unggahan'
+                && ! isset($request['text']);
+        });
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sendText'));
+    }
+
+    public function test_admin_can_send_an_attachment_without_caption(): void
+    {
+        $provider = $this->createProviderAccount('waha', 'waha-admin-attach-empty', [
+            'base_url' => 'https://waha-admin-attach-empty.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+        Http::fake([
+            'waha-admin-attach-empty.test/*' => Http::response(['id' => 'waha-img-empty-1'], 201),
+        ]);
+
+        Livewire::test(ListProviderAccounts::class)
+            ->callTableAction('test', $provider['id'], data: [
+                'type' => 'send',
+                'recipient' => '081234567890',
+                'body' => '',
+                'attachment_kind' => 'image',
+                'attachment_url' => 'https://cdn.example.com/uji/photo.jpg',
+            ])
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('Uji kirim berhasil');
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://waha-admin-attach-empty.test/api/sendImage'
+            && ! isset($request['caption'])
+            && ! isset($request['text']));
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sendText'));
+    }
+
+    public function test_audio_caption_is_rejected_before_the_provider_is_called(): void
+    {
+        $provider = ProviderAccount::query()->findOrFail(
+            $this->createProviderAccount('waha', 'waha-admin-audio', [
+                'base_url' => 'https://waha-admin-audio.test',
+                'session' => 'default',
+                'api_key' => 'waha-secret',
+            ])['id'],
+        );
+        Http::fake();
+
+        try {
+            app(ProviderAccountTester::class)->send(
+                $provider,
+                '081234567890',
+                'Caption yang tidak boleh ikut',
+                auth()->id(),
+                new OutboundAttachment(
+                    kind: AttachmentKind::Audio,
+                    url: 'https://cdn.example.com/voice/greeting.ogg',
+                    mimeType: 'audio/ogg; codecs=opus',
+                ),
+            );
+            $this->fail('Audio caption should be rejected.');
+        } catch (InvalidArgumentException $exception) {
+            $this->assertSame('Audio tidak mendukung caption.', $exception->getMessage());
+        }
+
+        $this->assertDatabaseCount('gateway_messages', 0);
+        Http::assertNothingSent();
     }
 }

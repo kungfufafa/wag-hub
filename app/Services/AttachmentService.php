@@ -396,6 +396,14 @@ final class AttachmentService
         }
     }
 
+    /**
+     * @return list<string>
+     */
+    public static function acceptedMimeTypes(): array
+    {
+        return array_keys(self::MIME_KINDS);
+    }
+
     public function disk(): string
     {
         return (string) config('gateway.attachments.disk', 'local');

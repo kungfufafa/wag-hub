@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundAttachment;
 use App\Filament\Resources\GatewayMessages\Pages\ViewGatewayMessage;
 use App\Jobs\DispatchGatewayMessage;
 use App\Models\GatewayMessage;
@@ -11,6 +13,7 @@ use App\Models\User;
 use App\Services\GatewayMessageDispatcher;
 use App\Services\ProviderAccountTester;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -163,5 +166,58 @@ final class AdminTestMessageRetryTest extends TestCase
             'gateway_message_id' => $message->getKey(),
             'type' => 'enqueue_failed',
         ]);
+    }
+
+    public function test_retrying_an_admin_attachment_test_resends_through_the_media_path(): void
+    {
+        $provider = $this->createProviderAccount('waha', 'waha-admin-attach-retry', [
+            'base_url' => 'https://waha-admin-attach-retry.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+        $publicUrl = 'https://cdn.example.com/uji/retry.png';
+
+        Http::fake([
+            'waha-admin-attach-retry.test/*' => Http::sequence()
+                ->push(['error' => 'temporary'], 503)
+                ->push(['id' => 'waha-attach-retry-ok'], 201),
+        ]);
+
+        $first = app(ProviderAccountTester::class)->send(
+            ProviderAccount::query()->findOrFail($provider['id']),
+            '081234567890',
+            'Caption retry lampiran',
+            1,
+            new OutboundAttachment(
+                kind: AttachmentKind::Image,
+                url: $publicUrl,
+            ),
+        );
+        $this->assertFalse($first->success);
+
+        $message = GatewayMessage::query()
+            ->where('purpose', ProviderAccountTester::PURPOSE)
+            ->sole();
+        $this->assertSame('outcome_unknown', $message->status);
+        $this->assertSame('image', $message->message_type);
+        $this->assertSame($publicUrl, $message->outboundAttachment()?->url);
+
+        config(['gateway.dispatch' => 'sync']);
+
+        Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
+            ->assertActionVisible('retry')
+            ->callAction('retry')
+            ->assertNotified('Kirim ulang diproses');
+
+        $message->refresh();
+        $this->assertSame('provider_accepted', $message->status);
+        $this->assertSame('waha-attach-retry-ok', $message->provider_message_id);
+        $this->assertDatabaseCount('message_attempts', 2);
+
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://waha-admin-attach-retry.test/api/sendImage'
+            && ($request['file']['url'] ?? null) === $publicUrl
+            && ($request['caption'] ?? null) === 'Caption retry lampiran'
+            && ! isset($request['text']));
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sendText'));
     }
 }

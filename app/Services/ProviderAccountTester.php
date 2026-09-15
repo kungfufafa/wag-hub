@@ -2,25 +2,24 @@
 
 namespace App\Services;
 
-use App\Domain\Delivery\OutboundMessage;
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundAttachment;
 use App\Domain\Delivery\ProviderAccountTestResult;
-use App\Domain\Delivery\ProviderOutcome;
-use App\Domain\Delivery\ProviderResult;
 use App\Domain\NumberCheck\NumberCheckResult;
+use App\Http\Requests\StoreMessageRequest;
 use App\Infrastructure\WhatsApp\ProviderDriverManager;
 use App\Models\ApiCredential;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
-use App\Models\MessageAttempt;
 use App\Models\MessageEvent;
 use App\Models\NumberCheckAttempt;
 use App\Models\NumberCheckRequest;
 use App\Models\ProviderAccount;
 use App\Support\PhoneNormalizer;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use Throwable;
 
 final readonly class ProviderAccountTester
 {
@@ -34,6 +33,8 @@ final readonly class ProviderAccountTester
         private ProviderDriverManager $drivers,
         private ProviderHealthRecorder $health,
         private PhoneNormalizer $phones,
+        private GatewayMessageDispatcher $dispatcher,
+        private AttachmentService $attachments,
     ) {}
 
     public function send(
@@ -41,99 +42,62 @@ final readonly class ProviderAccountTester
         string $recipient,
         string $body,
         ?int $administratorId = null,
+        ?OutboundAttachment $attachment = null,
     ): ProviderAccountTestResult {
         $normalizedRecipient = $this->phones->normalize($recipient);
         $normalizedBody = trim($body);
-
-        if ($normalizedBody === '') {
-            throw new InvalidArgumentException('Isi pesan uji tidak boleh kosong.');
-        }
+        $this->assertSendable($normalizedBody, $attachment);
 
         $startedAt = now();
-        $hrStart = hrtime(true);
-
-        try {
-            $result = $this->drivers->send(
-                $account,
-                new OutboundMessage(
-                    recipient: $normalizedRecipient,
-                    body: $normalizedBody,
-                ),
-            );
-        } catch (Throwable) {
-            $result = ProviderResult::outcomeUnknown(
-                errorCode: 'unexpected_driver_failure',
-                errorMessage: 'Driver berhenti setelah proses pengiriman dimulai.',
-            );
-        }
-
-        if ($result->outcome === ProviderOutcome::ProviderFailed
-            && $result->httpStatus !== null
-            && $result->httpStatus >= 500) {
-            $result = ProviderResult::outcomeUnknown(
-                httpStatus: $result->httpStatus,
-                errorCode: 'ambiguous_provider_http_error',
-                errorMessage: 'Provider gagal setelah request mungkin sudah diproses.',
-            );
-        }
-
-        $finishedAt = now();
-        $latencyMs = max(0, (int) floor((hrtime(true) - $hrStart) / 1_000_000));
-
-        DB::transaction(function () use (
+        $message = DB::transaction(function () use (
             $account,
             $administratorId,
-            $finishedAt,
-            $latencyMs,
+            $attachment,
             $normalizedBody,
             $normalizedRecipient,
-            $result,
             $startedAt,
-        ): void {
+        ): GatewayMessage {
             $client = $this->resolveAdminClient();
+
+            if ($attachment?->attachmentId !== null) {
+                $this->attachments->markReferenced($attachment->attachmentId);
+            }
+
+            $payload = [
+                'recipient' => $normalizedRecipient,
+                'body' => $normalizedBody,
+                'attachment' => $attachment?->toArray(),
+            ];
+
             $message = new GatewayMessage;
             $message->forceFill([
                 'uuid' => (string) Str::uuid(),
                 'client_application_id' => $client['application']->getKey(),
                 'routing_policy_id' => null,
-                'accepted_provider_account_id' => $result->outcome === ProviderOutcome::Accepted
-                    ? $account->getKey()
-                    : null,
+                'accepted_provider_account_id' => null,
                 'idempotency_key' => 'admin-test-'.Str::uuid(),
-                'payload_hash' => hash('sha256', $normalizedRecipient."\n".$normalizedBody),
+                'payload_hash' => hash('sha256', json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)),
                 'correlation_id' => 'admin-test-'.Str::uuid(),
                 'client_reference' => null,
                 'recipient' => $normalizedRecipient,
                 'recipient_hash' => hash_hmac('sha256', $normalizedRecipient, (string) config('app.key')),
                 'recipient_last4' => substr($normalizedRecipient, -4),
                 'body' => $normalizedBody,
+                'message_type' => $attachment?->kind->value ?? 'text',
+                'attachment' => $attachment?->toArray(),
                 'purpose' => self::PURPOSE,
                 'route_key' => self::ROUTE_KEY,
                 'mode' => 'sync',
                 'origin' => 'api',
+                'origin_user_id' => $administratorId,
                 'priority' => 50,
-                'status' => match ($result->outcome) {
-                    ProviderOutcome::Accepted => 'provider_accepted',
-                    ProviderOutcome::OutcomeUnknown => 'outcome_unknown',
-                    default => 'failed',
-                },
+                'status' => 'queued',
+                'queued_at' => $startedAt,
                 'metadata' => [
                     'source' => 'admin_test',
                     'administrator_id' => $administratorId,
                     'provider_account_id' => $account->getKey(),
                 ],
-                'provider_message_id' => $result->providerMessageId,
-                'last_error_code' => $this->sanitize($result->errorCode, 120),
-                'last_error_message' => $this->sanitize($result->errorMessage, 500),
-                'processing_at' => $startedAt,
-                'provider_accepted_at' => $result->outcome === ProviderOutcome::Accepted ? $finishedAt : null,
-                'failed_at' => in_array($result->outcome, [
-                    ProviderOutcome::Rejected,
-                    ProviderOutcome::ProviderFailed,
-                ], true) ? $finishedAt : null,
-                'outcome_unknown_at' => $result->outcome === ProviderOutcome::OutcomeUnknown
-                    ? $finishedAt
-                    : null,
             ])->save();
 
             MessageEvent::query()->create([
@@ -144,44 +108,85 @@ final readonly class ProviderAccountTester
                     'type' => 'send',
                     'provider_account_id' => $account->getKey(),
                     'administrator_id' => $administratorId,
-                    'outcome' => $result->outcome->value,
+                    'message_type' => $attachment?->kind->value ?? 'text',
                 ],
                 'occurred_at' => $startedAt,
             ]);
 
-            MessageAttempt::forceCreate([
-                'gateway_message_id' => $message->getKey(),
-                'provider_account_id' => $account->getKey(),
-                'sequence' => 1,
-                'status' => $result->outcome->value,
-                'delivery_certainty' => $result->deliveryCertainty->value,
-                'retry_disposition' => $result->retryDisposition->value,
-                'http_status' => $result->httpStatus,
-                'provider_message_id' => $result->providerMessageId,
-                'latency_ms' => $latencyMs,
-                'error_code' => $this->sanitize($result->errorCode, 120),
-                'error_message' => $this->sanitize($result->errorMessage, 500),
-                'started_at' => $startedAt,
-                'finished_at' => $finishedAt,
-            ]);
+            return $message;
         });
 
-        // Admin rejection probes must not open production circuits or spam ops alerts.
-        if ($result->outcome !== ProviderOutcome::Rejected) {
-            $this->health->record($account, $result);
-        }
-
-        $success = $result->outcome === ProviderOutcome::Accepted;
+        $dispatched = $this->dispatcher->dispatch($message);
+        $dispatched = $dispatched->fresh() ?? $dispatched;
+        $success = (string) $dispatched->status === 'provider_accepted';
 
         return new ProviderAccountTestResult(
             success: $success,
             title: $success ? 'Uji kirim berhasil' : 'Uji kirim gagal',
             body: $success
                 ? 'Provider menerima pesan'
-                    .($result->providerMessageId ? " (ID: {$result->providerMessageId})." : '.')
-                : ($result->errorMessage ?: $result->errorCode ?: 'Provider menolak atau gagal menerima pesan.'),
+                    .($dispatched->provider_message_id ? " (ID: {$dispatched->provider_message_id})." : '.')
+                : ($dispatched->last_error_message ?: $dispatched->last_error_code ?: 'Provider menolak atau gagal menerima pesan.'),
             type: 'send',
         );
+    }
+
+    public function storeUpload(UploadedFile $file, ?int $administratorId = null): OutboundAttachment
+    {
+        $client = $this->resolveAdminClient();
+        $stored = $this->attachments->createFromUpload(
+            $file,
+            clientApplicationId: $client['application']->getKey(),
+            userId: $administratorId,
+        );
+
+        return new OutboundAttachment(
+            kind: $stored->kind(),
+            url: 'attachment://'.$stored->uuid,
+            filename: $stored->original_filename,
+            mimeType: $stored->mime_type,
+            attachmentId: (string) $stored->uuid,
+            size: (int) $stored->size,
+        );
+    }
+
+    public function attachmentFromPublicUrl(string $url, string $kind): OutboundAttachment
+    {
+        $attachmentKind = AttachmentKind::tryFrom($kind);
+
+        if ($attachmentKind === null) {
+            throw new InvalidArgumentException('Pilih jenis lampiran.');
+        }
+
+        $this->attachments->assertPublicUrl($url);
+
+        return new OutboundAttachment(
+            kind: $attachmentKind,
+            url: trim($url),
+        );
+    }
+
+    private function assertSendable(string $body, ?OutboundAttachment $attachment): void
+    {
+        if ($body === '' && $attachment === null) {
+            throw new InvalidArgumentException('Isi pesan uji atau lampiran tidak boleh kosong.');
+        }
+
+        if ($attachment?->kind->supportsCaption() === false && $body !== '') {
+            throw new InvalidArgumentException('Audio tidak mendukung caption.');
+        }
+
+        if ($attachment !== null && mb_strlen($body) > StoreMessageRequest::CAPTION_MAX_LENGTH) {
+            throw new InvalidArgumentException('Caption attachment maksimal 1.024 karakter.');
+        }
+
+        if ($attachment === null && mb_strlen($body) > 10000) {
+            throw new InvalidArgumentException('Isi pesan maksimal 10.000 karakter.');
+        }
+
+        if ($attachment !== null && $attachment->attachmentId === null) {
+            $this->attachments->assertPublicUrl($attachment->url);
+        }
     }
 
     public function checkNumber(

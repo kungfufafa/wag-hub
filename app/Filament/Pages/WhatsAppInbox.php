@@ -83,15 +83,11 @@ class WhatsAppInbox extends Page
     {
         $this->resetSubmission();
         $requested = (int) request()->query('provider');
-        $channels = $this->channels();
 
-        if ($requested > 0 && $channels->contains(fn (ProviderAccount $account): bool => $account->id === $requested)) {
+        if ($requested > 0 && $this->channels()->contains(fn (ProviderAccount $account): bool => $account->id === $requested)) {
             $this->providerId = $requested;
-        } else {
-            $this->providerId = $channels->first()?->id;
+            $this->loadChats();
         }
-
-        $this->loadChats();
     }
 
     public function updatedSearch(): void
@@ -132,6 +128,12 @@ class WhatsAppInbox extends Page
 
     public function startNewChat(): void
     {
+        if ($this->selectedAccount() === null) {
+            Notification::make()->title('Pilih akun wrapping dulu.')->danger()->send();
+
+            return;
+        }
+
         $this->resetSubmission();
         $this->composingNew = true;
         $this->chatId = null;
@@ -141,11 +143,17 @@ class WhatsAppInbox extends Page
         $this->draft = '';
         $this->clearAttachment();
         $this->status = null;
-        $this->providerId ??= $this->channels()->first()?->id;
     }
 
     public function refreshInbox(): void
     {
+        if ($this->selectedAccount() === null) {
+            $this->chats = [];
+            $this->messages = [];
+
+            return;
+        }
+
         $this->loadChats();
 
         if (filled($this->chatId)) {
@@ -299,7 +307,7 @@ class WhatsAppInbox extends Page
 
     public function selectedAccount(): ?ProviderAccount
     {
-        if ($this->providerId === null) {
+        if ($this->providerId === null || $this->providerId <= 0) {
             return null;
         }
 
@@ -313,6 +321,43 @@ class WhatsAppInbox extends Page
         }
 
         return app(Inbox::class)->driverLabel($driver);
+    }
+
+    public function accountOptionLabel(ProviderAccount $account): string
+    {
+        return $account->is_active ? $account->name : $account->name.' (nonaktif)';
+    }
+
+    public function chatInitials(string $title): string
+    {
+        $title = trim($title);
+
+        if ($title === '') {
+            return '#';
+        }
+
+        if (preg_match('/^\+?\d/', $title) === 1) {
+            $digits = preg_replace('/\D+/', '', $title) ?? '';
+
+            return $digits !== '' ? substr($digits, -2) : '#';
+        }
+
+        $parts = preg_split('/\s+/u', $title) ?: [];
+        $parts = array_values(array_filter($parts, fn (string $part): bool => $part !== ''));
+
+        if ($parts !== [] && strcasecmp($parts[0], 'Grup') === 0) {
+            array_shift($parts);
+        }
+
+        if ($parts === []) {
+            return '#';
+        }
+
+        if (count($parts) === 1) {
+            return mb_strtoupper(mb_substr($parts[0], 0, min(2, mb_strlen($parts[0]))));
+        }
+
+        return mb_strtoupper(mb_substr($parts[0], 0, 1).mb_substr($parts[1], 0, 1));
     }
 
     public function attachmentSizeLabel(): string
@@ -369,7 +414,7 @@ class WhatsAppInbox extends Page
 
     public function getSubheading(): ?string
     {
-        return 'Kirim dan baca chat langsung dari akun WAHA, GOWA, Fonnte, dan WABA.';
+        return 'Baca dan balas percakapan dari akun wrapping.';
     }
 
     public function clearAttachment(): void
@@ -393,7 +438,19 @@ class WhatsAppInbox extends Page
 
     public function updatedProviderId(): void
     {
-        $this->resetSubmission();
+        if ($this->providerId !== null && $this->providerId <= 0) {
+            $this->providerId = null;
+        }
+
+        $this->chatId = null;
+        $this->chatTitle = '';
+        $this->messages = [];
+        $this->composingNew = false;
+        $this->newRecipient = '';
+        $this->draft = '';
+        $this->status = null;
+        $this->clearAttachment();
+        $this->loadChats();
     }
 
     public function updatedAttachmentKind(): void
@@ -415,11 +472,13 @@ class WhatsAppInbox extends Page
             Action::make('newChat')
                 ->label('Obrolan baru')
                 ->icon(Heroicon::OutlinedPlus)
+                ->disabled(fn (): bool => $this->selectedAccount() === null)
                 ->action(fn () => $this->startNewChat()),
             Action::make('refreshInbox')
                 ->label('Muat ulang')
                 ->icon(Heroicon::OutlinedArrowPath)
                 ->color('gray')
+                ->disabled(fn (): bool => $this->selectedAccount() === null)
                 ->action(fn () => $this->refreshInbox()),
         ];
     }
@@ -443,7 +502,15 @@ class WhatsAppInbox extends Page
 
     private function loadChats(): void
     {
-        $this->chats = app(Inbox::class)->chats(filled($this->search) ? $this->search : null);
+        $account = $this->selectedAccount();
+
+        if ($account === null) {
+            $this->chats = [];
+
+            return;
+        }
+
+        $this->chats = app(Inbox::class)->chats(filled($this->search) ? $this->search : null, $account);
     }
 
     private function loadMessages(): void
