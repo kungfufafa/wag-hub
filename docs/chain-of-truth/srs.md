@@ -1,9 +1,9 @@
 # Software Requirements Specification — WhatsApp Gateway Hub
 
 Status: Reviewed  
-Version: 0.1.0  
+Version: 0.2.0
 Owner: Complete Selular IT  
-Last reviewed: 2026-07-15
+Last reviewed: 2026-09-14
 
 ## Purpose and problem
 
@@ -16,7 +16,7 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 ### In scope
 
 - Laravel 12 API dan panel admin Filament 4.
-- Pesan teks outbound ke satu nomor individual per request.
+- Pesan outbound teks, gambar, dokumen, video, dan audio ke satu nomor individual per request; media berasal dari upload privat Hub atau URL publik.
 - Token terpisah untuk setiap aplikasi sumber.
 - Mode sinkron sampai `provider_accepted` untuk OTP/transaksi kritis.
 - Mode asinkron yang berhenti di `queued` untuk notifikasi biasa.
@@ -24,11 +24,13 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 - Idempotency, masa kedaluwarsa, prioritas, attempt ledger, dan status message.
 - Pengelolaan aplikasi, credential, provider account, routing policy, dan route step.
 - Pencarian/filter log, detail timeline attempt, dan retry manual untuk kegagalan terminal.
+- Inbox dashboard untuk memilih akun percakapan, mengirim satu attachment per pesan, dan membaca riwayat keluar/masuk.
+- Penyimpanan attachment privat, signed URL 24 jam, validasi kepemilikan, cleanup orphan 24 jam, dan retensi file terpakai 90 hari.
 - Pilot integrasi `web-shelf` tanpa memindahkan message builder bisnisnya.
 
 ### Out of scope
 
-- Media, group chat, multi-target, template interaktif, broadcast marketing, dan conversation inbox.
+- Group chat sebagai target API, multi-target, template interaktif, dan broadcast marketing.
 - NLP/bot atau aturan bisnis Shelf/SAM/Helpdesk di dalam Hub.
 - Raw inbound provider webhook dan forwarding ke aplikasi; skema event disiapkan tetapi aktivasi adalah fase berikutnya.
 - Klaim `delivered` atau `read` tanpa webhook provider yang terverifikasi.
@@ -72,6 +74,7 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 | FR-012 | Administrator harus dapat melihat message timeline dan melakukan retry manual hanya pada status terminal yang aman. | Must | Operasi pusat | TC-042–TC-044 |
 | FR-013 | Sistem harus menyediakan endpoint baca status yang hanya dapat melihat pesan milik aplikasi pemanggil. | Should | Integrasi | TC-045–TC-047 |
 | FR-014 | Pilot `web-shelf` harus menggunakan Hub melalui adapter yang mempertahankan `send(): bool`, memakai identitas event stabil untuk retry, dan tidak lagi menyimpan credential provider. | Must | Persetujuan MVP | TC-048–TC-051 |
+| FR-015 | Sistem harus menerima satu attachment melalui upload privat atau URL publik, memvalidasi jenis/ukuran/owner, mengirim lewat driver provider yang sesuai, dan mempertahankan referensi stabil pada ledger serta Inbox. | Must | Persetujuan attachment 2026-09-14 | TC-052–TC-060 |
 
 ## Business rules
 
@@ -87,6 +90,8 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 | BR-008 | Provider/response rahasia tidak pernah dikembalikan ke client atau log umum. | FR-007, FR-008 | Security |
 | BR-009 | Outcome ambigu menghentikan pesan saat ini tetapi menambah failure health; setelah threshold, circuit terbuka agar pesan baru melewati provider tersebut. | FR-006, FR-009 | Reliability |
 | BR-010 | Processing stale tanpa attempt provider aman direqueue (async) atau ditandai failed (sync); started attempt stale menjadi outcome_unknown. | FR-005, FR-009 | Crash recovery |
+| BR-011 | Attachment ID dan URL eksternal bersifat mutually exclusive. Signed URL privat dibuat ulang setiap attempt, tidak masuk payload hash, dan file yang masih queued/processing tidak boleh dihapus. | FR-015 | Attachment lifecycle |
+| BR-012 | Retry attachment hanya tersedia saat file privat masih tersedia; file hilang/kedaluwarsa menghasilkan kegagalan sebelum HTTP provider dan tidak diubah menjadi pesan teks. | FR-015 | Attachment lifecycle |
 
 ## Non-functional requirements
 
@@ -104,6 +109,8 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 
 - Provider credentials, recipient, message body, dan raw provider response adalah data sensitif dan memakai encrypted cast.
 - Hash recipient terpisah boleh disimpan untuk pencarian/deduplikasi tanpa membuka nilai mentah.
+- Upload attachment menyimpan UUID, nama asli, MIME hasil pemeriksaan, ukuran, checksum, owner aplikasi/admin, dan path acak pada disk privat.
+- Signed URL berlaku 24 jam. File upload orphan dibersihkan setelah 24 jam; file terpakai dipertahankan 90 hari sejak pesan terkait terakhir mencapai status akhir. Metadata/riwayat tetap ada setelah file kedaluwarsa.
 - Default usulan: body OTP 24 jam, body notifikasi 7 hari, metadata/attempt 90 hari; nilai final tetap menjadi keputusan deployment owner.
 - Token plaintext hanya ditampilkan saat dibuat/dirotasi dan tidak dapat diambil kembali.
 - Menghapus aplikasi/provider tidak boleh menghapus ledger; record operasional dinonaktifkan atau soft-deleted.
@@ -111,7 +118,10 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 ## External interfaces
 
 - `POST /api/v1/messages` — menerima pesan sync/async.
+- `POST /api/v1/attachments` — menerima multipart `file` (maksimum 16 MB) dan mengembalikan attachment UUID/metadata.
+- `GET /api/v1/attachments/{uuid}` — metadata attachment milik aplikasi pemanggil.
 - `GET /api/v1/messages/{uuid}` — status milik aplikasi pemanggil.
+- `GET|HEAD /attachments/{uuid}` — file privat melalui signed URL 24 jam dengan dukungan Range.
 - WAHA: `POST {base_url}/api/sendText` dengan `X-Api-Key` dan JSON.
 - Fonnte: `POST {endpoint}` dengan header `Authorization` dan multipart/form.
 - `/admin` — panel Filament untuk administrator.
@@ -127,4 +137,4 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 
 ## Validation record
 
-Pada 2026-07-15 stakeholder menyetujui ringkasan arsitektur outbound-first dengan balasan “lanjur mvp”. Implementasi dan evidence kini berstatus Runtime Verified oleh AI; acceptance manusia dan live-provider smoke tetap diperlukan pada handoff sebelum production go-live.
+Pada 2026-07-15 stakeholder menyetujui ringkasan arsitektur outbound-first dengan balasan “lanjur mvp”. Pada 2026-09-14 attachment API/dashboard dan lifecycle privat berstatus Runtime Verified oleh AI; acceptance manusia dan live-provider smoke tetap diperlukan pada handoff sebelum production go-live.

@@ -19,6 +19,7 @@ Baseline/version: 0.1.0
 | FR-012 | UC-004 | PAGE-005/006 | ENT-006–008 | UI-005 | masked ledger + guarded retry action | TC-042–044 | Implemented; Pass |
 | FR-013 | UC-001/002 | MOD-002 | ENT-006–008 | API-002 | app-scoped status controller | TC-045–047 | Implemented; Pass |
 | FR-014 | UC-001/002 | web-shelf adapter | ENT-001/002/006 | API-001 | Shelf Hub adapter + stable reminder identity | TC-048–051 | Implemented; Pass |
+| ATT-001 | UC-001/002/004 | attachment upload + Inbox composer | Attachment/GatewayMessage/InboxMessage | API-001/UI-005 | private upload, URL validation, media adapters, signed URL, retention cleanup, stable submission ID | AttachmentUploadTest, AttachmentDeliveryTest, WhatsAppInboxAttachmentTest | Implemented; Pass |
 
 ## Non-functional traceability
 
@@ -27,11 +28,11 @@ Baseline/version: 0.1.0
 | NFR-001 | hashed client token, encrypted casts, admin gate, endpoint allowlist | TC-001–003, 032, 038–040, 051 | Pass; dependency audits clean |
 | NFR-002 | unique app+key + keyed payload fingerprint | TC-007–009 | Pass |
 | NFR-003 | local response target and attempt latency | TC-015, TC-031, deployment benchmark | Functional pass; production p95 pending |
-| NFR-004 | masking + retention rules | TC-032, TC-042, code review | Masking/encryption pass; automated pruning pending |
+| NFR-004 | masking + retention rules | TC-032, TC-042, AttachmentUploadTest, code review | Masking/encryption and automated attachment cleanup pass |
 | NFR-005 | correlation/attempt/event ledger | TC-030–036 | Pass |
 | NFR-006 | driver interface | TC-022–029, architecture review | Pass |
-| NFR-007 | PHPUnit coverage | full suite coverage | 201 tests pass; line percentage unavailable without Xdebug/PCOV |
+| NFR-007 | PHPUnit coverage | full suite coverage | 328 tests pass; line percentage unavailable without Xdebug/PCOV |
 
 ## Coverage summary
 
-Forward and implementation traceability cover 14/14 functional requirements. All functional test groups are GREEN. NFR performance benchmark, automated retention, live-provider smoke, dan numerical line coverage remain deployment/CI evidence rather than missing functional implementation.
+Forward and implementation traceability cover the outbound API, attachment, Inbox, and provider requirements. All functional test groups are GREEN. NFR performance benchmark, live-provider smoke, dan numerical line coverage remain deployment/CI evidence rather than missing functional implementation.

@@ -37,7 +37,7 @@ sequenceDiagram
 |---|---|---|---|---|
 | API-001 | POST | `/api/v1/messages` | Bearer `messages:send` | Required header, scoped per application |
 | API-002 | GET | `/api/v1/messages/{uuid}` | Bearer `messages:read` | Read-only |
-| INT-001 | Function | `ProviderDriver::send(ProviderAccount, OutboundText): ProviderResult` | Internal | Exactly one attempt context |
+| INT-001 | Function | `ProviderDriver::send(ProviderAccount, OutboundMessage): ProviderResult` | Internal | Exactly one attempt context; text or one attachment |
 
 ### Request/input
 

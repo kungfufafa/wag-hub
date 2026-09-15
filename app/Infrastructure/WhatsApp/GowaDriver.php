@@ -4,7 +4,8 @@ namespace App\Infrastructure\WhatsApp;
 
 use App\Contracts\WhatsApp\ProviderDriver;
 use App\Contracts\WhatsApp\ProviderNumberChecker;
-use App\Domain\Delivery\OutboundText;
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundMessage;
 use App\Domain\Delivery\ProviderResult;
 use App\Domain\NumberCheck\NumberCheckResult;
 use App\Models\ProviderAccount;
@@ -20,7 +21,7 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
         private ProviderEndpointGuard $endpoints,
     ) {}
 
-    public function send(ProviderAccount $account, OutboundText $message): ProviderResult
+    public function send(ProviderAccount $account, OutboundMessage $message): ProviderResult
     {
         $configuration = is_array($account->configuration) ? $account->configuration : [];
         $baseUrl = $this->nonEmptyString($configuration['base_url'] ?? null);
@@ -34,7 +35,18 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
             );
         }
 
-        $endpoint = rtrim($baseUrl, '/').'/send/message';
+        $version = $this->nonEmptyString($configuration['version'] ?? $configuration['gowa_version'] ?? null);
+
+        if ($message->attachment?->kind === AttachmentKind::Document
+            && ($version === null || version_compare(ltrim($version, 'v'), '8.10.0', '<'))) {
+            return ProviderResult::rejected(
+                errorCode: 'attachment_format_unsupported',
+                errorMessage: 'Pengiriman URL dokumen GOWA membutuhkan versi 8.10.0 atau lebih baru yang terkonfigurasi.',
+            );
+        }
+
+        [$path, $fields] = $this->sendRequest($message);
+        $endpoint = rtrim($baseUrl, '/').$path;
 
         try {
             $this->endpoints->assertAllowed($endpoint);
@@ -46,7 +58,6 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
         }
 
         $request = Http::acceptJson()
-            ->asJson()
             ->withBasicAuth($username, $password)
             ->withoutRedirecting()
             ->timeout($this->timeout($account))
@@ -58,15 +69,59 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
         }
 
         try {
-            $response = $request->post($endpoint, [
-                'phone' => $message->gowaPhone(),
-                'message' => $message->body,
-            ]);
+            // GOWA's text endpoint is JSON while every media endpoint is multipart/form-data.
+            $response = $message->hasAttachment()
+                ? $request->asMultipart()->post($endpoint, $this->multipart($fields))
+                : $request->asJson()->post($endpoint, $fields);
         } catch (ConnectionException $exception) {
             return $this->transportFailures->classifyException($exception);
         }
 
         return $this->responses->classify($response->status(), $response->body());
+    }
+
+    /**
+     * @return array{0: string, 1: array<string, string>}
+     */
+    private function sendRequest(OutboundMessage $message): array
+    {
+        $fields = ['phone' => $message->gowaPhone()];
+        $attachment = $message->attachment;
+
+        if ($attachment === null) {
+            return ['/send/message', $fields + ['message' => $message->body]];
+        }
+
+        [$path, $urlField] = match ($attachment->kind) {
+            AttachmentKind::Image => ['/send/image', 'image_url'],
+            AttachmentKind::Document => ['/send/file', 'file_url'],
+            AttachmentKind::Video => ['/send/video', 'video_url'],
+            AttachmentKind::Audio => ['/send/audio', 'audio_url'],
+        };
+
+        $fields[$urlField] = $attachment->url;
+        $caption = $message->caption();
+
+        if ($caption !== null) {
+            $fields['caption'] = $caption;
+        }
+
+        return [$path, $fields];
+    }
+
+    /**
+     * @param  array<string, string>  $fields
+     * @return list<array{name: string, contents: string}>
+     */
+    private function multipart(array $fields): array
+    {
+        $parts = [];
+
+        foreach ($fields as $name => $contents) {
+            $parts[] = ['name' => $name, 'contents' => $contents];
+        }
+
+        return $parts;
     }
 
     public function checkNumber(ProviderAccount $account, string $recipient): NumberCheckResult

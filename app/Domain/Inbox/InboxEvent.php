@@ -13,6 +13,9 @@ final readonly class InboxEvent
         public string $kind = 'text',
         public ?string $title = null,
         public bool $isGroup = false,
+        /** @var array<string, mixed>|null */
+        public ?array $attachment = null,
+        public ?int $gatewayMessageId = null,
     ) {}
 
     public function toMessage(): InboxMessage
@@ -24,6 +27,7 @@ final readonly class InboxEvent
             timestamp: date('d M H.i', $this->occurredAt),
             kind: $this->kind,
             occurredAt: $this->occurredAt,
+            attachment: $this->attachment,
         );
     }
 }

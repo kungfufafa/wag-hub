@@ -33,6 +33,13 @@ return [
     // sync = jalankan DispatchGatewayMessage langsung (tanpa queue:work) — cocok lokal/dev saja.
     'dispatch' => env('GATEWAY_DISPATCH', 'async') === 'sync' ? 'sync' : 'async',
 
+    'attachments' => [
+        'disk' => env('GATEWAY_ATTACHMENT_DISK', 'local'),
+        'max_bytes' => (int) env('GATEWAY_ATTACHMENT_MAX_BYTES', 16 * 1024 * 1024),
+        'retention_days' => (int) env('GATEWAY_ATTACHMENT_RETENTION_DAYS', 90),
+        'orphan_hours' => (int) env('GATEWAY_ATTACHMENT_ORPHAN_HOURS', 24),
+    ],
+
     'seed' => [
         'administrator' => [
             'name' => env('GATEWAY_SEED_ADMIN_NAME') ?: 'Gateway Administrator',
@@ -49,12 +56,14 @@ return [
                 'endpoint' => env('GATEWAY_SEED_FONNTE_ENDPOINT', 'https://api.fonnte.com/send'),
                 'validate_endpoint' => env('GATEWAY_SEED_FONNTE_VALIDATE_ENDPOINT', 'https://api.fonnte.com/validate'),
                 'token' => env('GATEWAY_SEED_FONNTE_TOKEN'),
+                'attachment_max_bytes' => env('GATEWAY_SEED_FONNTE_ATTACHMENT_MAX_BYTES', 4 * 1024 * 1024),
             ],
             'gowa' => [
                 'base_url' => env('GATEWAY_SEED_GOWA_BASE_URL'),
                 'username' => env('GATEWAY_SEED_GOWA_USERNAME'),
                 'password' => env('GATEWAY_SEED_GOWA_PASSWORD'),
                 'device_id' => env('GATEWAY_SEED_GOWA_DEVICE_ID'),
+                'version' => env('GATEWAY_SEED_GOWA_VERSION'),
             ],
             'waba' => [
                 'base_url' => env('GATEWAY_SEED_WABA_BASE_URL', 'https://graph.facebook.com'),

@@ -14,6 +14,15 @@ final readonly class ProviderHealthRecorder
 {
     public function record(ProviderAccount $provider, ProviderResult $result): void
     {
+        if (in_array($result->errorCode, [
+            'attachment_unavailable',
+            'attachment_invalid',
+            'attachment_format_unsupported',
+            'attachment_size_unsupported',
+        ], true)) {
+            return;
+        }
+
         if (! in_array($result->outcome, [
             ProviderOutcome::Accepted,
             ProviderOutcome::Rejected,

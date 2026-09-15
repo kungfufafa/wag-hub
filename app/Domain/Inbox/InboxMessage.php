@@ -11,19 +11,27 @@ final readonly class InboxMessage
         public ?string $timestamp,
         public string $kind = 'text',
         public ?int $occurredAt = null,
+        /** @var array<string, mixed>|null */
+        public ?array $attachment = null,
     ) {}
 
     /**
-     * @return array{id: string, body: string, from_me: bool, timestamp: ?string, kind: string}
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
-        return [
+        $data = [
             'id' => $this->id,
             'body' => $this->body,
             'from_me' => $this->fromMe,
             'timestamp' => $this->timestamp,
             'kind' => $this->kind,
         ];
+
+        if ($this->attachment !== null) {
+            $data['attachment'] = $this->attachment;
+        }
+
+        return $data;
     }
 }

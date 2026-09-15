@@ -37,6 +37,11 @@ chmod -R ug+rwx storage bootstrap/cache
 
 Atur document root website ke `<DIREKTORI_APP>/public`, bukan ke root proyek.
 
+Simpan storage/app/private pada volume persisten dan pastikan provider dapat
+menjangkau APP_URL melalui HTTPS. Pada PHP-FPM/CLI gunakan
+upload_max_filesize=16M dan post_max_size=20M atau lebih agar upload
+multipart 16 MB tidak dipotong sebelum validasi Hub.
+
 ## 4. Isi environment production
 
 Edit `<DIREKTORI_APP>/.env` dari file manager/terminal 1Panel:
@@ -57,6 +62,11 @@ DB_PASSWORD=GANTI_PASSWORD_DATABASE
 
 QUEUE_CONNECTION=database
 DB_QUEUE_RETRY_AFTER=420
+
+GATEWAY_ATTACHMENT_DISK=local
+GATEWAY_ATTACHMENT_MAX_BYTES=16777216
+GATEWAY_ATTACHMENT_RETENTION_DAYS=90
+GATEWAY_ATTACHMENT_ORPHAN_HOURS=24
 
 GATEWAY_PROVIDER_HTTPS_HOSTS=wa.example.com,api.fonnte.com
 GATEWAY_PROVIDER_HTTP_HOSTS=

@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Domain\Delivery\OutboundAttachment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreMessageRequest;
+use App\Models\Attachment;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
+use App\Services\AttachmentService;
 use App\Services\GatewayMessageDispatcher;
 use App\Services\GatewayMessageEnqueuer;
 use BackedEnum;
@@ -127,6 +130,12 @@ class MessageController extends Controller
         $now = now();
 
         $message = new GatewayMessage;
+        $attachment = $request->outboundAttachment();
+
+        if ($attachment?->attachmentId !== null) {
+            app(AttachmentService::class)->markReferenced($attachment->attachmentId);
+        }
+
         $message->forceFill([
             'uuid' => (string) Str::uuid(),
             'client_application_id' => $application->getKey(),
@@ -139,10 +148,13 @@ class MessageController extends Controller
             'recipient' => $recipient,
             'recipient_hash' => hash_hmac('sha256', $recipient, (string) config('app.key')),
             'recipient_last4' => substr($recipient, -4),
-            'body' => $payload['message']['text'],
+            'body' => $request->messageText(),
+            'message_type' => $request->messageType(),
+            'attachment' => $attachment?->toArray(),
             'purpose' => $payload['purpose'],
             'route_key' => $payload['route_key'],
             'mode' => $mode,
+            'origin' => 'api',
             'priority' => $this->priorityFor((string) $payload['purpose']),
             'status' => $mode === 'async' ? 'queued' : 'processing',
             'metadata' => $payload['metadata'],
@@ -265,17 +277,25 @@ class MessageController extends Controller
     private function dispatchFailureResponse(Request $request, GatewayMessage $message): JsonResponse
     {
         $status = $this->statusValue($message->status);
+        $attachmentError = in_array($message->last_error_code, [
+            'attachment_unavailable',
+            'attachment_invalid',
+            'attachment_format_unsupported',
+            'attachment_size_unsupported',
+        ], true);
 
         [$httpStatus, $code, $retryable] = match ($status) {
             'outcome_unknown' => [502, 'provider_outcome_unknown', false],
             'expired' => [410, 'message_expired', false],
-            'failed', 'dead_letter' => [
-                503,
-                in_array($message->last_error_code, ['route_unavailable', 'providers_failed'], true)
-                    ? $message->last_error_code
-                    : 'providers_failed',
-                true,
-            ],
+            'failed', 'dead_letter' => $attachmentError
+                ? [422, (string) $message->last_error_code, false]
+                : [
+                    503,
+                    in_array($message->last_error_code, ['route_unavailable', 'providers_failed'], true)
+                        ? $message->last_error_code
+                        : 'providers_failed',
+                    true,
+                ],
             default => [503, 'gateway_dispatch_incomplete', true],
         };
 
@@ -284,6 +304,10 @@ class MessageController extends Controller
                 'provider_outcome_unknown' => 'The provider outcome could not be determined.',
                 'message_expired' => 'The message expired before it could be sent.',
                 'route_unavailable' => 'No usable route is currently available.',
+                'attachment_unavailable' => 'Attachment tidak tersedia untuk dikirim.',
+                'attachment_invalid' => 'Attachment tidak valid untuk dikirim.',
+                'attachment_format_unsupported' => 'Format attachment tidak didukung provider.',
+                'attachment_size_unsupported' => 'Ukuran attachment melebihi batas provider.',
                 default => 'No provider accepted the message.',
             },
             'error' => [
@@ -313,6 +337,7 @@ class MessageController extends Controller
             'status' => $this->statusValue($message->status),
             'mode' => $this->statusValue($message->mode),
             'purpose' => $this->statusValue($message->purpose),
+            'message_type' => (string) ($message->message_type ?: 'text'),
             'route_key' => (string) $message->route_key,
             'client_reference' => $message->client_reference,
             'provider_message_id' => $message->provider_message_id,
@@ -325,6 +350,12 @@ class MessageController extends Controller
             'expires_at' => $this->iso8601($message->expires_at),
         ];
 
+        $attachment = $message->outboundAttachment();
+
+        if ($attachment !== null) {
+            $data['attachment'] = $this->attachmentData($message, $attachment);
+        }
+
         if ($duplicate !== null) {
             $data['duplicate'] = $duplicate;
         }
@@ -336,6 +367,47 @@ class MessageController extends Controller
         }
 
         return $data;
+    }
+
+    /** @return array<string, mixed> */
+    private function attachmentData(GatewayMessage $message, OutboundAttachment $attachment): array
+    {
+        if ($attachment->attachmentId === null) {
+            return [
+                'kind' => $attachment->kind->value,
+                'url' => $attachment->url,
+                'filename' => $attachment->filename,
+                'mime_type' => $attachment->mimeType,
+            ];
+        }
+
+        $stored = Attachment::query()
+            ->where('uuid', $attachment->attachmentId)
+            ->where('client_application_id', $message->client_application_id)
+            ->first();
+
+        if ($stored === null) {
+            return [
+                'id' => $attachment->attachmentId,
+                'kind' => $attachment->kind->value,
+                'status' => 'expired',
+                'filename' => $attachment->filename,
+                'mime_type' => $attachment->mimeType,
+                'download_url' => null,
+            ];
+        }
+
+        return [
+            'id' => (string) $stored->uuid,
+            'kind' => (string) $stored->media_kind,
+            'status' => $stored->isAvailable() ? (string) $stored->status : 'expired',
+            'filename' => (string) $stored->original_filename,
+            'mime_type' => (string) $stored->mime_type,
+            'size' => (int) $stored->size,
+            'download_url' => $stored->isAvailable()
+                ? app(AttachmentService::class)->temporaryUrl($stored)
+                : null,
+        ];
     }
 
     private function priorityFor(string $purpose): int

@@ -52,8 +52,8 @@ class EditProviderAccount extends EditRecord
         $driver = $data['driver'];
         $allowedKeys = match ($driver) {
             'waha' => ['base_url', 'session', 'api_key', 'webhook_secret'],
-            'fonnte' => ['endpoint', 'validate_endpoint', 'token', 'webhook_secret'],
-            'gowa' => ['base_url', 'username', 'password', 'device_id', 'webhook_secret'],
+            'fonnte' => ['endpoint', 'validate_endpoint', 'token', 'attachment_max_bytes', 'webhook_secret'],
+            'gowa' => ['base_url', 'username', 'password', 'device_id', 'version', 'webhook_secret'],
             'waba' => ['base_url', 'api_version', 'phone_number_id', 'access_token', 'webhook_secret'],
             default => [],
         };

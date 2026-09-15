@@ -11,3 +11,7 @@ Artisan::command('inspire', function () {
 Schedule::command('gateway:recover-stale --minutes=10 --limit=100')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('gateway:cleanup-attachments')
+    ->daily()
+    ->withoutOverlapping();

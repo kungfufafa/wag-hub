@@ -38,7 +38,7 @@ final class WahaResponseClassifier
             return ProviderResult::outcomeUnknown(
                 httpStatus: $httpStatus,
                 errorCode: 'ambiguous_provider_http_error',
-                errorMessage: $message !== 'WAHA menolak request.' ? $baseMessage . ' Respons: ' . $message : $baseMessage,
+                errorMessage: $message !== 'WAHA menolak request.' ? $baseMessage.' Respons: '.$message : $baseMessage,
             );
         }
 
@@ -48,7 +48,7 @@ final class WahaResponseClassifier
             return ProviderResult::providerFailed(
                 httpStatus: $httpStatus,
                 errorCode: 'provider_server_error',
-                errorMessage: $message !== 'WAHA menolak request.' ? $baseMessage . ' Respons: ' . $message : $baseMessage,
+                errorMessage: $message !== 'WAHA menolak request.' ? $baseMessage.' Respons: '.$message : $baseMessage,
             );
         }
 
@@ -190,7 +190,7 @@ final class WahaResponseClassifier
     private function errorMessage(string $body): string
     {
         $payload = json_decode($body, true);
-        
+
         if (is_array($payload)) {
             $message = $payload['error'] ?? $payload['message'] ?? null;
             if (is_scalar($message) && trim((string) $message) !== '') {

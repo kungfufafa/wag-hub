@@ -68,6 +68,10 @@ class GatewayMessageResource extends Resource
                     ->label('Tujuan')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => static::purposeLabel($state)),
+                TextColumn::make('origin')
+                    ->label('Asal')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => $state === 'inbox' ? 'Inbox' : 'API'),
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
@@ -155,6 +159,12 @@ class GatewayMessageResource extends Resource
                             ->badge()
                             ->color('gray')
                             ->formatStateUsing(fn (?string $state): string => static::purposeLabel($state)),
+                        TextEntry::make('origin')
+                            ->label('Asal')
+                            ->formatStateUsing(fn (?string $state): string => $state === 'inbox' ? 'Inbox dashboard' : 'API'),
+                        TextEntry::make('originUser.name')
+                            ->label('Administrator')
+                            ->placeholder('—'),
                         TextEntry::make('clientApplication.name')
                             ->label('Aplikasi')
                             ->placeholder('Tidak diketahui'),
@@ -164,6 +174,13 @@ class GatewayMessageResource extends Resource
                         TextEntry::make('acceptedProviderAccount.name')
                             ->label('Provider yang menerima')
                             ->placeholder('Belum ada'),
+                        TextEntry::make('pinnedProviderAccount.name')
+                            ->label('Provider pilihan')
+                            ->placeholder('—'),
+                        TextEntry::make('inbox_chat_id')
+                            ->label('Chat ID')
+                            ->placeholder('—')
+                            ->copyable(),
                         TextEntry::make('created_at')
                             ->label('Dibuat')
                             ->dateTime(),
@@ -211,6 +228,7 @@ class GatewayMessageResource extends Resource
                         SchemaView::make('filament.gateway-messages.message-body')
                             ->viewData(fn (GatewayMessage $record): array => [
                                 'body' => $record->plaintextBody(),
+                                'attachment' => $record->outboundAttachment(),
                             ]),
                     ])
                     ->columnSpanFull(),

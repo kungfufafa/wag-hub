@@ -12,7 +12,10 @@ use Illuminate\Support\Facades\DB;
 
 final class StaleGatewayMessageRecovery
 {
-    public function __construct(private readonly GatewayMessageEnqueuer $enqueuer) {}
+    public function __construct(
+        private readonly GatewayMessageEnqueuer $enqueuer,
+        private readonly AttachmentService $attachments,
+    ) {}
 
     /**
      * @return array{examined: int, requeued: int, enqueue_failed: int, accepted: int, outcome_unknown: int, failed: int}
@@ -163,6 +166,7 @@ final class StaleGatewayMessageRecovery
         ])->save();
 
         $this->appendEvent($message, 'recovery_sync_failed_before_attempt', null);
+        $this->finalizeAttachment($message);
 
         return 'failed';
     }
@@ -197,6 +201,7 @@ final class StaleGatewayMessageRecovery
         ])->save();
 
         $this->appendEvent($message, 'recovery_provider_accepted', $attempt);
+        $this->finalizeAttachment($message);
 
         return 'accepted';
     }
@@ -214,6 +219,7 @@ final class StaleGatewayMessageRecovery
         ])->save();
 
         $this->appendEvent($message, 'recovery_outcome_unknown', $attempt);
+        $this->finalizeAttachment($message);
 
         return 'outcome_unknown';
     }
@@ -231,6 +237,7 @@ final class StaleGatewayMessageRecovery
         ])->save();
 
         $this->appendEvent($message, 'recovery_failed', $attempt);
+        $this->finalizeAttachment($message);
 
         return 'failed';
     }
@@ -251,6 +258,22 @@ final class StaleGatewayMessageRecovery
             ],
             'occurred_at' => now(),
         ]);
+    }
+
+    private function finalizeAttachment(GatewayMessage $message): void
+    {
+        $attachmentId = $message->outboundAttachment()?->attachmentId;
+
+        if ($attachmentId === null) {
+            return;
+        }
+
+        try {
+            $this->attachments->finalizeReference($attachmentId);
+        } catch (\Throwable) {
+            // A missing file is retained as a ledger error; recovery outcome
+            // must not be rolled back because metadata cleanup failed.
+        }
     }
 
     /**

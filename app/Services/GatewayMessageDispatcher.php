@@ -2,15 +2,19 @@
 
 namespace App\Services;
 
-use App\Domain\Delivery\OutboundText;
 use App\Domain\Delivery\ProviderOutcome;
 use App\Domain\Delivery\ProviderResult;
+use App\Domain\Delivery\RetryDisposition;
+use App\Domain\Inbox\InboxEvent;
+use App\Infrastructure\WhatsApp\InboxPayload;
 use App\Infrastructure\WhatsApp\ProviderDriverManager;
 use App\Models\GatewayMessage;
 use App\Models\MessageAttempt;
 use App\Models\ProviderAccount;
+use Illuminate\Contracts\Filesystem\FileNotFoundException;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Throwable;
 
 final readonly class GatewayMessageDispatcher
@@ -26,6 +30,8 @@ final readonly class GatewayMessageDispatcher
     public function __construct(
         private ProviderDriverManager $drivers,
         private ProviderHealthRecorder $health,
+        private InboxLedger $ledger,
+        private AttachmentService $attachments,
     ) {}
 
     public function dispatch(GatewayMessage $message): GatewayMessage
@@ -49,6 +55,10 @@ final readonly class GatewayMessageDispatcher
         }
 
         $message = $this->markProcessing($message);
+
+        if ((string) $message->origin === 'inbox') {
+            return $this->dispatchInbox($message);
+        }
 
         if ((string) $message->purpose === ProviderAccountTester::PURPOSE) {
             return $this->dispatchAdminTest($message);
@@ -109,7 +119,9 @@ final readonly class GatewayMessageDispatcher
             $latencyMs = max(0, (int) floor((hrtime(true) - $startedAt) / 1_000_000));
 
             $this->finishAttempt($attemptId, $result, $latencyMs);
-            $this->health->record($provider, $result);
+            if (! in_array($result->errorCode, ['attachment_unavailable', 'attachment_invalid', 'attachment_format_unsupported', 'attachment_size_unsupported'], true)) {
+                $this->health->record($provider, $result);
+            }
             $lastResult = $result;
 
             if ($result->outcome === ProviderOutcome::Accepted) {
@@ -188,6 +200,51 @@ final readonly class GatewayMessageDispatcher
             $message,
             errorCode: $result->errorCode ?? 'providers_failed',
             errorMessage: $result->errorMessage ?? 'Provider uji admin gagal menerima pesan.',
+        );
+    }
+
+    private function dispatchInbox(GatewayMessage $message): GatewayMessage
+    {
+        $provider = $message->pinned_provider_account_id === null
+            ? null
+            : ProviderAccount::query()->find($message->pinned_provider_account_id);
+
+        if ($provider === null || ! $this->providerIsUsable($provider)) {
+            return $this->markFailed(
+                $message,
+                errorCode: 'inbox_provider_unavailable',
+                errorMessage: 'Akun provider percakapan tidak tersedia.',
+            );
+        }
+
+        $attemptId = $this->startAttempt($message, $provider);
+        $startedAt = hrtime(true);
+        $result = $this->send($provider, $message);
+        $latencyMs = max(0, (int) floor((hrtime(true) - $startedAt) / 1_000_000));
+
+        $this->finishAttempt($attemptId, $result, $latencyMs);
+
+        if (! in_array($result->errorCode, [
+            'attachment_unavailable',
+            'attachment_invalid',
+            'attachment_format_unsupported',
+            'attachment_size_unsupported',
+        ], true)) {
+            $this->health->record($provider, $result);
+        }
+
+        if ($result->outcome === ProviderOutcome::Accepted) {
+            return $this->markAccepted($message, $provider, $result);
+        }
+
+        if ($result->outcome === ProviderOutcome::OutcomeUnknown) {
+            return $this->markOutcomeUnknown($message, $result);
+        }
+
+        return $this->markFailed(
+            $message,
+            errorCode: $result->errorCode ?? 'inbox_provider_rejected',
+            errorMessage: $result->errorMessage ?? 'Provider menolak pesan percakapan.',
         );
     }
 
@@ -370,12 +427,30 @@ final readonly class GatewayMessageDispatcher
     private function send(ProviderAccount $provider, GatewayMessage $message): ProviderResult
     {
         try {
-            return $this->drivers->send(
-                $provider,
-                new OutboundText(
-                    recipient: (string) $message->recipient,
-                    body: (string) $message->body,
-                ),
+            $result = $this->drivers->send($provider, $message->toOutboundMessage());
+
+            if ($result->outcome === ProviderOutcome::ProviderFailed
+                && $result->httpStatus !== null
+                && $result->httpStatus >= 500) {
+                return ProviderResult::outcomeUnknown(
+                    httpStatus: $result->httpStatus,
+                    errorCode: 'ambiguous_provider_http_error',
+                    errorMessage: 'Provider gagal setelah request mungkin sudah diproses.',
+                );
+            }
+
+            return $result;
+        } catch (FileNotFoundException $exception) {
+            return ProviderResult::rejected(
+                errorCode: 'attachment_unavailable',
+                errorMessage: $exception->getMessage(),
+                retryDisposition: RetryDisposition::DoNotRetry,
+            );
+        } catch (InvalidArgumentException $exception) {
+            return ProviderResult::rejected(
+                errorCode: 'attachment_invalid',
+                errorMessage: $exception->getMessage(),
+                retryDisposition: RetryDisposition::DoNotRetry,
             );
         } catch (Throwable) {
             return ProviderResult::outcomeUnknown(
@@ -418,7 +493,46 @@ final readonly class GatewayMessageDispatcher
             $this->appendEventOnce($message->id, 'provider_accepted');
         });
 
+        $this->finalizeAttachment($message);
+
+        $this->recordApiHistory($message, $provider, $result);
+
         return $message->fresh() ?? $message;
+    }
+
+    private function recordApiHistory(
+        GatewayMessage $message,
+        ProviderAccount $provider,
+        ProviderResult $result,
+    ): void {
+        if ((string) $message->origin !== 'api'
+            || (string) $message->purpose === ProviderAccountTester::PURPOSE) {
+            return;
+        }
+
+        $chatId = match ((string) $provider->driver) {
+            'waha' => ((string) $message->recipient).'@c.us',
+            'gowa' => ((string) $message->recipient).'@s.whatsapp.net',
+            default => (string) $message->recipient,
+        };
+        $providerMessageId = $result->providerMessageId ?: 'gateway-'.$message->uuid;
+
+        try {
+            $this->ledger->record($provider, new InboxEvent(
+                chatId: $chatId,
+                messageId: $providerMessageId,
+                body: $message->plaintextBody(),
+                fromMe: true,
+                occurredAt: time(),
+                kind: (string) ($message->message_type ?: 'text'),
+                title: (string) $message->recipient,
+                isGroup: InboxPayload::isGroup($chatId),
+                attachment: $message->outboundAttachment()?->toArray(),
+                gatewayMessageId: (int) $message->getKey(),
+            ));
+        } catch (Throwable) {
+            // Provider acceptance remains authoritative if the local inbox ledger is unavailable.
+        }
     }
 
     private function markOutcomeUnknown(GatewayMessage $message, ProviderResult $result): GatewayMessage
@@ -433,6 +547,8 @@ final readonly class GatewayMessageDispatcher
 
             $this->appendEventOnce($message->id, 'outcome_unknown');
         });
+
+        $this->finalizeAttachment($message);
 
         return $message->fresh() ?? $message;
     }
@@ -453,6 +569,8 @@ final readonly class GatewayMessageDispatcher
             $this->appendEventOnce($message->id, 'failed');
         });
 
+        $this->finalizeAttachment($message);
+
         return $message->fresh() ?? $message;
     }
 
@@ -468,7 +586,25 @@ final readonly class GatewayMessageDispatcher
             $this->appendEventOnce($message->id, 'expired');
         });
 
+        $this->finalizeAttachment($message);
+
         return $message->fresh() ?? $message;
+    }
+
+    private function finalizeAttachment(GatewayMessage $message): void
+    {
+        $attachmentId = $message->outboundAttachment()?->attachmentId;
+
+        if ($attachmentId === null) {
+            return;
+        }
+
+        try {
+            $this->attachments->finalizeReference($attachmentId);
+        } catch (Throwable) {
+            // Delivery status remains authoritative if metadata has already
+            // been removed or storage is temporarily unavailable.
+        }
     }
 
     private function isExpired(GatewayMessage $message): bool

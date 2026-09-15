@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Domain\Delivery\OutboundText;
+use App\Domain\Delivery\OutboundMessage;
 use App\Domain\Delivery\ProviderAccountTestResult;
 use App\Domain\Delivery\ProviderOutcome;
 use App\Domain\Delivery\ProviderResult;
@@ -55,7 +55,7 @@ final readonly class ProviderAccountTester
         try {
             $result = $this->drivers->send(
                 $account,
-                new OutboundText(
+                new OutboundMessage(
                     recipient: $normalizedRecipient,
                     body: $normalizedBody,
                 ),
@@ -64,6 +64,16 @@ final readonly class ProviderAccountTester
             $result = ProviderResult::outcomeUnknown(
                 errorCode: 'unexpected_driver_failure',
                 errorMessage: 'Driver berhenti setelah proses pengiriman dimulai.',
+            );
+        }
+
+        if ($result->outcome === ProviderOutcome::ProviderFailed
+            && $result->httpStatus !== null
+            && $result->httpStatus >= 500) {
+            $result = ProviderResult::outcomeUnknown(
+                httpStatus: $result->httpStatus,
+                errorCode: 'ambiguous_provider_http_error',
+                errorMessage: 'Provider gagal setelah request mungkin sudah diproses.',
             );
         }
 
@@ -100,6 +110,7 @@ final readonly class ProviderAccountTester
                 'purpose' => self::PURPOSE,
                 'route_key' => self::ROUTE_KEY,
                 'mode' => 'sync',
+                'origin' => 'api',
                 'priority' => 50,
                 'status' => match ($result->outcome) {
                     ProviderOutcome::Accepted => 'provider_accepted',

@@ -49,6 +49,12 @@ DB_PASSWORD=GANTI_PASSWORD_DATABASE
 QUEUE_CONNECTION=database
 DB_QUEUE_RETRY_AFTER=420
 
+# Storage attachment privat Hub. Batas aplikasi 16 MB.
+GATEWAY_ATTACHMENT_DISK=local
+GATEWAY_ATTACHMENT_MAX_BYTES=16777216
+GATEWAY_ATTACHMENT_RETENTION_DAYS=90
+GATEWAY_ATTACHMENT_ORPHAN_HOURS=24
+
 # Hanya hostname provider yang boleh dihubungi Hub.
 GATEWAY_PROVIDER_HTTPS_HOSTS=wa.example.com,api.fonnte.com
 GATEWAY_PROVIDER_HTTP_HOSTS=
@@ -91,7 +97,8 @@ server {
     server_name gateway.example.com;
     root /var/www/gateway-hub/public;
     index index.php;
-    client_max_body_size 10m;
+    # Beri ruang untuk multipart overhead; validasi aplikasi tetap 16 MB per file.
+    client_max_body_size 20m;
 
     location / {
         try_files $uri $uri/ /index.php?$query_string;
@@ -111,6 +118,10 @@ server {
 ```
 
 Sesuaikan lokasi aplikasi dan socket PHP-FPM, aktifkan HTTPS dengan sertifikat valid, lalu reload Nginx.
+Provider harus dapat menjangkau `APP_URL` melalui HTTPS agar signed URL attachment
+dapat diambil. Pastikan disk `storage/app/private` persisten dan tidak dibagikan
+sebagai direktori publik. Set PHP `upload_max_filesize=16M` dan
+`post_max_size=20M` (atau lebih) pada PHP-FPM dan CLI yang menjalankan worker.
 
 ## 6. Jalankan worker antrian
 

@@ -169,6 +169,14 @@ class ProviderAccountResource extends Resource
                                 ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
                                 ->dehydrated(fn (?string $state): bool => filled($state))
                                 ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.attachment_max_bytes')
+                                ->label('Batas attachment (byte)')
+                                ->numeric()
+                                ->minValue(1)
+                                ->maxValue(16777216)
+                                ->default(4 * 1024 * 1024)
+                                ->helperText('Kebijakan awal Fonnte 4 MB; naikkan setelah batas akun terverifikasi.')
+                                ->dehydratedWhenHidden(false),
                         ])
                         ->visible(fn (Get $get): bool => $get('driver') === 'fonnte')
                         ->columns(['md' => 2]),
@@ -197,6 +205,12 @@ class ProviderAccountResource extends Resource
                                 ->label('Device ID')
                                 ->helperText('Opsional bila server GOWA hanya memiliki satu device.')
                                 ->maxLength(255)
+                                ->dehydratedWhenHidden(false),
+                            TextInput::make('configuration.version')
+                                ->label('Versi GOWA')
+                                ->placeholder('8.10.0')
+                                ->helperText('Wajib dikonfigurasi minimal 8.10.0 untuk mengirim dokumen melalui URL.')
+                                ->maxLength(32)
                                 ->dehydratedWhenHidden(false),
                         ])
                         ->visible(fn (Get $get): bool => $get('driver') === 'gowa')

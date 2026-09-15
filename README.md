@@ -144,6 +144,81 @@ curl -X POST http://localhost:8000/api/v1/messages \
 
 Untuk notifikasi asinkron, gunakan `"mode": "async"`. Hub mengembalikan HTTP 202 dengan status `queued`, lalu worker memprosesnya.
 
+### Mengirim lampiran
+
+Satu pesan boleh memiliki satu lampiran. Ada dua cara memasok file: upload ke
+storage privat Hub, atau URL eksternal yang dapat diakses publik. Upload dibatasi
+16 MB, diperiksa isi dan ekstensi, lalu dikembalikan sebagai UUID. File upload
+disimpan sampai 90 hari sejak referensi kiriman terakhir; file yang tidak pernah
+dipakai dibersihkan setelah 24 jam.
+
+Upload terlebih dahulu memakai multipart `file`:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/attachments \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer wgh_CONTOH_TOKEN' \
+  -F 'file=@/path/INV-0001.pdf'
+```
+
+Gunakan `data.id` dari response upload pada `message.attachment.id`:
+
+```json
+{
+  "message": {
+    "type": "document",
+    "text": "Terlampir invoice Anda.",
+    "attachment": {"id": "UUID_ATTACHMENT"}
+  }
+}
+```
+
+Sebagai alternatif, ganti `message.type` menjadi `image`, `document`, `video`,
+atau `audio`, lalu isi `message.attachment.url` dengan URL HTTP(S) publik.
+`message.text` menjadi caption (opsional, maks 1.024 karakter; `audio` tidak
+mendukung caption). `filename` dan `mime_type` opsional; bila kosong Hub
+menurunkannya dari URL. `attachment.id` dan `attachment.url` wajib tepat salah
+satu.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/messages \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer wgh_CONTOH_TOKEN' \
+  -H 'Idempotency-Key: invoice-0001' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "recipient": {"type": "phone", "value": "081234567890"},
+    "message": {
+      "type": "document",
+      "text": "Terlampir invoice Anda.",
+      "attachment": {
+        "url": "https://cdn.example.com/invoices/INV-0001.pdf",
+        "filename": "INV-0001.pdf",
+        "mime_type": "application/pdf"
+      }
+    },
+    "purpose": "transactional",
+    "mode": "async",
+    "route_key": "default",
+    "client_reference": "invoice-0001"
+  }'
+```
+
+Lampiran berjalan lewat rute dan fallback yang sama dengan pesan teks. Pemetaan per provider:
+
+| Jenis | WAHA | Fonnte | GOWA | WABA |
+|---|---|---|---|---|
+| `image` | `POST /api/sendImage` | `/send` + `url` | `POST /send/image` (`image_url`) | `type: image` + `link` |
+| `document` | `POST /api/sendFile` | `/send` + `url`, `filename` | `POST /send/file` (`file_url`) | `type: document` + `link`, `filename` |
+| `video` | `POST /api/sendVideo` | `/send` + `url` | `POST /send/video` (`video_url`) | `type: video` + `link` |
+| `audio` | `POST /api/sendVoice` | `/send` + `url` | `POST /send/audio` (`audio_url`) | `type: audio` + `link` |
+
+Batas Hub adalah 16 MB. Batas provider tetap berlaku: kebijakan awal Fonnte
+4 MB (dapat dikonfigurasi per akun), WABA image 5 MB, WABA audio/video 16 MB,
+dan WABA document 100 MB. WAHA audio harus OGG/Opus. URL dokumen GOWA
+membutuhkan GOWA v8.10.0 atau lebih baru. Respons API menyertakan
+`data.message_type` dan referensi attachment.
+
 Status pesan milik aplikasi dapat dibaca melalui:
 
 ```bash
@@ -234,7 +309,7 @@ Token Shelf cukup diberi ability `messages:send` (`messages:read` hanya bila She
 - Satu smoke test nyata untuk setiap provider aktif diverifikasi dari ledger sebelum trafik aplikasi dialihkan.
 - Adapter Shelf sudah masuk branch deployment (`staging`/`main`) dan environment Shelf telah direcache.
 
-Retention/pruning otomatis dan webhook inbound/delivered/read belum termasuk MVP. Tentukan prosedur purge manual serta jaga endpoint inbound aplikasi lama tetap di jaringan tepercaya sampai fase autentikasi inbound dikerjakan.
+Cleanup attachment otomatis berjalan melalui scheduler: upload yang tidak pernah dipakai dihapus setelah 24 jam dan file terpakai setelah 90 hari sejak referensi terakhir. Webhook inbound/delivered/read belum termasuk MVP; jaga endpoint inbound aplikasi lama tetap di jaringan tepercaya sampai fase autentikasi inbound dikerjakan.
 
 ## Verifikasi
 

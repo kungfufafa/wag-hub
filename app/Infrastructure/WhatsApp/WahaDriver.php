@@ -4,7 +4,8 @@ namespace App\Infrastructure\WhatsApp;
 
 use App\Contracts\WhatsApp\ProviderDriver;
 use App\Contracts\WhatsApp\ProviderNumberChecker;
-use App\Domain\Delivery\OutboundText;
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundMessage;
 use App\Domain\Delivery\ProviderResult;
 use App\Domain\NumberCheck\NumberCheckResult;
 use App\Models\ProviderAccount;
@@ -20,7 +21,7 @@ final readonly class WahaDriver implements ProviderDriver, ProviderNumberChecker
         private ProviderEndpointGuard $endpoints,
     ) {}
 
-    public function send(ProviderAccount $account, OutboundText $message): ProviderResult
+    public function send(ProviderAccount $account, OutboundMessage $message): ProviderResult
     {
         $configuration = $this->configuration($account);
         $baseUrl = $this->nonEmptyString($configuration['base_url'] ?? null);
@@ -33,7 +34,18 @@ final readonly class WahaDriver implements ProviderDriver, ProviderNumberChecker
             );
         }
 
-        $endpoint = rtrim($baseUrl, '/').'/api/sendText';
+        $audioMime = strtolower((string) ($message->attachment?->resolvedMimeType() ?? ''));
+
+        if ($message->attachment?->kind === AttachmentKind::Audio
+            && ! (str_starts_with($audioMime, 'audio/ogg') || str_starts_with($audioMime, 'audio/opus'))) {
+            return ProviderResult::rejected(
+                errorCode: 'attachment_format_unsupported',
+                errorMessage: 'WAHA menerima voice attachment dalam OGG/Opus.',
+            );
+        }
+
+        [$path, $payload] = $this->sendRequest($session, $message);
+        $endpoint = rtrim($baseUrl, '/').$path;
 
         try {
             $this->endpoints->assertAllowed($endpoint);
@@ -57,16 +69,61 @@ final readonly class WahaDriver implements ProviderDriver, ProviderNumberChecker
         }
 
         try {
-            $response = $request->post($endpoint, [
-                'session' => $session,
-                'chatId' => $message->wahaChatId(),
-                'text' => $message->body,
-            ]);
+            $response = $request->post($endpoint, $payload);
         } catch (ConnectionException $exception) {
             return $this->transportFailures->classifyException($exception);
         }
 
         return $this->responses->classify($response->status(), $response->body());
+    }
+
+    /**
+     * Map the outbound message onto the matching WAHA send endpoint.
+     *
+     * @return array{0: string, 1: array<string, mixed>}
+     */
+    private function sendRequest(string $session, OutboundMessage $message): array
+    {
+        $payload = [
+            'session' => $session,
+            'chatId' => $message->wahaChatId(),
+        ];
+        $attachment = $message->attachment;
+
+        if ($attachment === null) {
+            return ['/api/sendText', $payload + ['text' => $message->body]];
+        }
+
+        $file = [
+            'mimetype' => $attachment->resolvedMimeType(),
+            'url' => $attachment->url,
+        ];
+
+        if ($attachment->kind !== AttachmentKind::Audio) {
+            $file['filename'] = $attachment->resolvedFilename();
+        }
+
+        $payload['file'] = $file;
+        $caption = $message->caption();
+
+        if ($caption !== null) {
+            $payload['caption'] = $caption;
+        }
+
+        $path = match ($attachment->kind) {
+            AttachmentKind::Image => '/api/sendImage',
+            AttachmentKind::Document => '/api/sendFile',
+            AttachmentKind::Video => '/api/sendVideo',
+            AttachmentKind::Audio => '/api/sendVoice',
+        };
+
+        if ($attachment->kind === AttachmentKind::Audio) {
+            // WAHA voice messages must already be OGG/Opus; never trigger
+            // the provider's automatic transcoding path.
+            $payload['convert'] = false;
+        }
+
+        return [$path, $payload];
     }
 
     public function checkNumber(ProviderAccount $account, string $recipient): NumberCheckResult

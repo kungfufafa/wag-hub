@@ -2,7 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundAttachment;
 use App\Models\ProviderAccount;
+use App\Services\AttachmentService;
 use App\Services\WhatsAppInbox as Inbox;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -13,11 +16,17 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
+use Throwable;
 use UnitEnum;
 
 class WhatsAppInbox extends Page
 {
+    use WithFileUploads;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInbox;
 
     protected static string|UnitEnum|null $navigationGroup = 'Operasi';
@@ -42,6 +51,18 @@ class WhatsAppInbox extends Page
 
     public string $draft = '';
 
+    public ?TemporaryUploadedFile $attachmentFile = null;
+
+    public string $attachmentUrl = '';
+
+    public string $attachmentKind = 'document';
+
+    public string $submissionUuid = '';
+
+    public ?string $storedAttachmentId = null;
+
+    public ?string $attachmentError = null;
+
     public string $newRecipient = '';
 
     public bool $composingNew = false;
@@ -60,6 +81,7 @@ class WhatsAppInbox extends Page
 
     public function mount(): void
     {
+        $this->resetSubmission();
         $requested = (int) request()->query('provider');
         $channels = $this->channels();
 
@@ -77,8 +99,29 @@ class WhatsAppInbox extends Page
         $this->loadChats();
     }
 
+    public function updatedAttachmentFile(): void
+    {
+        $this->resetSubmission();
+        $this->attachmentError = null;
+
+        if ($this->attachmentFile !== null) {
+            $this->attachmentUrl = '';
+        }
+    }
+
+    public function updatedAttachmentUrl(): void
+    {
+        $this->resetSubmission();
+        $this->attachmentError = null;
+
+        if (trim($this->attachmentUrl) !== '') {
+            $this->attachmentFile = null;
+        }
+    }
+
     public function selectChat(string $chatId, string $title = '', ?int $providerId = null): void
     {
+        $this->resetSubmission();
         $this->providerId = $this->resolveProviderId($chatId, $providerId);
         $this->composingNew = false;
         $this->chatId = $chatId;
@@ -89,12 +132,14 @@ class WhatsAppInbox extends Page
 
     public function startNewChat(): void
     {
+        $this->resetSubmission();
         $this->composingNew = true;
         $this->chatId = null;
         $this->chatTitle = 'Obrolan baru';
         $this->messages = [];
         $this->newRecipient = '';
         $this->draft = '';
+        $this->clearAttachment();
         $this->status = null;
         $this->providerId ??= $this->channels()->first()?->id;
     }
@@ -110,6 +155,12 @@ class WhatsAppInbox extends Page
 
     public function send(): void
     {
+        $this->attachmentError = null;
+
+        if ($this->submissionUuid === '') {
+            $this->resetSubmission();
+        }
+
         $account = $this->selectedAccount();
 
         if ($account === null) {
@@ -120,22 +171,100 @@ class WhatsAppInbox extends Page
 
         $target = $this->composingNew ? $this->newRecipient : (string) $this->chatId;
         $body = trim($this->draft);
+        $attachment = null;
 
-        if ($target === '' || $body === '') {
-            Notification::make()->title('Isi nomor tujuan dan pesan.')->danger()->send();
+        if ($target === '') {
+            Notification::make()->title('Isi nomor tujuan.')->danger()->send();
 
             return;
         }
 
         try {
-            $dispatch = app(Inbox::class)->send($account, $target, $body);
+            if ($this->attachmentFile !== null) {
+                $stored = $this->storedAttachmentId !== null
+                    ? app(AttachmentService::class)->forUser($this->storedAttachmentId, (int) auth()->id())
+                    : app(AttachmentService::class)->createFromUpload($this->attachmentFile, userId: auth()->id());
+
+                if (! $stored->isAvailable()) {
+                    throw new InvalidArgumentException('Lampiran sudah kedaluwarsa atau tidak tersedia. Pilih file baru.');
+                }
+
+                $this->storedAttachmentId = (string) $stored->uuid;
+                $this->attachmentKind = $stored->media_kind;
+                $attachment = new OutboundAttachment(
+                    kind: $stored->kind(),
+                    url: 'attachment://'.$stored->uuid,
+                    filename: $stored->original_filename,
+                    mimeType: $stored->mime_type,
+                    attachmentId: (string) $stored->uuid,
+                    size: (int) $stored->size,
+                );
+            } elseif (trim($this->attachmentUrl) !== '') {
+                $kind = AttachmentKind::tryFrom($this->attachmentKind);
+
+                if ($kind === null) {
+                    throw new InvalidArgumentException('Pilih jenis lampiran.');
+                }
+
+                app(AttachmentService::class)->assertPublicUrl($this->attachmentUrl);
+                $attachment = new OutboundAttachment(
+                    kind: $kind,
+                    url: trim($this->attachmentUrl),
+                );
+            }
+
+            if ($attachment === null && $body === '') {
+                throw new InvalidArgumentException('Isi pesan atau pilih lampiran.');
+            }
+
+            if ($attachment?->kind === AttachmentKind::Audio && $body !== '') {
+                throw new InvalidArgumentException('Audio tidak mendukung caption.');
+            }
+        } catch (InvalidArgumentException $exception) {
+            $this->attachmentError = $exception->getMessage();
+            Notification::make()->title($exception->getMessage())->danger()->send();
+
+            return;
+        } catch (Throwable) {
+            $this->attachmentError = 'Lampiran gagal disimpan.';
+            Notification::make()->title('Lampiran gagal disimpan.')->danger()->send();
+
+            return;
+        }
+
+        try {
+            $dispatch = app(Inbox::class)->send($account, $target, $body, $attachment, $this->submissionUuid);
         } catch (InvalidArgumentException $exception) {
             Notification::make()->title($exception->getMessage())->danger()->send();
 
             return;
         }
 
+        if ($dispatch->result->errorCode === 'message_queued') {
+            $this->draft = '';
+            $this->clearAttachment();
+            $this->resetSubmission();
+            $this->composingNew = false;
+            $this->chatId = $dispatch->chatId;
+            $this->chatTitle = $this->chatTitle !== '' && $this->chatTitle !== 'Obrolan baru'
+                ? $this->chatTitle
+                : $dispatch->chatId;
+            $this->status = 'Diantrikan lewat '.$account->name;
+            Notification::make()->title('Pesan diantrikan.')->success()->send();
+            $this->loadChats();
+            $this->loadMessages();
+
+            return;
+        }
+
         if (! $dispatch->isAccepted()) {
+            $this->composingNew = false;
+            $this->chatId = $dispatch->chatId;
+            $this->chatTitle = $this->chatTitle !== '' && $this->chatTitle !== 'Obrolan baru'
+                ? $this->chatTitle
+                : $dispatch->chatId;
+            $this->loadChats();
+            $this->loadMessages();
             Notification::make()
                 ->title('Pesan belum terkirim')
                 ->body($dispatch->result->errorMessage ?? 'Provider menolak atau tidak menjawab.')
@@ -146,6 +275,8 @@ class WhatsAppInbox extends Page
         }
 
         $this->draft = '';
+        $this->clearAttachment();
+        $this->resetSubmission();
         $this->composingNew = false;
         $this->chatId = $dispatch->chatId;
         $this->chatTitle = $this->chatTitle !== '' && $this->chatTitle !== 'Obrolan baru'
@@ -184,6 +315,52 @@ class WhatsAppInbox extends Page
         return app(Inbox::class)->driverLabel($driver);
     }
 
+    public function attachmentSizeLabel(): string
+    {
+        $bytes = (int) ($this->attachmentFile?->getSize() ?: 0);
+
+        if ($bytes <= 0) {
+            return 'ukuran tidak diketahui';
+        }
+
+        if ($bytes >= 1024 * 1024) {
+            return number_format($bytes / (1024 * 1024), 2, ',', '.').' MB';
+        }
+
+        return number_format(max(1, $bytes / 1024), 0, ',', '.').' KB';
+    }
+
+    public function attachmentPreviewUrl(): ?string
+    {
+        $kind = AttachmentKind::tryFrom($this->attachmentKind);
+
+        if ($kind === null || $kind === AttachmentKind::Document) {
+            return null;
+        }
+
+        if ($this->attachmentFile !== null) {
+            try {
+                return $this->attachmentFile->temporaryUrl();
+            } catch (Throwable) {
+                return null;
+            }
+        }
+
+        $url = trim($this->attachmentUrl);
+
+        if ($url === '') {
+            return null;
+        }
+
+        try {
+            app(AttachmentService::class)->assertPublicUrl($url);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+
+        return $url;
+    }
+
     public function isActiveChat(array $chat): bool
     {
         return $this->chatId === ($chat['id'] ?? null)
@@ -193,6 +370,36 @@ class WhatsAppInbox extends Page
     public function getSubheading(): ?string
     {
         return 'Kirim dan baca chat langsung dari akun WAHA, GOWA, Fonnte, dan WABA.';
+    }
+
+    public function clearAttachment(): void
+    {
+        $this->attachmentFile = null;
+        $this->attachmentUrl = '';
+        $this->attachmentKind = 'document';
+        $this->attachmentError = null;
+        $this->resetSubmission();
+    }
+
+    public function updatedDraft(): void
+    {
+        $this->resetSubmission();
+    }
+
+    public function updatedNewRecipient(): void
+    {
+        $this->resetSubmission();
+    }
+
+    public function updatedProviderId(): void
+    {
+        $this->resetSubmission();
+    }
+
+    public function updatedAttachmentKind(): void
+    {
+        $this->resetSubmission();
+        $this->attachmentError = null;
     }
 
     public function content(Schema $schema): Schema
@@ -250,5 +457,11 @@ class WhatsAppInbox extends Page
         }
 
         $this->messages = app(Inbox::class)->messages($account, (string) $this->chatId);
+    }
+
+    private function resetSubmission(): void
+    {
+        $this->submissionUuid = (string) Str::uuid();
+        $this->storedAttachmentId = null;
     }
 }

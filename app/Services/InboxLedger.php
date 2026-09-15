@@ -6,6 +6,8 @@ use App\Domain\Inbox\InboxChat;
 use App\Domain\Inbox\InboxEvent;
 use App\Domain\Inbox\InboxMessage as InboxMessageView;
 use App\Infrastructure\WhatsApp\InboxPayload;
+use App\Models\Attachment;
+use App\Models\GatewayMessage;
 use App\Models\InboxConversation;
 use App\Models\InboxMessage;
 use App\Models\ProviderAccount;
@@ -16,24 +18,93 @@ final class InboxLedger
 {
     public function record(ProviderAccount $account, InboxEvent $event): void
     {
-        $conversation = $this->conversation($account, $event->chatId, $event->title, $event->isGroup);
         $messageId = mb_substr($event->messageId, 0, 190);
-        $existing = InboxMessage::query()
+        $gateway = $event->gatewayMessageId === null
+            ? GatewayMessage::query()
+                ->where('accepted_provider_account_id', $account->id)
+                ->where('provider_message_id', $messageId)
+                ->first()
+            : GatewayMessage::query()->find($event->gatewayMessageId);
+        $gatewayMessageId = $event->gatewayMessageId ?? $gateway?->getKey();
+        $attachment = $event->attachment
+            ?? $gateway?->outboundAttachment()?->toArray();
+        $kind = $event->kind !== 'text'
+            ? $event->kind
+            : (string) ($gateway?->message_type ?: $event->kind);
+        $conversation = $this->conversation($account, $event->chatId, $event->title, $event->isGroup);
+        $existing = $gatewayMessageId === null
+            ? null
+            : InboxMessage::query()
+                ->where('inbox_conversation_id', $conversation->id)
+                ->where('gateway_message_id', $gatewayMessageId)
+                ->first();
+        $providerExisting = InboxMessage::query()
             ->where('inbox_conversation_id', $conversation->id)
             ->where('provider_message_id', $messageId)
             ->first();
 
-        if ($existing === null) {
-            InboxMessage::query()->create([
-                'inbox_conversation_id' => $conversation->id,
-                'provider_message_id' => $messageId,
-                'from_me' => $event->fromMe,
-                'body' => $event->body,
-                'kind' => $event->kind,
-                'occurred_at' => Carbon::createFromTimestamp($event->occurredAt),
+        if ($existing !== null && $providerExisting !== null && $existing->getKey() !== $providerExisting->getKey()) {
+            $providerExisting->update([
+                'gateway_message_id' => $gatewayMessageId,
+                'body' => $providerExisting->body !== '' ? $providerExisting->body : $existing->body,
+                'attachment' => $providerExisting->attachment ?? $existing->attachment,
             ]);
-        } elseif ($existing->body === '' && $event->body !== '') {
-            $existing->update(['body' => $event->body]);
+            $existing->delete();
+            $existing = $providerExisting;
+        } else {
+            $existing ??= $providerExisting;
+        }
+
+        if ($existing === null) {
+            try {
+                InboxMessage::query()->create([
+                    'inbox_conversation_id' => $conversation->id,
+                    'gateway_message_id' => $gatewayMessageId,
+                    'provider_message_id' => $messageId,
+                    'from_me' => $event->fromMe,
+                    'body' => $event->body,
+                    'kind' => $kind,
+                    'attachment' => $attachment,
+                    'occurred_at' => Carbon::createFromTimestamp($event->occurredAt),
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                $existing = InboxMessage::query()
+                    ->where('inbox_conversation_id', $conversation->id)
+                    ->where('provider_message_id', $messageId)
+                    ->first();
+
+                if ($existing !== null && ($existing->gateway_message_id === null || $existing->attachment === null)) {
+                    $existing->update(array_filter([
+                        'gateway_message_id' => $existing->gateway_message_id === null ? $gatewayMessageId : null,
+                        'attachment' => $existing->attachment === null ? $attachment : null,
+                    ], static fn (mixed $value): bool => $value !== null));
+                }
+            }
+        } elseif (
+            ($existing->body === '' && $event->body !== '')
+            || ($existing->gateway_message_id === null && $gatewayMessageId !== null)
+            || ($existing->attachment === null && $attachment !== null)
+            || $existing->provider_message_id !== $messageId
+        ) {
+            $updates = [];
+
+            if ($existing->body === '' && $event->body !== '') {
+                $updates['body'] = $event->body;
+            }
+
+            if ($existing->gateway_message_id === null && $gatewayMessageId !== null) {
+                $updates['gateway_message_id'] = $gatewayMessageId;
+            }
+
+            if ($existing->attachment === null && $attachment !== null) {
+                $updates['attachment'] = $attachment;
+            }
+
+            if ($existing->provider_message_id !== $messageId) {
+                $updates['provider_message_id'] = $messageId;
+            }
+
+            $existing->update($updates);
         }
 
         $this->touchConversation($conversation, $event);
@@ -157,17 +228,28 @@ final class InboxLedger
 
         return InboxMessage::query()
             ->whereIn('inbox_conversation_id', $conversationIds)
+            ->with('gatewayMessage')
             ->orderBy('occurred_at')
             ->orderBy('id')
             ->get()
-            ->map(fn (InboxMessage $message): array => (new InboxMessageView(
-                id: $message->provider_message_id,
-                body: $message->body,
-                fromMe: $message->from_me,
-                timestamp: $message->occurred_at?->timezone((string) config('app.timezone'))->format('d M H.i'),
-                kind: $message->kind,
-                occurredAt: $message->occurred_at?->getTimestamp(),
-            ))->toArray())
+            ->map(function (InboxMessage $message): array {
+                $data = (new InboxMessageView(
+                    id: $message->provider_message_id,
+                    body: $message->body,
+                    fromMe: $message->from_me,
+                    timestamp: $message->occurred_at?->timezone((string) config('app.timezone'))->format('d M H.i'),
+                    kind: $message->kind,
+                    occurredAt: $message->occurred_at?->getTimestamp(),
+                    attachment: $this->presentAttachment($message->attachment),
+                ))->toArray();
+
+                if ($message->gatewayMessage !== null) {
+                    $data['gateway_message_id'] = (string) $message->gatewayMessage->uuid;
+                    $data['delivery_status'] = (string) $message->gatewayMessage->status;
+                }
+
+                return $data;
+            })
             ->all();
     }
 
@@ -221,7 +303,11 @@ final class InboxLedger
         $occurred = Carbon::createFromTimestamp($event->occurredAt);
 
         if ($conversation->last_message_at === null || $occurred->greaterThan($conversation->last_message_at)) {
-            $conversation->preview = mb_substr($event->body, 0, 500);
+            $conversation->preview = mb_substr(
+                $event->body !== '' ? $event->body : ($event->attachment['kind'] ?? '[Lampiran]'),
+                0,
+                500,
+            );
             $conversation->last_from_me = $event->fromMe;
             $conversation->last_message_at = $occurred;
         }
@@ -243,5 +329,39 @@ final class InboxLedger
         return $current === ''
             || $current === $chatId
             || $current === InboxPayload::peerKey($chatId);
+    }
+
+    /** @param array<string, mixed>|null $attachment */
+    private function presentAttachment(?array $attachment): ?array
+    {
+        if ($attachment === null) {
+            return null;
+        }
+
+        $id = $attachment['id'] ?? null;
+
+        if (! is_string($id) || $id === '') {
+            if (is_string($attachment['url'] ?? null) && trim($attachment['url']) !== '') {
+                $attachment['status'] = 'external';
+                $attachment['download_url'] = $attachment['url'];
+            }
+
+            return $attachment;
+        }
+
+        if (is_string($id) && $id !== '') {
+            $stored = Attachment::query()->where('uuid', $id)->first();
+
+            if ($stored !== null) {
+                $attachment['filename'] ??= $stored->original_filename;
+                $attachment['mime_type'] ??= $stored->mime_type;
+                $attachment['status'] = $stored->isAvailable() ? $stored->status : 'expired';
+                $attachment['download_url'] = $stored->isAvailable()
+                    ? app(AttachmentService::class)->temporaryUrl($stored)
+                    : null;
+            }
+        }
+
+        return $attachment;
     }
 }

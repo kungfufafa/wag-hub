@@ -4,7 +4,8 @@ namespace App\Infrastructure\WhatsApp;
 
 use App\Contracts\WhatsApp\ProviderDriver;
 use App\Contracts\WhatsApp\ProviderNumberChecker;
-use App\Domain\Delivery\OutboundText;
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundMessage;
 use App\Domain\Delivery\ProviderResult;
 use App\Domain\NumberCheck\NumberCheckResult;
 use App\Models\ProviderAccount;
@@ -20,7 +21,7 @@ final readonly class FonnteDriver implements ProviderDriver, ProviderNumberCheck
         private ProviderEndpointGuard $endpoints,
     ) {}
 
-    public function send(ProviderAccount $account, OutboundText $message): ProviderResult
+    public function send(ProviderAccount $account, OutboundMessage $message): ProviderResult
     {
         $configuration = $this->configuration($account);
         $endpoint = $this->nonEmptyString($configuration['endpoint'] ?? null);
@@ -30,6 +31,21 @@ final readonly class FonnteDriver implements ProviderDriver, ProviderNumberCheck
             return ProviderResult::providerFailed(
                 errorCode: 'provider_configuration_invalid',
                 errorMessage: 'Konfigurasi Fonnte belum lengkap.',
+            );
+        }
+
+        if ($message->attachment?->size !== null
+            && $message->attachment->size > (int) ($configuration['attachment_max_bytes'] ?? 4 * 1024 * 1024)) {
+            return ProviderResult::rejected(
+                errorCode: 'attachment_size_unsupported',
+                errorMessage: 'Ukuran attachment melebihi batas Fonnte yang dikonfigurasi.',
+            );
+        }
+
+        if ($message->attachment !== null && ! $this->supportsAttachment($message->attachment->kind, $message->attachment->resolvedMimeType())) {
+            return ProviderResult::rejected(
+                errorCode: 'attachment_format_unsupported',
+                errorMessage: 'Format attachment ini tidak didukung Fonnte.',
             );
         }
 
@@ -49,25 +65,50 @@ final readonly class FonnteDriver implements ProviderDriver, ProviderNumberCheck
                 ->withoutRedirecting()
                 ->timeout($this->timeout($account))
                 ->connectTimeout(min(5, $this->timeout($account)))
-                ->post($endpoint, [
-                    [
-                        'name' => 'target',
-                        'contents' => $message->recipient,
-                    ],
-                    [
-                        'name' => 'message',
-                        'contents' => $message->body,
-                    ],
-                    [
-                        'name' => 'countryCode',
-                        'contents' => '62',
-                    ],
-                ]);
+                ->post($endpoint, $this->sendParts($message));
         } catch (ConnectionException $exception) {
             return $this->transportFailures->classifyException($exception);
         }
 
         return $this->responses->classify($response->status(), $response->body());
+    }
+
+    /**
+     * Fonnte uses a single /send endpoint; attachments ride along as `url`
+     * (public file URL) and the text doubles as the caption.
+     *
+     * @return list<array{name: string, contents: string}>
+     */
+    private function sendParts(OutboundMessage $message): array
+    {
+        $fields = [
+            'target' => $message->recipient,
+            'countryCode' => '62',
+        ];
+        $attachment = $message->attachment;
+
+        if ($attachment === null) {
+            $fields['message'] = $message->body;
+        } else {
+            $fields['url'] = $attachment->url;
+            $caption = $message->caption();
+
+            if ($caption !== null) {
+                $fields['message'] = $caption;
+            }
+
+            if ($attachment->kind->supportsFilename() || $attachment->kind->value === 'audio') {
+                $fields['filename'] = $attachment->resolvedFilename();
+            }
+        }
+
+        $parts = [];
+
+        foreach ($fields as $name => $contents) {
+            $parts[] = ['name' => $name, 'contents' => $contents];
+        }
+
+        return $parts;
     }
 
     public function checkNumber(ProviderAccount $account, string $recipient): NumberCheckResult
@@ -153,5 +194,25 @@ final readonly class FonnteDriver implements ProviderDriver, ProviderNumberCheck
         }
 
         return false;
+    }
+
+    private function supportsAttachment(AttachmentKind $kind, string $mimeType): bool
+    {
+        $mimeType = strtolower(trim(explode(';', $mimeType, 2)[0]));
+
+        return match ($kind) {
+            AttachmentKind::Image => in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp'], true),
+            AttachmentKind::Document => in_array($mimeType, [
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'text/csv',
+                'text/plain',
+            ], true),
+            AttachmentKind::Video => $mimeType === 'video/mp4',
+            AttachmentKind::Audio => $mimeType === 'audio/mpeg',
+        };
     }
 }

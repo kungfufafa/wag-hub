@@ -4,12 +4,18 @@ namespace Tests\Feature\Admin;
 
 use App\Filament\Pages\WhatsAppInbox;
 use App\Filament\Resources\ProviderAccounts\Pages\ListProviderAccounts;
+use App\Jobs\DispatchGatewayMessage;
+use App\Models\GatewayMessage;
 use App\Models\InboxMessage;
 use App\Models\ProviderAccount;
 use App\Models\User;
+use App\Services\GatewayMessageDispatcher;
+use App\Services\WhatsAppInbox as InboxService;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -31,12 +37,51 @@ class WhatsAppInboxTest extends TestCase
 
     public function test_an_administrator_can_open_the_inbox_page(): void
     {
-        $this->get('/panel/inbox')
+        $html = $this->get('/panel/inbox')
             ->assertOk()
             ->assertSee('wa-inbox', false)
             ->assertSee('Percakapan')
+            ->assertSee('Cari nama, nomor, atau akun')
+            ->assertSee('Tulis pesan')
+            ->assertSee('Kirim')
+            ->assertSee('Obrolan baru')
+            ->assertSee('Muat ulang')
             ->assertSee('Kirim dan baca chat langsung dari akun WAHA, GOWA, Fonnte, dan WABA.')
-            ->assertDontSee('>Kanal<', false);
+            ->assertDontSee('>Kanal<', false)
+            ->getContent();
+
+        $this->assertIdleComposerIsCompact($html);
+        $this->assertMatchesRegularExpression(
+            '/class="[^"]*wa-inbox-thread-title[^"]*"/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/wa-inbox-thread-name[^>]*>\s*Pilih percakapan\s*</',
+            $html,
+        );
+    }
+
+    public function test_idle_composer_keeps_lampiran_collapsed_until_an_attachment_is_chosen(): void
+    {
+        $page = Livewire::test(WhatsAppInbox::class);
+
+        $this->assertIdleComposerIsCompact($page->html());
+
+        $open = $page
+            ->set('attachmentUrl', 'https://cdn.example.com/inbox/photo.jpg')
+            ->html();
+
+        $this->assertMatchesRegularExpression(
+            '/id="wa-inbox-attachment-panel"[^>]*data-expanded="true"/',
+            $open,
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/id="wa-inbox-attachment-panel"[^>]*data-expanded="false"/',
+            $open,
+        );
+        $this->assertStringContainsString('aria-label="Jenis lampiran"', $open);
+        $this->assertStringContainsString('Atau URL publik HTTP(S) lampiran', $open);
+        $this->assertStringContainsString('type="file"', $open);
     }
 
     public function test_waha_inbox_lists_inbound_and_outbound_then_sends_a_reply(): void
@@ -108,14 +153,23 @@ class WhatsAppInboxTest extends TestCase
             ->set('providerId', $provider['id'])
             ->assertSee('Budi')
             ->assertSee('Halo Hub')
+            ->assertSee('wa-inbox-item-preview', false)
+            ->assertSee('wa-inbox-item-foot', false)
             ->call('selectChat', '6281234567890@c.us', 'Budi')
             ->assertSee('Siap')
             ->assertSee('Balasan pelanggan')
             ->assertSee('wa-bubble-text', false)
+            ->assertSee('wa-bubble is-in', false)
+            ->assertSee('wa-bubble is-out', false)
             ->set('draft', 'Balasan dari Hub')
             ->call('send')
             ->assertNotified('Pesan terkirim.')
             ->assertSee('Balasan dari Hub');
+
+        $this->assertMatchesRegularExpression(
+            '/wa-inbox-thread-name[^>]*>\s*Budi\s*</',
+            $page->html(),
+        );
 
         Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'sendText')
             && $request['text'] === 'Balasan dari Hub'
@@ -161,6 +215,53 @@ class WhatsAppInboxTest extends TestCase
         $this->assertTrue(InboxMessage::query()->first()->from_me);
     }
 
+    public function test_retrying_a_failed_inbox_submission_enqueues_delivery_again(): void
+    {
+        $provider = $this->createProviderAccount('waha', 'waha-inbox-retry', [
+            'base_url' => 'https://waha-inbox-retry.test',
+            'session' => 'default',
+            'api_key' => 'waha-secret',
+        ]);
+
+        Http::fake([
+            'waha-inbox-retry.test/*' => Http::sequence()
+                ->push(['error' => 'invalid'], 422)
+                ->push(['id' => 'waha-inbox-retry-ok'], 201),
+        ]);
+
+        $inbox = app(InboxService::class);
+        $submissionUuid = (string) Str::uuid();
+        $account = ProviderAccount::query()->findOrFail($provider['id']);
+
+        $first = $inbox->send($account, '081234567890', 'Pesan yang gagal', submissionUuid: $submissionUuid);
+        $this->assertFalse($first->isAccepted());
+
+        $message = GatewayMessage::query()->where('origin', 'inbox')->sole();
+        $this->assertTrue($message->isSafeToRetry());
+
+        Queue::fake();
+
+        $second = $inbox->send($account, '081234567890', 'Pesan yang gagal', submissionUuid: $submissionUuid);
+
+        Queue::assertPushed(
+            DispatchGatewayMessage::class,
+            fn (DispatchGatewayMessage $job): bool => $job->messageId === (int) $message->id,
+        );
+        $this->assertSame('queued', $message->fresh()->status);
+        $this->assertSame('message_queued', $second->result->errorCode);
+
+        (new DispatchGatewayMessage((int) $message->id))->handle(
+            app(GatewayMessageDispatcher::class),
+        );
+
+        $this->assertSame('provider_accepted', $message->fresh()->status);
+        $this->assertSame('waha-inbox-retry-ok', $message->fresh()->provider_message_id);
+        $this->assertDatabaseCount('gateway_messages', 1);
+        Http::assertSentCount(2);
+        Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'sendText')
+            && $request['text'] === 'Pesan yang gagal');
+    }
+
     public function test_gowa_inbox_lists_chats_from_the_gateway(): void
     {
         $provider = $this->createProviderAccount('gowa', 'gowa-inbox', [
@@ -199,13 +300,19 @@ class WhatsAppInboxTest extends TestCase
             'token' => 'fonnte-secret',
         ]);
 
-        Livewire::test(WhatsAppInbox::class)
+        $page = Livewire::test(WhatsAppInbox::class)
             ->set('providerId', $provider['id'])
             ->assertSee('Belum ada percakapan')
             ->assertDontSee('tidak menarik riwayat')
             ->call('startNewChat')
             ->assertSet('composingNew', true)
-            ->assertSee('Nomor tujuan');
+            ->assertSee('Nomor tujuan')
+            ->assertSee('Obrolan baru');
+
+        $this->assertMatchesRegularExpression(
+            '/wa-inbox-thread-name[^>]*>\s*Obrolan baru\s*</',
+            $page->html(),
+        );
     }
 
     public function test_inbox_lists_chats_from_every_wrapped_account_together(): void
@@ -544,5 +651,19 @@ class WhatsAppInboxTest extends TestCase
 
         Livewire::test(ListProviderAccounts::class)
             ->assertTableActionVisible('inbox', $provider);
+    }
+
+    private function assertIdleComposerIsCompact(string $html): void
+    {
+        $this->assertStringContainsString('wa-inbox-attach-toggle', $html);
+        $this->assertStringContainsString('aria-label="Lampiran"', $html);
+        $this->assertMatchesRegularExpression(
+            '/id="wa-inbox-attachment-panel"[^>]*data-expanded="false"/',
+            $html,
+        );
+        $this->assertMatchesRegularExpression(
+            '/id="wa-inbox-attachment-panel"[^>]*\shidden(\s|>)/',
+            $html,
+        );
     }
 }

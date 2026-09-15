@@ -4,7 +4,7 @@ namespace App\Infrastructure\WhatsApp;
 
 use App\Contracts\WhatsApp\ProviderDriver;
 use App\Contracts\WhatsApp\ProviderNumberChecker;
-use App\Domain\Delivery\OutboundText;
+use App\Domain\Delivery\OutboundMessage;
 use App\Domain\Delivery\ProviderResult;
 use App\Domain\NumberCheck\NumberCheckResult;
 use App\Models\ProviderAccount;
@@ -18,7 +18,7 @@ final readonly class ProviderDriverManager
         private WabaDriver $waba,
     ) {}
 
-    public function send(ProviderAccount $account, OutboundText $message): ProviderResult
+    public function send(ProviderAccount $account, OutboundMessage $message): ProviderResult
     {
         $driver = $this->resolve((string) $account->driver);
 

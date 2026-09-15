@@ -65,6 +65,9 @@ class IntegrationDocumentation extends Page
                         Placeholder::make('endpoint_send')
                             ->label('Kirim pesan')
                             ->content(new HtmlString('<code class="text-xs">POST /api/v1/messages</code>')),
+                        Placeholder::make('endpoint_attachment')
+                            ->label('Upload attachment')
+                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/attachments</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">multipart file, maksimum 16 MB</div>')),
                         Placeholder::make('endpoint_status')
                             ->label('Status pesan')
                             ->content(new HtmlString('<code class="text-xs">GET /api/v1/messages/{uuid}</code>')),
@@ -140,6 +143,42 @@ curl -X POST https://gateway.example.com/api/v1/messages \
     "route_key": "default",
     "expires_at": "2030-01-01T12:05:00+07:00",
     "client_reference": "otp-0001"
+  }'
+BASH).
+                                '</pre>'
+                            )),
+                    ])
+                    ->columnSpanFull(),
+
+                Section::make('Contoh: kirim lampiran (async)')
+                    ->description('Upload file ke POST /api/v1/attachments lalu gunakan data.id, atau gunakan attachment.url publik. Satu pesan memiliki satu lampiran; caption maksimal 1.024 karakter dan audio tanpa caption.')
+                    ->icon(Heroicon::OutlinedPaperClip)
+                    ->schema([
+                        Placeholder::make('curl_send_attachment')
+                            ->hiddenLabel()
+                            ->content(new HtmlString(
+                                '<pre class="overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs leading-5 text-gray-100 dark:bg-black/40">'.
+                                e(<<<'BASH'
+curl -X POST https://gateway.example.com/api/v1/messages \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer wgh_TOKEN_ANDA' \
+  -H 'Idempotency-Key: invoice-0001' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "recipient": {"type": "phone", "value": "081234567890"},
+    "message": {
+      "type": "document",
+      "text": "Terlampir invoice Anda.",
+      "attachment": {
+        "url": "https://cdn.example.com/invoices/INV-0001.pdf",
+        "filename": "INV-0001.pdf",
+        "mime_type": "application/pdf"
+      }
+    },
+    "purpose": "transactional",
+    "mode": "async",
+    "route_key": "default",
+    "client_reference": "invoice-0001"
   }'
 BASH).
                                 '</pre>'

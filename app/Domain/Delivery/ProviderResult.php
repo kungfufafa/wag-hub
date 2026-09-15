@@ -40,11 +40,12 @@ final readonly class ProviderResult
         ?int $httpStatus = null,
         ?string $errorCode = null,
         ?string $errorMessage = null,
+        RetryDisposition $retryDisposition = RetryDisposition::FallbackAllowed,
     ): self {
         return new self(
             outcome: ProviderOutcome::Rejected,
             deliveryCertainty: DeliveryCertainty::NotSent,
-            retryDisposition: RetryDisposition::FallbackAllowed,
+            retryDisposition: $retryDisposition,
             httpStatus: $httpStatus,
             errorCode: $errorCode,
             errorMessage: $errorMessage,

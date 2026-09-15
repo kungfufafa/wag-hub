@@ -55,7 +55,16 @@ Status: Reviewed
 | TC-049 | Pilot unit | FR-014 | web-shelf adapter | Hub validation/auth/failed response | `send()` false + safe log | P0 |
 | TC-050 | Pilot unit | FR-014/FR-003 | caller supplies stable business-event context | retry the same reminder after ambiguous transport failure | same keyed request identity, Idempotency-Key, client reference, and canonical body | P0 |
 | TC-051 | Pilot security | FR-014/NFR-001 | migrated config | inspect code/env contract | no provider credential required by Shelf adapter | P0 |
+| TC-052 | API | FR-015 | active app/token | multipart upload image/document/video/audio | 201 with UUID, owner, checksum, MIME, size, and media kind | P0 |
+| TC-053 | API/Security | FR-015/BR-011 | two apps/admin | cross-owner attachment ID or both id+url | rejected without message/provider side effects | P0 |
+| TC-054 | API | FR-015 | attachment upload | missing/oversized/mismatched MIME-extension | validation error; no partial file/metadata | P0 |
+| TC-055 | Integration | FR-015 | private attachment + provider | dispatch/retry | fresh 24-hour signed URL per attempt; stable ID remains hashed | P0 |
+| TC-056 | Integration | FR-015/BR-012 | deleted/corrupt private file | dispatch/retry | failed before provider HTTP; provider health unchanged; no text fallback | P0 |
+| TC-057 | Integration | FR-015 | WAHA/Fonnte/GOWA/WABA | image/document/video/audio contracts and provider limits | correct endpoint/payload or clear unsupported reason | P0 |
+| TC-058 | Feature | FR-015 | active admin Inbox | upload/URL, preview, caption/clear, duplicate submit | progress/error visible; one ledger message and one provider call | P0 |
+| TC-059 | Feature | FR-015 | history refresh | accepted/failed/unknown attachment message | media card/player/download and delivery status persist; provider echo deduped by identity | P1 |
+| TC-060 | Console | FR-015 | orphan/expired/pending files | run cleanup scheduler | orphan 24h removed, terminal 90d removed, queued/processing protected, metadata retained | P0 |
 
 ## Coverage summary
 
-Every FR-001–FR-014, UC-001–UC-004, API-001/API-002/JOB-001/INT-001/UI-001–UI-005, dan AC-001–AC-017 has at least one test case. Provider delivery/read webhook and production HA remain excluded as documented scope.
+Every FR-001–FR-015, UC-001–UC-004, API-001/API-002/JOB-001/INT-001/UI-001–UI-005, dan AC-001–AC-017 has at least one test case. Provider delivery/read webhook and production HA remain excluded as documented scope.

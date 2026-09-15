@@ -5,7 +5,7 @@ Derived from: UC-001–UC-004 0.1.0 (implementation exception approved)
 
 ## Domain overview
 
-Lima konteks saling terhubung: Client Access (`ClientApplication`, `ApiCredential`), Provider Configuration (`ProviderAccount`), Routing (`RoutingPolicy`, `RoutingStep`), Delivery Ledger (`GatewayMessage`, `MessageAttempt`, `MessageEvent`), dan Number Check Ledger (`NumberCheckRequest`, `NumberCheckAttempt`). Queue job hanya membawa message ID; plaintext body dan credential dibaca oleh worker pada saat diperlukan.
+Enam konteks saling terhubung: Client Access (`ClientApplication`, `ApiCredential`), Attachment Storage (`Attachment`), Provider Configuration (`ProviderAccount`), Routing (`RoutingPolicy`, `RoutingStep`), Delivery Ledger (`GatewayMessage`, `MessageAttempt`, `MessageEvent`), dan Number Check Ledger (`NumberCheckRequest`, `NumberCheckAttempt`). Queue job hanya membawa message ID; plaintext body dan credential dibaca oleh worker pada saat diperlukan.
 
 ## Entities
 
@@ -101,17 +101,20 @@ Used by: UC-001, UC-002, UC-004
 |---|---|---|---|---|
 | id | bigint | yes | PK | Internal |
 | uuid | uuid | yes | unique/public | Public ID |
-| client_application_id | FK | yes | ENT-001 | Internal |
+| client_application_id | FK | no | ENT-001; null for dashboard/Inbox messages | Internal |
 | routing_policy_id | FK | no | selected policy snapshot reference | Internal |
 | accepted_provider_account_id | FK | no | provider accepted | Internal |
 | idempotency_key | string(160) | yes | unique with application | Sensitive reference |
+| inbox_submission_uuid | UUID | no | unique for Inbox dashboard submissions; null for API messages | Internal |
 | payload_hash | char(64) | yes | hash of canonical payload | Internal |
 | correlation_id | uuid/string | yes | generated/client-safe | Public tracing |
 | client_reference | string(160) | no | optional, bounded | Sensitive reference |
 | recipient | encrypted text | yes | canonical phone | PII secret |
 | recipient_hash | char(64) | yes | keyed HMAC | Sensitive-derived |
 | recipient_last4 | char(4) | yes | masked display | PII limited |
-| body | encrypted long text | yes | 1–10,000 chars | Message secret |
+| body | encrypted long text | yes | text: 1–10,000 chars; attachment caption: 0–1,024 chars (empty string when no caption) | Message secret |
+| message_type | string(16) | yes | text/image/document/video/audio, default `text` | Internal/public |
+| attachment | encrypted text (JSON) | no | `{id, kind, filename, mime_type, size}` for private upload or `{kind, url, filename, mime_type}` for external URL; null for text messages. Signed URL is generated per attempt and is never hashed. | Message secret |
 | purpose | string(40) | yes | otp/transactional/notification | Internal |
 | route_key | string(80) | yes | default `default` | Internal |
 | mode | string(16) | yes | sync/async | Internal |
@@ -195,6 +198,22 @@ Used by: Number check API
 | reason_code | string(120) | no | normalized; no raw response | Internal |
 | started_at, finished_at, timestamps | datetime | yes | lifecycle | Internal |
 
+### Attachment Storage — Attachment
+
+Purpose: Metadata dan objek privat yang dapat direferensikan satu kali atau lebih oleh pesan API/Inbox.
+
+| Field | Type | Required | Validation/default | Sensitivity |
+|---|---|---|---|---|
+| id, uuid | bigint, uuid | yes | PK + unique/public upload ID | Internal/public ID |
+| client_application_id | FK | no | owner API; null for dashboard uploads | Internal |
+| user_id | FK | no | owner administrator; null for API uploads | Internal |
+| disk, path | string | yes | private disk, random storage name | Sensitive/internal |
+| original_filename | string(255) | yes | sanitized display name | Internal |
+| mime_type, media_kind | string | yes | file inspection + supported image/document/video/audio | Internal |
+| size, checksum | unsigned bigint, char(64) | yes | <=16 MB, SHA-256 | Internal |
+| status | string | yes | active/expired | Internal |
+| last_referenced_at, expires_at, deleted_at | datetime | no | orphan 24h; used retention 90d after terminal message | Internal |
+
 ## Relationships
 
 | From | Relationship | To | Cardinality | Rule |
@@ -208,6 +227,8 @@ Used by: Number check API
 | ENT-006 | records | ENT-008 | 1:N | event append-only |
 | ENT-001/002 | requests through | ENT-009 | 1:N | application and credential remain traceable |
 | ENT-009 | records | ENT-010 | 1:N | provider sequence append-oriented |
+| Attachment | owned by | ENT-001 or administrator | 1:1 | Exactly one owner scope; API cannot access dashboard files and vice versa |
+| ENT-006 | references | Attachment | 0:1 per message | Stable attachment ID is encrypted in the message; signed URL is derived per attempt |
 | ENT-003 | participates through | ENT-010 | 1:N | result or skip reason is retained |
 
 ## State transitions
@@ -232,7 +253,8 @@ queue handoff recovery: queued + enqueue_failed -> enqueue_recovered
 - Processing stale tanpa attempt direqueue untuk async dan ditutup sebagai failed-safe untuk sync; started attempt stale tidak pernah dikirim ulang otomatis.
 - Foreign record konfigurasi memakai soft delete; delivery ledger tidak cascade-delete.
 - Index utama: message `(app,status,created_at)`, `(recipient_hash,created_at)`, attempt `(message,sequence)`, policy `(app,key,purpose,is_active)`.
-- Scheduled pruning belum diimplementasikan pada MVP. Deployment owner harus menetapkan purge manual sampai kebijakan retensi final dan command pruning tersedia.
+- Attachment upload menyimpan objek privat dengan checksum, MIME hasil pemeriksaan, owner, dan status. File yang belum pernah direferensikan dihapus setelah 24 jam; file terpakai dipertahankan 90 hari sejak referensi terakhir.
+- Provider dan dashboard memakai signed URL 24 jam; GET, HEAD, dan Range tersedia melalui route signed. Metadata dan ledger tetap disimpan setelah file kedaluwarsa.
 
 ## Diagram/schema
 
@@ -247,8 +269,10 @@ erDiagram
     GATEWAY_MESSAGE ||--o{ MESSAGE_ATTEMPT : attempts
     PROVIDER_ACCOUNT ||--o{ MESSAGE_ATTEMPT : handles
     GATEWAY_MESSAGE ||--o{ MESSAGE_EVENT : records
+    CLIENT_APPLICATION ||--o{ ATTACHMENT : owns
+    GATEWAY_MESSAGE o|--|| ATTACHMENT : references
 ```
 
 ## Validation record
 
-Setiap data read/write pada UC-001–UC-004 tercakup. Model berstatus Reviewed; exception implementasi mengikuti persetujuan MVP. OQ-001 retention tetap terbuka untuk production.
+Setiap data read/write pada UC-001–UC-004 tercakup. Model berstatus Reviewed; exception implementasi mengikuti persetujuan MVP. Retensi attachment mengikuti konfigurasi deployment (default 90 hari).
