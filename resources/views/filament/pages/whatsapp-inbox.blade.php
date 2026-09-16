@@ -38,10 +38,16 @@
         min-height: min(70vh, 44rem);
         max-height: calc(100vh - 12rem);
         overflow: hidden;
+        border: 1px solid var(--wa-line);
+        border-radius: var(--wa-radius);
         background: var(--mky-surface, white);
         color: inherit;
         font-size: 0.875rem;
         line-height: 1.4;
+    }
+
+    .dark .wa-inbox {
+        --wa-muted: var(--gray-400);
     }
 
     .wa-inbox *,
@@ -121,7 +127,11 @@
     }
 
     .wa-inbox-item:hover {
-        background: var(--wa-panel);
+        background: var(--gray-50);
+    }
+
+    .dark .wa-inbox-item:hover {
+        background: rgb(255 255 255 / 0.03);
     }
 
     .wa-inbox-item.is-active {
@@ -260,8 +270,14 @@
     }
 
     .wa-bubble.is-in {
-        background: var(--mky-surface, white);
+        background: var(--gray-50);
         border: 1px solid var(--wa-line);
+    }
+
+    .dark .wa-bubble.is-in {
+        background: var(--gray-800);
+        border-color: var(--gray-700);
+        color: var(--gray-100);
     }
 
     .wa-bubble.is-out {
@@ -299,8 +315,13 @@
         gap: 0.4rem;
         padding: 0.5rem 0.55rem;
         border: 1px solid var(--wa-line);
-        border-radius: var(--wa-radius);
+        border-radius: 0.5rem;
         background: var(--wa-panel);
+    }
+
+    .dark .wa-attachment-tools {
+        background: rgb(255 255 255 / 0.03);
+        border-color: var(--gray-700);
     }
 
     .wa-attachment-tools[hidden] {
@@ -401,11 +422,19 @@
         width: 2.5rem;
         height: 2.5rem;
         margin: 0;
-        border: 1px solid var(--wa-line);
-        border-radius: var(--wa-radius);
+        border: 1px solid var(--gray-300);
+        border-radius: 0.5rem;
         padding: 0;
-        background: var(--wa-panel);
+        background: var(--mky-surface, white);
+        color: var(--gray-500);
         cursor: pointer;
+        transition: border-color 0.15s, background 0.15s;
+    }
+
+    .dark .wa-inbox-attach-toggle {
+        border-color: var(--gray-700);
+        background: rgb(255 255 255 / 0.05);
+        color: var(--gray-400);
     }
 
     .wa-inbox-attach-toggle.is-on,
@@ -414,21 +443,51 @@
         border-color: var(--gray-400);
     }
 
+    .dark .wa-inbox-attach-toggle.is-on,
+    .dark .wa-inbox-attach-toggle[aria-expanded="true"] {
+        background: rgb(255 255 255 / 0.1);
+        border-color: var(--gray-600);
+    }
+
     .wa-inbox input,
     .wa-inbox textarea,
     .wa-inbox select {
         width: 100%;
         min-width: 0;
+        min-height: 2.5rem;
         margin: 0;
-        border: 1px solid var(--wa-line);
-        border-radius: var(--wa-radius);
-        padding: 0.5rem 0.65rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.75rem;
         background: var(--mky-surface, white);
-        color: inherit;
+        color: var(--gray-950);
         font: inherit;
+        font-size: 0.875rem;
         line-height: 1.4;
         outline: none;
+        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .wa-inbox input::placeholder,
+    .wa-inbox textarea::placeholder {
+        color: var(--gray-400);
+    }
+
+    .dark .wa-inbox input,
+    .dark .wa-inbox textarea,
+    .dark .wa-inbox select {
+        border-color: var(--gray-700);
+        background: rgb(255 255 255 / 0.05);
+        color: var(--gray-100);
         box-shadow: none;
+    }
+
+    .wa-inbox input:focus,
+    .wa-inbox textarea:focus,
+    .wa-inbox select:focus {
+        border-color: var(--primary-500);
+        box-shadow: 0 0 0 1px var(--primary-500);
     }
 
     .wa-inbox input:disabled,
@@ -442,15 +501,20 @@
         position: relative;
         display: flex;
         align-items: center;
-        min-height: 2.35rem;
+        min-height: 2.5rem;
         overflow: hidden;
-        border: 1px solid var(--wa-line);
-        border-radius: var(--wa-radius);
-        padding: 0 0.7rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 0.5rem;
+        padding: 0 0.75rem;
         background: var(--mky-surface, white);
         color: var(--wa-muted);
         cursor: pointer;
         font-size: 0.8rem;
+    }
+
+    .dark .wa-inbox-file {
+        border-color: var(--gray-700);
+        background: rgb(255 255 255 / 0.05);
     }
 
     .wa-inbox-file input[type="file"] {
@@ -477,12 +541,19 @@
         height: 2.5rem;
         margin: 0;
         border: 0;
-        border-radius: var(--wa-radius);
-        padding: 0 0.95rem;
+        border-radius: 0.5rem;
+        padding: 0 1.1rem;
         background: var(--primary-600);
         color: white;
+        font-size: 0.875rem;
         font-weight: 600;
         cursor: pointer;
+        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        transition: background 0.15s;
+    }
+
+    .wa-inbox-send:hover:not(:disabled) {
+        background: var(--primary-500);
     }
 
     .wa-inbox-send:disabled {
