@@ -1,11 +1,8 @@
 <x-filament-panels::page>
 @php $graphs = $this->graphs(); @endphp
-{{-- Single wrapper so the page slot has exactly one root element. --}}
+{{-- Single wrapper so the page slot has exactly one root element.
+     Drawflow + builder JS are loaded via FilamentAsset (SPA-safe) / lazily in init(). --}}
 <div class="fb-root">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.css">
-<script src="https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.js"></script>
-<script src="{{ asset('js/flow-builder.js') }}"></script>
-
 {{-- Toolbar in a native Filament section. --}}
 <x-filament::section>
     <div class="fb-bar">

@@ -32,7 +32,39 @@ window.flowBuilder = () => ({
 
     init() {
         if (this.editor) return;
-        if (typeof Drawflow === 'undefined') { console.error('Drawflow belum termuat.'); return; }
+        // SPA-safe: Drawflow may not be loaded yet when Alpine runs x-init.
+        this.ensureDrawflow().then(() => this.build());
+    },
+
+    // Lazy-load the Drawflow lib (CDN) once; resolves when window.Drawflow exists.
+    ensureDrawflow() {
+        return new Promise((resolve) => {
+            if (typeof Drawflow !== 'undefined') return resolve();
+
+            if (!document.getElementById('drawflow-css')) {
+                const link = document.createElement('link');
+                link.id = 'drawflow-css';
+                link.rel = 'stylesheet';
+                link.href = 'https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.css';
+                document.head.appendChild(link);
+            }
+
+            let s = document.getElementById('drawflow-js');
+            if (!s) {
+                s = document.createElement('script');
+                s.id = 'drawflow-js';
+                s.src = 'https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.js';
+                document.head.appendChild(s);
+            }
+
+            const ready = () => (typeof Drawflow !== 'undefined' ? resolve() : setTimeout(ready, 50));
+            s.addEventListener('load', ready);
+            ready();
+        });
+    },
+
+    build() {
+        if (this.editor || typeof Drawflow === 'undefined') return;
 
         this.editor = new Drawflow(this.$refs.canvas);
         this.editor.reroute = true;
