@@ -8,7 +8,17 @@
   Gateway Laravel terpusat untuk pemilihan provider WhatsApp, routing, dan fallback pesan.
 </p>
 
-Gateway Laravel terpusat untuk `appscript-ft`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA, Fonnte, GOWA, atau WABA, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
+Gateway Laravel terpusat untuk `appscript-ft`, `web-shelf`, `web-sam`, dan `web-helpdesk`.
+
+## Aset brand
+
+Logo mengikuti keluarga OceanSpace: badge kotak membulat, warna brand solid, dan
+glyph putih dengan celah horizontal. Gateway Hub memakai emerald `#059669` dengan
+huruf **G** (Gateway). Aset tersedia di `public/`:
+
+- `icon.svg` — mark kotak (dipakai sebagai brand logo panel Filament dan favicon).
+- `logo.svg` / `logo-dark.svg` — logotype horizontal (mark + wordmark) untuk mode terang/gelap.
+- `favicon.ico` (16/32/48) dan `icon-192.png`, `icon-512.png` — versi raster. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA, Fonnte, GOWA, atau WABA, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
 
 Panduan deploy production dari `git clone`: [docs/DEPLOYMENT_ID.md](docs/DEPLOYMENT_ID.md).
 Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md).

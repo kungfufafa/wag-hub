@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200">
+    <svg x="4" y="4" width="192" height="192" viewBox="0 0 512 512">
+        <rect width="512" height="512" rx="108" fill="#059669"/>
+        <defs>
+            <mask id="slats">
+                <rect width="512" height="512" fill="#FFFFFF"/>
+                <rect x="60" y="172" width="392" height="14" fill="#000000"/>
+                <rect x="60" y="248" width="392" height="14" fill="#000000"/>
+                <rect x="60" y="324" width="392" height="14" fill="#000000"/>
+            </mask>
+        </defs>
+        <g fill="#FFFFFF" fill-rule="evenodd" mask="url(#slats)">
+            <path d="M 80 112 L 432 88 L 432 150 L 80 150 Z"/>
+            <path d="M 80 112 H 136 V 400 H 80 Z"/>
+            <path d="M 80 362 L 432 362 L 432 400 L 80 424 Z"/>
+            <path d="M 376 250 H 432 V 400 H 376 Z"/>
+            <path d="M 262 250 H 432 V 306 H 262 Z"/>
+        </g>
+    </svg>
+    <text x="224" y="102" dominant-baseline="central"
+          font-family="'Inter','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif"
+          font-size="88" font-weight="700" letter-spacing="-2">
+        <tspan fill="#F8FAFC">Gateway</tspan><tspan dx="26" fill="#34D399">Hub</tspan>
+    </text>
+</svg>
