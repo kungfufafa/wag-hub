@@ -121,4 +121,9 @@ class ProviderAccount extends Model
     {
         return $this->hasMany(KnowledgeBaseEntry::class);
     }
+
+    public function botGraphs(): HasMany
+    {
+        return $this->hasMany(BotGraph::class);
+    }
 }

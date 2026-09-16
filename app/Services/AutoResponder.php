@@ -25,6 +25,7 @@ final readonly class AutoResponder
 {
     public function __construct(
         private WhatsAppInbox $inbox,
+        private BotGraphEngine $graphs,
         private BotFlowEngine $flows,
         private KnowledgeBaseResponder $knowledge,
     ) {}
@@ -53,9 +54,17 @@ final readonly class AutoResponder
             return;
         }
 
-        // Guided menu flows take precedence: continue an active flow, or start
-        // one when triggered. Falls through to simple auto-reply rules.
+        // Visual (n8n-style) graphs take precedence, then legacy guided menu
+        // flows, then simple auto-reply rules, then the AI knowledge base.
+        if ($this->graphs->continueActive($account, $event)) {
+            return;
+        }
+
         if ($this->flows->continueActive($account, $event)) {
+            return;
+        }
+
+        if ($this->graphs->startIfTriggered($account, $event, ! $conversationExisted)) {
             return;
         }
 

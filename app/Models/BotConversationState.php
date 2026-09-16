@@ -14,6 +14,8 @@ class BotConversationState extends Model
         'provider_account_id',
         'chat_key',
         'bot_flow_id',
+        'bot_graph_id',
+        'node_id',
         'expires_at',
     ];
 
