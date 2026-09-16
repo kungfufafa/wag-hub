@@ -216,7 +216,9 @@
     /* Compact node cards */
     .drawflow .drawflow-node { border-radius: 0.7rem; border: 1px solid #d7dee8; box-shadow: 0 3px 10px rgb(15 23 42 / 0.10); padding: 0; width: 190px; background: #fff; }
     .dark .drawflow .drawflow-node { border-color: #334155; background: #111a2b; }
-    .drawflow .drawflow-node.selected { box-shadow: 0 0 0 2px var(--primary-500, #059669), 0 4px 14px rgb(15 23 42 / 0.16); }
+    /* Selection = clean ring only (override Drawflow's default red body fill). */
+    .drawflow .drawflow-node.selected { background: #fff; border-color: var(--primary-500, #059669); box-shadow: 0 0 0 2px var(--primary-500, #059669), 0 4px 14px rgb(15 23 42 / 0.16); }
+    .dark .drawflow .drawflow-node.selected { background: #111a2b; }
     .fbn { font-size: 0.8rem; }
     .fbn-top { display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.65rem; border-top-left-radius: 0.7rem; border-top-right-radius: 0.7rem; color: #fff; font-weight: 700; }
     .fbn-ic { font-size: 0.9rem; line-height: 1; }
