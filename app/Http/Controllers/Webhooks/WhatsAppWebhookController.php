@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Infrastructure\WhatsApp\InboxWebhookParser;
 use App\Models\ProviderAccount;
 use App\Services\WhatsAppInbox;
+use App\Services\WhatsAppSessionManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -17,6 +18,7 @@ final class WhatsAppWebhookController extends Controller
         string $provider,
         InboxWebhookParser $parser,
         WhatsAppInbox $inbox,
+        WhatsAppSessionManager $sessions,
     ): JsonResponse|Response {
         $account = ProviderAccount::query()
             ->where('uuid', $provider)
@@ -32,6 +34,12 @@ final class WhatsAppWebhookController extends Controller
 
         if (! $this->tokenMatches($request, $account)) {
             return response()->json(['ok' => false], 401);
+        }
+
+        // Session lifecycle events (self-hosted engine) update pairing state
+        // rather than the message ledger.
+        if ($sessions->handleWebhook($account, $request->all())) {
+            return response()->json(['ok' => true, 'session' => $account->fresh()?->session_status]);
         }
 
         $recorded = 0;

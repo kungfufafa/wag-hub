@@ -26,3 +26,6 @@ Thumbs.db
 /.codex
 /.worktrees
 /graphify-out
+
+/engine/.env
+/engine/mock-waha/node_modules
