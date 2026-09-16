@@ -22,6 +22,18 @@ return [
         'circuit_open_seconds' => (int) env('GATEWAY_PROVIDER_CIRCUIT_SECONDS', 300),
     ],
 
+    // Inbound automation (auto-reply / CS bot). Rules are configured per
+    // provider account in the "Balasan Otomatis" panel.
+    'automation' => [
+        'enabled' => env('GATEWAY_AUTOMATION', true) !== false && env('GATEWAY_AUTOMATION', true) !== 'false',
+        // Pause auto-replies for a chat after a human agent has replied within
+        // this window (minutes). Set 0 to disable the human-handoff pause.
+        'handoff_pause_minutes' => (int) env('GATEWAY_AUTOMATION_HANDOFF_MINUTES', 30),
+        // Ignore group chats by default; direct 1:1 chats are the CS use case.
+        'skip_groups' => env('GATEWAY_AUTOMATION_SKIP_GROUPS', true) !== false
+            && env('GATEWAY_AUTOMATION_SKIP_GROUPS', true) !== 'false',
+    ],
+
     'alerts' => [
         // sync = kirim tanpa queue worker (web: afterResponse; console/tests: langsung).
         // async = dispatch ke queue (butuh php artisan queue:work).

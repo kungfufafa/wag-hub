@@ -106,4 +106,9 @@ class ProviderAccount extends Model
     {
         return $this->hasMany(InboxConversation::class);
     }
+
+    public function autoReplyRules(): HasMany
+    {
+        return $this->hasMany(AutoReplyRule::class);
+    }
 }
