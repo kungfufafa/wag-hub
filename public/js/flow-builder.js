@@ -1,32 +1,48 @@
-// Visual bot Flow Builder (Drawflow) logic. Kept in an external file so the
-// HTML template strings below are not parsed by Livewire's root-element
-// detection when this lives inside a Filament page component.
-window.flowBuilder = (config) => ({
+// Visual bot Flow Builder (Drawflow). Nodes are compact (icon + title +
+// summary); editing happens in a side inspector panel — the n8n pattern.
+// Kept external so HTML template strings aren't parsed by Livewire's
+// root-element detection inside the Filament page component.
+window.flowBuilder = () => ({
     editor: null,
     seq: 0,
     selected: null,
-    ready: false,
+    inspType: null,
+    insp: {},
+
+    meta: {
+        trigger: { icon: '\u25B6', title: 'Pemicu', in: 0, out: 1 },
+        message: { icon: '\uD83D\uDCAC', title: 'Pesan', in: 1, out: 1 },
+        condition: { icon: '\uD83D\uDD00', title: 'Kondisi', in: 1, out: 2 },
+        menu: { icon: '\uD83D\uDCCB', title: 'Menu', in: 1, out: 0 },
+        ai: { icon: '\uD83E\uDD16', title: 'Jawab AI', in: 1, out: 1 },
+        handoff: { icon: '\uD83D\uDE4B', title: 'Ke Agen', in: 1, out: 0 },
+    },
+
+    defaults(type) {
+        return {
+            trigger: { trigger_type: 'keyword', keywords: 'halo, menu' },
+            message: { text: '' },
+            condition: { keywords: '' },
+            menu: { header: 'Silakan pilih:', options: [{ key: '1', label: 'Opsi 1', action: 'reply', reply: '' }], footer: 'Ketik angka pilihan.' },
+            ai: {},
+            handoff: { message: 'Baik, Anda akan dibantu agen kami sebentar lagi.' },
+        }[type];
+    },
 
     init() {
-        // Guard against Alpine re-initialising (the stage is wire:ignore, but
-        // be defensive) so nodes never duplicate.
         if (this.editor) return;
-        if (typeof Drawflow === 'undefined') {
-            console.error('Drawflow belum termuat.');
-            return;
-        }
+        if (typeof Drawflow === 'undefined') { console.error('Drawflow belum termuat.'); return; }
 
         this.editor = new Drawflow(this.$refs.canvas);
         this.editor.reroute = true;
         this.editor.curvature = 0.5;
         this.editor.start();
 
-        this.editor.on('nodeSelected', (id) => { this.selected = id; });
-        this.editor.on('nodeUnselected', () => { this.selected = null; });
-        this.editor.on('nodeRemoved', () => { this.selected = null; });
+        this.editor.on('nodeSelected', (id) => this.onSelect(id));
+        this.editor.on('nodeUnselected', () => { this.selected = null; this.inspType = null; });
+        this.editor.on('nodeRemoved', () => { this.selected = null; this.inspType = null; });
 
-        this.loadFrom(config.definition, true);
-        this.ready = true;
+        this.loadFrom(this.$el.dataset.definition, true);
 
         this.$wire.on('flow-loaded', (payload) => {
             const def = Array.isArray(payload) ? payload[0]?.definition : payload?.definition;
@@ -34,85 +50,113 @@ window.flowBuilder = (config) => ({
         });
     },
 
+    // ---- summaries & node html -------------------------------------------
+    esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); },
+    clip(s, n = 46) { s = String(s ?? '').trim(); return s.length > n ? s.slice(0, n) + '…' : (s || '(kosong)'); },
+
+    summary(type, d) {
+        switch (type) {
+            case 'trigger': return d.trigger_type === 'welcome' ? 'Saat kontak pertama' : 'Kata kunci: ' + (d.keywords || '—');
+            case 'message': return this.clip(d.text);
+            case 'condition': return 'Jika mengandung: ' + (d.keywords || '—');
+            case 'menu': return ((d.options || []).length) + ' opsi';
+            case 'ai': return 'Jawab dari Knowledge Base';
+            case 'handoff': return this.clip(d.message);
+            default: return '';
+        }
+    },
+
+    nodeHtml(type, d) {
+        const m = this.meta[type];
+        return `<div class="fbn fbn-${type}"><div class="fbn-top"><span class="fbn-ic">${m.icon}</span><span class="fbn-title">${m.title}</span></div><div class="fbn-sub" data-fbn-sub>${this.esc(this.summary(type, d))}</div></div>`;
+    },
+
+    addNode(type) {
+        if (!this.meta[type]) return;
+        const d = this.defaults(type);
+        const m = this.meta[type];
+        const n = this.seq++;
+        const x = 70 + (n % 3) * 250 + (n % 2) * 20;
+        const y = 50 + Math.floor(n / 3) * 170;
+        this.editor.addNode(type, m.in, m.out, x, y, type, d, this.nodeHtml(type, d), false);
+    },
+
+    // ---- load / persist ---------------------------------------------------
     loadFrom(def, seed) {
-        try { this.editor.clear(); } catch (e) { /* fresh editor */ }
-        this.selected = null;
-        this.seq = 0;
+        try { this.editor.clear(); } catch (e) {}
+        this.selected = null; this.inspType = null; this.seq = 0;
 
         let data = null;
-        try {
-            data = (typeof def === 'string' && def !== '') ? JSON.parse(def) : def;
-        } catch (e) { data = null; }
+        try { data = (typeof def === 'string' && def !== '') ? JSON.parse(def) : def; } catch (e) { data = null; }
 
         const nodes = data?.drawflow?.Home?.data;
         if (nodes && Object.keys(nodes).length) {
             this.editor.import(data);
             this.seq = Math.max(0, ...Object.keys(nodes).map(Number));
+            this.$nextTick(() => this.refreshAll());
             try { this.editor.zoom_reset(); } catch (e) {}
             return;
         }
-
         if (seed) this.addNode('trigger');
     },
 
-    templates(type) {
-        const t = {
-            trigger: { in: 0, out: 1, html: `
-                <div class="fbn"><div class="fbn-h fbn-trigger"><span class="fbn-ic">&#9654;</span> Pemicu</div>
-                <label>Tipe</label><select df-trigger_type><option value="keyword">Kata kunci</option><option value="welcome">Sapaan (kontak pertama)</option></select>
-                <label>Kata kunci</label><input df-keywords placeholder="halo, menu, mulai"></div>`,
-                data: { trigger_type: 'keyword', keywords: 'halo, menu' } },
-            message: { in: 1, out: 1, html: `
-                <div class="fbn"><div class="fbn-h fbn-message"><span class="fbn-ic">&#128172;</span> Pesan</div>
-                <textarea df-text placeholder="Isi pesan..."></textarea></div>`,
-                data: { text: '' } },
-            condition: { in: 1, out: 2, html: `
-                <div class="fbn"><div class="fbn-h fbn-condition"><span class="fbn-ic">&#128256;</span> Kondisi</div>
-                <label>Kata kunci (cocok &rarr; jalur 1)</label><input df-keywords placeholder="beli, pesan">
-                <div class="fbn-outs"><span class="fbn-out-yes">1 &bull; cocok</span><span class="fbn-out-no">2 &bull; tidak</span></div></div>`,
-                data: { keywords: '' } },
-            menu: { in: 1, out: 0, html: `
-                <div class="fbn"><div class="fbn-h fbn-menu"><span class="fbn-ic">&#128203;</span> Menu</div>
-                <label>Header</label><textarea df-header placeholder="Silakan pilih:"></textarea>
-                <label>Opsi: key|label|reply/handoff|balasan</label>
-                <textarea df-options class="fbn-opts" placeholder="1|Jam operasional|reply|Kami buka 08-17"></textarea>
-                <label>Footer</label><input df-footer placeholder="Ketik angka pilihan."></div>`,
-                data: { header: 'Silakan pilih:', options: '', footer: '' } },
-            ai: { in: 1, out: 1, html: `
-                <div class="fbn"><div class="fbn-h fbn-ai"><span class="fbn-ic">&#129302;</span> Jawab AI</div>
-                <small>Menjawab pertanyaan bebas dari Knowledge Base.</small></div>`,
-                data: {} },
-            handoff: { in: 1, out: 0, html: `
-                <div class="fbn"><div class="fbn-h fbn-handoff"><span class="fbn-ic">&#128587;</span> Serahkan ke Agen</div>
-                <textarea df-message placeholder="Menghubungkan ke agen kami..."></textarea></div>`,
-                data: { message: 'Baik, Anda akan dibantu agen kami sebentar lagi.' } },
-        };
-        return t[type];
+    refreshAll() {
+        const nodes = this.editor.export()?.drawflow?.Home?.data || {};
+        Object.values(nodes).forEach((n) => this.setSummary(n.id, n.name, n.data || {}));
     },
 
-    addNode(type) {
-        const tpl = this.templates(type);
-        if (!tpl) return;
-        const n = this.seq++;
-        // Stagger new nodes so they never stack exactly on top of each other.
-        const x = 60 + (n % 3) * 260 + (n % 2) * 20;
-        const y = 40 + Math.floor(n / 3) * 210;
-        this.editor.addNode(type, tpl.in, tpl.out, x, y, type, { ...tpl.data }, tpl.html, false);
+    setSummary(id, type, data) {
+        const el = document.querySelector('#node-' + id + ' [data-fbn-sub]');
+        if (el) el.textContent = this.summary(type, data);
     },
 
+    // ---- inspector --------------------------------------------------------
+    onSelect(id) {
+        const node = this.editor.getNodeFromId(id);
+        if (!node) return;
+        this.selected = id;
+        this.inspType = node.name;
+        const d = JSON.parse(JSON.stringify(node.data || {}));
+        if (this.inspType === 'menu') d.options = this.normalizeOptions(d.options);
+        this.insp = d;
+    },
+
+    normalizeOptions(opts) {
+        if (Array.isArray(opts)) return opts.map((o) => ({ key: o.key || '', label: o.label || '', action: o.action === 'handoff' ? 'handoff' : 'reply', reply: o.reply || '' }));
+        // Legacy "key|label|action|reply" lines.
+        return String(opts || '').split(/\r?\n/).map((line) => {
+            const p = line.split('|');
+            return { key: (p[0] || '').trim(), label: (p[1] || '').trim(), action: (p[2] || 'reply').trim() === 'handoff' ? 'handoff' : 'reply', reply: (p[3] || '').trim() };
+        }).filter((o) => o.key || o.label);
+    },
+
+    apply() {
+        if (this.selected == null) return;
+        const d = JSON.parse(JSON.stringify(this.insp));
+        this.editor.updateNodeDataFromId(this.selected, d);
+        this.setSummary(this.selected, this.inspType, d);
+    },
+
+    addOption() {
+        if (!Array.isArray(this.insp.options)) this.insp.options = [];
+        this.insp.options.push({ key: String(this.insp.options.length + 1), label: '', action: 'reply', reply: '' });
+        this.apply();
+    },
+    removeOption(i) { this.insp.options.splice(i, 1); this.apply(); },
+
+    inspTitle() { return this.inspType ? (this.meta[this.inspType]?.title || '') : ''; },
+
+    // ---- toolbar ----------------------------------------------------------
     removeSelected() {
         if (this.selected == null) return;
         try { this.editor.removeNodeId('node-' + this.selected); } catch (e) {}
-        this.selected = null;
+        this.selected = null; this.inspType = null;
     },
-
     clearCanvas() {
         try { this.editor.clear(); } catch (e) {}
-        this.seq = 0;
-        this.selected = null;
+        this.seq = 0; this.selected = null; this.inspType = null;
         this.addNode('trigger');
     },
-
     zoomIn() { try { this.editor.zoom_in(); } catch (e) {} },
     zoomOut() { try { this.editor.zoom_out(); } catch (e) {} },
     zoomReset() { try { this.editor.zoom_reset(); } catch (e) {} },

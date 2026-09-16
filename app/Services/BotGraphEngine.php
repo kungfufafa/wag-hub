@@ -231,9 +231,36 @@ final readonly class BotGraphEngine
      */
     private function menuOptions(array $node): array
     {
+        $raw = $node['data']['options'] ?? [];
         $options = [];
 
-        foreach (preg_split('/\r?\n/', (string) ($node['data']['options'] ?? '')) ?: [] as $line) {
+        // Preferred: array of { key, label, action, reply } from the inspector.
+        if (is_array($raw)) {
+            foreach ($raw as $option) {
+                if (! is_array($option)) {
+                    continue;
+                }
+
+                $key = trim((string) ($option['key'] ?? ''));
+                $label = trim((string) ($option['label'] ?? ''));
+
+                if ($key === '' || $label === '') {
+                    continue;
+                }
+
+                $options[] = [
+                    'key' => $key,
+                    'label' => $label,
+                    'action' => ($option['action'] ?? 'reply') === 'handoff' ? 'handoff' : 'reply',
+                    'reply' => isset($option['reply']) ? (string) $option['reply'] : null,
+                ];
+            }
+
+            return $options;
+        }
+
+        // Legacy: "key|label|action|reply" lines.
+        foreach (preg_split('/\r?\n/', (string) $raw) ?: [] as $line) {
             $parts = array_map('trim', explode('|', $line));
 
             if (($parts[0] ?? '') === '' || ($parts[1] ?? '') === '') {
