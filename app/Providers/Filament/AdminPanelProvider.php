@@ -40,6 +40,7 @@ class AdminPanelProvider extends PanelProvider
             ->registration(null)
             ->passwordReset(null)
             ->brandName('WhatsApp Gateway Hub')
+            ->favicon(asset('icon.svg'))
             ->colors([
                 'primary' => Color::Emerald,
             ])
