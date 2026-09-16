@@ -7,8 +7,6 @@ use App\Models\ProviderAccount;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Components\View as SchemaView;
-use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
@@ -32,6 +30,8 @@ class FlowBuilder extends Page
     protected static ?string $title = 'Flow Builder';
 
     protected static ?string $slug = 'flow-builder';
+
+    protected string $view = 'filament.pages.flow-builder';
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
@@ -141,13 +141,6 @@ class FlowBuilder extends Page
         }
 
         $this->newGraph();
-    }
-
-    public function content(Schema $schema): Schema
-    {
-        return $schema->components([
-            SchemaView::make('filament.pages.flow-builder')->columnSpanFull(),
-        ]);
     }
 
     public function getSubheading(): ?string

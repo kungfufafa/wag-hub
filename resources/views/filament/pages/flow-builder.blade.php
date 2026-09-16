@@ -1,5 +1,7 @@
+<x-filament-panels::page>
 @php $graphs = $this->graphs(); @endphp
-
+{{-- Single wrapper so the page slot has exactly one root element. --}}
+<div class="fb-root">
 {{-- Drawflow (visual node editor) from CDN. --}}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.css">
 <script src="https://cdn.jsdelivr.net/npm/drawflow@0.0.60/dist/drawflow.min.js"></script>
@@ -66,98 +68,7 @@
     </div>
 </div>
 
-<script>
-    window.flowBuilder = (config) => ({
-        editor: null,
-        seq: 0,
-
-        init() {
-            if (typeof Drawflow === 'undefined') {
-                console.error('Drawflow belum termuat.');
-                return;
-            }
-            this.editor = new Drawflow(this.$refs.canvas);
-            this.editor.reroute = true;
-            this.editor.start();
-            this.loadFrom(config.definition);
-
-            this.$wire.on('flow-loaded', (payload) => {
-                const def = Array.isArray(payload) ? payload[0]?.definition : payload?.definition;
-                this.loadFrom(def);
-            });
-        },
-
-        loadFrom(def) {
-            try {
-                this.editor.clear();
-            } catch (e) { /* fresh editor */ }
-
-            let data = null;
-            try {
-                data = (typeof def === 'string' && def !== '') ? JSON.parse(def) : def;
-            } catch (e) { data = null; }
-
-            if (data && data.drawflow && Object.keys(data.drawflow.Home?.data || {}).length) {
-                this.editor.import(data);
-                this.seq = Math.max(0, ...Object.keys(data.drawflow.Home.data).map(Number)) ;
-                return;
-            }
-
-            // Empty flow: seed a trigger node so the canvas is never blank.
-            this.addNode('trigger');
-        },
-
-        templates(type) {
-            const t = {
-                trigger: { in: 0, out: 1, html: `
-                    <div class="fbn"><div class="fbn-h fbn-trigger">▶ Pemicu</div>
-                    <label>Tipe</label><select df-trigger_type><option value="keyword">Kata kunci</option><option value="welcome">Sapaan (kontak pertama)</option></select>
-                    <label>Kata kunci</label><input df-keywords placeholder="halo, menu, mulai"></div>`,
-                    data: { trigger_type: 'keyword', keywords: 'halo, menu' } },
-                message: { in: 1, out: 1, html: `
-                    <div class="fbn"><div class="fbn-h fbn-message">💬 Pesan</div>
-                    <textarea df-text placeholder="Isi pesan..."></textarea></div>`,
-                    data: { text: '' } },
-                condition: { in: 1, out: 2, html: `
-                    <div class="fbn"><div class="fbn-h fbn-condition">🔀 Kondisi</div>
-                    <label>Kata kunci (cocok → jalur 1)</label><input df-keywords placeholder="beli, pesan">
-                    <div class="fbn-outs"><span>1 · cocok</span><span>2 · tidak</span></div></div>`,
-                    data: { keywords: '' } },
-                menu: { in: 1, out: 0, html: `
-                    <div class="fbn"><div class="fbn-h fbn-menu">📋 Menu</div>
-                    <label>Header</label><textarea df-header placeholder="Silakan pilih:"></textarea>
-                    <label>Opsi — key|label|reply/handoff|balasan</label>
-                    <textarea df-options placeholder="1|Jam operasional|reply|Kami buka 08-17&#10;2|Ke agen|handoff|Menghubungkan..."></textarea>
-                    <label>Footer</label><input df-footer placeholder="Ketik angka pilihan."></div>`,
-                    data: { header: 'Silakan pilih:', options: '', footer: '' } },
-                ai: { in: 1, out: 1, html: `
-                    <div class="fbn"><div class="fbn-h fbn-ai">🤖 Jawab AI</div>
-                    <small>Menjawab pertanyaan bebas dari Knowledge Base.</small></div>`,
-                    data: {} },
-                handoff: { in: 1, out: 0, html: `
-                    <div class="fbn"><div class="fbn-h fbn-handoff">🙋 Serahkan ke Agen</div>
-                    <textarea df-message placeholder="Menghubungkan ke agen kami..."></textarea></div>`,
-                    data: { message: 'Baik, Anda akan dibantu agen kami sebentar lagi.' } },
-            };
-            return t[type];
-        },
-
-        addNode(type) {
-            const tpl = this.templates(type);
-            if (!tpl) return;
-            const n = this.seq++;
-            const x = 40 + (n % 4) * 250;
-            const y = 30 + Math.floor(n / 4) * 230;
-            this.editor.addNode(type, tpl.in, tpl.out, x, y, type, { ...tpl.data }, tpl.html, false);
-        },
-
-        save() {
-            const data = this.editor.export();
-            this.$wire.set('definition', JSON.stringify(data));
-            this.$wire.save();
-        },
-    });
-</script>
+<script src="{{ asset('js/flow-builder.js') }}"></script>
 
 <style>
     .fb { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -202,3 +113,5 @@
     .fbn-handoff { background: #db2777; }
     .drawflow .drawflow-node { border-radius: 0.6rem; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgb(0 0 0 / 0.1); padding: 0.5rem; }
 </style>
+</div>{{-- /fb-root --}}
+</x-filament-panels::page>
