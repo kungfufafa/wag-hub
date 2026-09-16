@@ -107,7 +107,7 @@
 
     .fb-canvas { position: relative; }
     #drawflow { width: 100%; height: 74vh; min-height: 30rem; background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px); background-size: 20px 20px; }
-    .dark #drawflow { background-color: #0b1220; background-image: radial-gradient(#1f2937 1.2px, transparent 1.2px); }
+    .dark #drawflow { background-color: #0b1220; background-image: radial-gradient(#334155 1.4px, transparent 1.4px); }
     .fb-hint { padding: 0.55rem 0.7rem; font-size: 0.75rem; color: var(--gray-500); border-top: 1px solid var(--mky-border, #e5e7eb); }
 
     /* Node cards */
