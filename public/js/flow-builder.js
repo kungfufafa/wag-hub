@@ -8,6 +8,7 @@ window.flowBuilder = () => ({
     selected: null,
     inspType: null,
     insp: {},
+    saving: false,
 
     meta: {
         trigger: { icon: '\u25B6', title: 'Pemicu', in: 0, out: 1 },
@@ -83,7 +84,6 @@ window.flowBuilder = () => ({
 
     // ---- load / persist ---------------------------------------------------
     loadFrom(def, seed) {
-        try { this.editor.clear(); } catch (e) {}
         this.selected = null; this.inspType = null; this.seq = 0;
 
         let data = null;
@@ -91,12 +91,16 @@ window.flowBuilder = () => ({
 
         const nodes = data?.drawflow?.Home?.data;
         if (nodes && Object.keys(nodes).length) {
+            // import() replaces the canvas in a single pass — no clear()-then-import
+            // flash, so switching flows stays smooth.
             this.editor.import(data);
             this.seq = Math.max(0, ...Object.keys(nodes).map(Number));
             this.$nextTick(() => this.refreshAll());
             try { this.editor.zoom_reset(); } catch (e) {}
             return;
         }
+
+        try { this.editor.clear(); } catch (e) {}
         if (seed) this.addNode('trigger');
     },
 
@@ -162,8 +166,14 @@ window.flowBuilder = () => ({
     zoomReset() { try { this.editor.zoom_reset(); } catch (e) {} },
 
     save() {
+        if (this.saving) return;
+        this.saving = true;
         const data = this.editor.export();
         this.$wire.set('definition', JSON.stringify(data));
-        this.$wire.save();
+        const done = () => { this.saving = false; };
+        try {
+            const p = this.$wire.save();
+            (p && typeof p.finally === 'function') ? p.finally(done) : setTimeout(done, 600);
+        } catch (e) { done(); }
     },
 });

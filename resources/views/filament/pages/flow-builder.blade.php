@@ -38,6 +38,9 @@
     @if ($graphs->isNotEmpty())
         <div class="fb-chips">
             <span class="fb-chips-label">Flow tersimpan:</span>
+            <span class="fb-loading" wire:loading wire:target="selectGraph,newGraph,providerId">
+                <x-filament::loading-indicator class="fb-loading-ic" /> memuat…
+            </span>
             @foreach ($graphs as $graph)
                 <button type="button" wire:click="selectGraph({{ $graph->id }})"
                         class="fb-chip @if ($this->graphId === $graph->id) is-active @endif">
@@ -67,7 +70,9 @@
             <x-filament::button type="button" size="xs" color="gray" x-on:click="zoomIn()">+</x-filament::button>
             <x-filament::button type="button" size="xs" color="gray" icon="heroicon-o-trash" x-bind:disabled="selected===null" x-on:click="removeSelected()">Hapus node</x-filament::button>
             <x-filament::button type="button" size="xs" color="gray" x-on:click="clearCanvas()">Bersihkan</x-filament::button>
-            <x-filament::button type="button" size="xs" color="primary" icon="heroicon-o-check" x-on:click="save()">Simpan</x-filament::button>
+            <x-filament::button type="button" size="xs" color="primary" icon="heroicon-o-check" x-bind:disabled="saving" x-on:click="save()">
+                <span x-text="saving ? 'Menyimpan…' : 'Simpan'"></span>
+            </x-filament::button>
         </div>
 
         <div class="fb-workarea">
@@ -213,8 +218,11 @@
     .fb-hint { padding: 0.6rem 0.85rem; font-size: 0.75rem; color: var(--gray-500); border-top: 1px solid var(--gray-100); }
     .dark .fb-hint { border-top-color: rgb(255 255 255 / 0.08); }
 
-    /* Compact node cards. */
-    .drawflow .drawflow-node { border-radius: 0.7rem; border: 1px solid #d7dee8; box-shadow: 0 3px 10px rgb(15 23 42 / 0.10); padding: 0; width: 190px; background: #fff; }
+    .fb-loading { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--gray-500); }
+    .fb-loading-ic { width: 0.9rem; height: 0.9rem; }
+
+    /* Compact node cards. Smooth drag: promote to its own layer, no transform transition. */
+    .drawflow .drawflow-node { border-radius: 0.7rem; border: 1px solid #d7dee8; box-shadow: 0 3px 10px rgb(15 23 42 / 0.10); padding: 0; width: 190px; background: #fff; will-change: transform; transition: box-shadow 0.15s ease; }
     .dark .drawflow .drawflow-node { border-color: #334155; background: #111a2b; }
     .drawflow .drawflow-node.selected { background: #fff; border-color: var(--primary-500, #059669); box-shadow: 0 0 0 2px var(--primary-500, #059669), 0 4px 14px rgb(15 23 42 / 0.16); }
     .dark .drawflow .drawflow-node.selected { background: #111a2b; }
