@@ -97,8 +97,8 @@
                         @elseif ($selectedStatus->needsQr())
                             <div class="wa-qr">
                                 <div class="wa-qr-frame">
-                                    @if ($qr)
-                                        <img src="{{ $qr }}" alt="Kode QR pairing WhatsApp" />
+                                    @if ($this->qr)
+                                        <img src="{{ $this->qr }}" alt="Kode QR pairing WhatsApp" />
                                     @else
                                         <div class="wa-qr-loading">Menyiapkan QR…</div>
                                     @endif

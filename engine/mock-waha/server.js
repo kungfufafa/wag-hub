@@ -38,6 +38,9 @@ async function fireWebhook(s, event, payload) {
   }
 }
 
+// Opt-in: auto-"scan" the QR after N ms to make hands-free demos self-driving.
+const AUTOSCAN_MS = parseInt(process.env.MOCK_AUTOSCAN_MS || '0', 10);
+
 function toScanQr(s, delay = 700) {
   s.status = 'STARTING';
   fireWebhook(s, 'session.status', { name: s.name, status: 'STARTING' });
@@ -45,7 +48,28 @@ function toScanQr(s, delay = 700) {
     s.status = 'SCAN_QR_CODE';
     fireWebhook(s, 'session.status', { name: s.name, status: 'SCAN_QR_CODE' });
     console.log(`[mock] session ${s.name} -> SCAN_QR_CODE`);
+    if (AUTOSCAN_MS > 0) {
+      setTimeout(() => {
+        if (s.status === 'SCAN_QR_CODE') simulateScan(s);
+      }, AUTOSCAN_MS);
+    }
   }, delay);
+}
+
+function simulateScan(s, phone = '6281200000001', from = '6289900000002') {
+  s.status = 'WORKING';
+  s.me = { id: `${phone}@c.us`, pushName: 'Bisnis Demo' };
+  fireWebhook(s, 'session.status', { name: s.name, status: 'WORKING', me: s.me });
+  fireWebhook(s, 'message', {
+    id: `false_${from}@c.us_${Date.now().toString(16)}`,
+    timestamp: Math.floor(Date.now() / 1000),
+    from: `${from}@c.us`,
+    fromMe: false,
+    body: 'Halo, apakah pesanan saya sudah dikirim?',
+    hasMedia: false,
+    notifyName: 'Pelanggan Demo',
+  });
+  console.log(`[mock] session ${s.name} -> WORKING (scanned)`);
 }
 
 // --- Session lifecycle -----------------------------------------------------
@@ -122,20 +146,8 @@ app.get('/api/:name/chats/:chatId/messages', (_req, res) => res.json([]));
 app.post('/_mock/scan/:name', (req, res) => {
   const s = getOrCreate(req.params.name);
   const phone = (req.query.phone || '6281200000001').toString().replace(/\D+/g, '');
-  s.status = 'WORKING';
-  s.me = { id: `${phone}@c.us`, pushName: 'Bisnis Demo' };
-  fireWebhook(s, 'session.status', { name: s.name, status: 'WORKING', me: s.me });
-
   const from = (req.body?.from || '6289900000002').toString().replace(/\D+/g, '');
-  fireWebhook(s, 'message', {
-    id: `false_${from}@c.us_${Date.now().toString(16)}`,
-    timestamp: Math.floor(Date.now() / 1000),
-    from: `${from}@c.us`,
-    fromMe: false,
-    body: req.body?.body || 'Halo, apakah pesanan saya sudah dikirim?',
-    hasMedia: false,
-    notifyName: req.body?.name || 'Pelanggan Demo',
-  });
+  simulateScan(s, phone, from);
   res.json(doc(s));
 });
 
