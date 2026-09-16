@@ -1,0 +1,14 @@
+{
+  "name": "wag-hub-mock-waha",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WAHA-compatible mock engine for local development and tests of the Gateway Hub self-hosted pairing flow.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4"
+  }
+}

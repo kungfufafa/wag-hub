@@ -22,6 +22,33 @@ return [
         'circuit_open_seconds' => (int) env('GATEWAY_PROVIDER_CIRCUIT_SECONDS', 300),
     ],
 
+    // Inbound automation (auto-reply / CS bot). Rules are configured per
+    // provider account in the "Balasan Otomatis" panel.
+    'automation' => [
+        'enabled' => env('GATEWAY_AUTOMATION', true) !== false && env('GATEWAY_AUTOMATION', true) !== 'false',
+        // Pause auto-replies for a chat after a human agent has replied within
+        // this window (minutes). Set 0 to disable the human-handoff pause.
+        'handoff_pause_minutes' => (int) env('GATEWAY_AUTOMATION_HANDOFF_MINUTES', 30),
+        // Ignore group chats by default; direct 1:1 chats are the CS use case.
+        'skip_groups' => env('GATEWAY_AUTOMATION_SKIP_GROUPS', true) !== false
+            && env('GATEWAY_AUTOMATION_SKIP_GROUPS', true) !== 'false',
+    ],
+
+    // AI agent (answers free-text questions from the knowledge base). Retrieval
+    // works with no external service; the LLM layer activates only when an API
+    // key is present and phrases answers grounded on the retrieved entries.
+    'ai' => [
+        'enabled' => env('GATEWAY_AI', true) !== false && env('GATEWAY_AI', true) !== 'false',
+        'min_score' => (int) env('GATEWAY_AI_MIN_SCORE', 1),
+        'llm' => [
+            'enabled' => filled(env('GATEWAY_AI_API_KEY')),
+            'endpoint' => env('GATEWAY_AI_ENDPOINT', 'https://api.openai.com/v1/chat/completions'),
+            'model' => env('GATEWAY_AI_MODEL', 'gpt-4o-mini'),
+            'api_key' => env('GATEWAY_AI_API_KEY'),
+            'timeout' => (int) env('GATEWAY_AI_TIMEOUT', 20),
+        ],
+    ],
+
     'alerts' => [
         // sync = kirim tanpa queue worker (web: afterResponse; console/tests: langsung).
         // async = dispatch ke queue (butuh php artisan queue:work).

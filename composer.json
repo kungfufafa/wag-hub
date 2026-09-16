@@ -10,7 +10,11 @@
         "filament/filament": "^4.11",
         "kungfufafa/mekaya-theme": "@dev",
         "laravel/framework": "^12.0",
-        "laravel/tinker": "^2.10.1"
+        "laravel/horizon": "^5.49",
+        "laravel/octane": "^2.19",
+        "laravel/reverb": "^1.11",
+        "laravel/tinker": "^2.10.1",
+        "opcodesio/log-viewer": "^3.24"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

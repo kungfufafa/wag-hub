@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Domain\Inbox\InboxChat;
 use App\Domain\Inbox\InboxEvent;
 use App\Domain\Inbox\InboxMessage as InboxMessageView;
+use App\Events\InboxMessageReceived;
 use App\Infrastructure\WhatsApp\InboxPayload;
 use App\Models\Attachment;
 use App\Models\GatewayMessage;
@@ -108,6 +109,13 @@ final class InboxLedger
         }
 
         $this->touchConversation($conversation, $event);
+
+        // Nudge open Inboxes to refresh in real time (Reverb). Never let a
+        // broadcasting hiccup break message recording.
+        try {
+            InboxMessageReceived::dispatch($account->id, $event->chatId);
+        } catch (\Throwable) {
+        }
     }
 
     public function rememberChat(ProviderAccount $account, InboxChat $chat): void

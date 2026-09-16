@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\WhatsApp\SessionStatus;
 use App\Models\Concerns\GeneratesSlugFromName;
 use App\Models\Concerns\ReleasesUniqueIdentifierOnSoftDelete;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -26,6 +27,9 @@ class ProviderAccount extends Model
         'configuration',
         'is_active',
         'health_status',
+        'session_status',
+        'session_meta',
+        'session_synced_at',
         'consecutive_failures',
         'circuit_open_until',
         'timeout_seconds',
@@ -50,10 +54,27 @@ class ProviderAccount extends Model
         return [
             'configuration' => 'encrypted:array',
             'is_active' => 'boolean',
+            'session_meta' => 'array',
+            'session_synced_at' => 'datetime',
             'consecutive_failures' => 'integer',
             'circuit_open_until' => 'datetime',
             'timeout_seconds' => 'integer',
         ];
+    }
+
+    /**
+     * Whether this account runs on a self-hostable engine that the Hub can
+     * pair in-panel (QR/session lifecycle). Only the WAHA driver (which powers
+     * our own Baileys/NOWEB engine) exposes a session API today.
+     */
+    public function supportsSessions(): bool
+    {
+        return $this->driver === 'waha';
+    }
+
+    public function sessionStatus(): SessionStatus
+    {
+        return SessionStatus::from($this->session_status ?: SessionStatus::Unknown->value);
     }
 
     public function routingSteps(): HasMany
@@ -84,5 +105,25 @@ class ProviderAccount extends Model
     public function inboxConversations(): HasMany
     {
         return $this->hasMany(InboxConversation::class);
+    }
+
+    public function autoReplyRules(): HasMany
+    {
+        return $this->hasMany(AutoReplyRule::class);
+    }
+
+    public function botFlows(): HasMany
+    {
+        return $this->hasMany(BotFlow::class);
+    }
+
+    public function knowledgeBaseEntries(): HasMany
+    {
+        return $this->hasMany(KnowledgeBaseEntry::class);
+    }
+
+    public function botGraphs(): HasMany
+    {
+        return $this->hasMany(BotGraph::class);
     }
 }

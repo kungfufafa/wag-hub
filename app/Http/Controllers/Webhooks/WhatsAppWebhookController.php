@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
+use App\Infrastructure\WhatsApp\InboxPayload;
 use App\Infrastructure\WhatsApp\InboxWebhookParser;
+use App\Models\InboxConversation;
 use App\Models\ProviderAccount;
+use App\Services\AutoResponder;
 use App\Services\WhatsAppInbox;
+use App\Services\WhatsAppSessionManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -17,6 +21,8 @@ final class WhatsAppWebhookController extends Controller
         string $provider,
         InboxWebhookParser $parser,
         WhatsAppInbox $inbox,
+        WhatsAppSessionManager $sessions,
+        AutoResponder $autoResponder,
     ): JsonResponse|Response {
         $account = ProviderAccount::query()
             ->where('uuid', $provider)
@@ -34,14 +40,38 @@ final class WhatsAppWebhookController extends Controller
             return response()->json(['ok' => false], 401);
         }
 
+        // Session lifecycle events (self-hosted engine) update pairing state
+        // rather than the message ledger.
+        if ($sessions->handleWebhook($account, $request->all())) {
+            return response()->json(['ok' => true, 'session' => $account->fresh()?->session_status]);
+        }
+
         $recorded = 0;
 
         foreach ($parser->parse($account->driver, $request->all()) as $event) {
+            // Capture first-contact state before recording so "welcome" rules
+            // can fire on the very first message from a chat.
+            $conversationExisted = $this->conversationExists($account, $event->chatId);
+
             $inbox->recordEvent($account, $event);
             $recorded++;
+
+            $autoResponder->handle($account, $event, $conversationExisted);
         }
 
         return response()->json(['ok' => true, 'recorded' => $recorded]);
+    }
+
+    private function conversationExists(ProviderAccount $account, string $chatId): bool
+    {
+        $peer = InboxPayload::peerKey($chatId);
+
+        return InboxConversation::query()
+            ->where('provider_account_id', $account->id)
+            ->where(function ($query) use ($chatId, $peer): void {
+                $query->where('chat_id', $chatId)->orWhere('peer_key', $peer);
+            })
+            ->exists();
     }
 
     private function verify(Request $request, ProviderAccount $account): JsonResponse|Response

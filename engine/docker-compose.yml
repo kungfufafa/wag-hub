@@ -1,0 +1,44 @@
+# Self-hosted WhatsApp engine for the Gateway Hub.
+#
+# WAHA (WhatsApp HTTP API) running its NOWEB engine — a Baileys-based
+# (WhatsApp Web multi-device) transport. This is "our own engine": pair your
+# own number by scanning a QR from the Hub panel (Konfigurasi -> Perangkat
+# WhatsApp), then send/receive through the same Inbox as the third-party
+# providers.
+#
+# Usage:
+#   1. Copy engine/.env.example to engine/.env and set WAHA_API_KEY + WAHA_DASHBOARD creds.
+#   2. docker compose -f engine/docker-compose.yml up -d
+#   3. In the Hub, add a Provider Account (driver: WAHA):
+#        base_url = http://<host>:3000   session = default   api_key = <WAHA_API_KEY>
+#      and add that host to GATEWAY_PROVIDER_HTTP_HOSTS / _HTTPS_HOSTS.
+#   4. Open "Perangkat WhatsApp" and scan the QR.
+#
+# NOTE: Baileys/WA-Web is unofficial. Use it for conversational/business chat,
+# not high-volume or OTP traffic (ban risk). Keep OTP on official WABA.
+
+services:
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: wag-hub-waha
+    restart: unless-stopped
+    ports:
+      - "${WAHA_PORT:-3000}:3000"
+    environment:
+      # NOWEB = Baileys engine (multi-device, QR pairing).
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
+      # Protect the API; the Hub sends this as the X-Api-Key header.
+      WAHA_API_KEY: ${WAHA_API_KEY:?set WAHA_API_KEY in engine/.env}
+      # Persist NOWEB auth state (survives restarts / reconnect).
+      WHATSAPP_FILES_FOLDER: /app/.media
+      WAHA_LOG_FORMAT: JSON
+      # Optional dashboard (browse sessions, view QR from WAHA itself).
+      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-admin}
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:?set WAHA_DASHBOARD_PASSWORD in engine/.env}
+    volumes:
+      - waha_sessions:/app/.sessions
+      - waha_media:/app/.media
+
+volumes:
+  waha_sessions:
+  waha_media:

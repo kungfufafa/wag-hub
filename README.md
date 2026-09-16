@@ -1,4 +1,12 @@
-# WhatsApp Gateway Hub
+<p align="center">
+  <img src="public/icon.svg" alt="Logo WhatsApp Gateway Hub" width="150">
+</p>
+
+<h1 align="center">WhatsApp Gateway Hub</h1>
+
+<p align="center">
+  Gateway Laravel terpusat untuk pemilihan provider WhatsApp, routing, dan fallback pesan.
+</p>
 
 Gateway Laravel terpusat untuk `appscript-ft`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA, Fonnte, GOWA, atau WABA, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
 
