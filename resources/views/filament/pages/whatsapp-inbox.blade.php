@@ -598,7 +598,8 @@
     }
 </style>
 
-<div class="wa-inbox" @if ($account) wire:poll.3s="refreshInbox" @endif>
+{{-- Realtime via Reverb (Echo); wire:poll is a fallback when websockets are unavailable. --}}
+<div class="wa-inbox" @if ($account) wire:poll.10s="refreshInbox" @endif>
     <section class="wa-inbox-col" aria-label="Percakapan">
         <div class="wa-inbox-head">
             <h2 class="wa-inbox-heading">Percakapan</h2>

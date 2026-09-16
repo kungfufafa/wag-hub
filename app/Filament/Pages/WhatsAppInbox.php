@@ -18,6 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Livewire\Attributes\On;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 use Throwable;
@@ -143,6 +144,15 @@ class WhatsAppInbox extends Page
         $this->draft = '';
         $this->clearAttachment();
         $this->status = null;
+    }
+
+    /**
+     * Real-time nudge from Reverb when a new inbox message is recorded.
+     */
+    #[On('echo:inbox,InboxMessageReceived')]
+    public function onInboxBroadcast(): void
+    {
+        $this->refreshInbox();
     }
 
     public function refreshInbox(): void

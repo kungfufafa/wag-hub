@@ -6,14 +6,19 @@
   },
   "user": "ubuntu",
   "install": "./.cursor/install.sh",
+  "start": "sudo service redis-server start || redis-server --daemonize yes",
   "terminals": [
     {
       "name": "server",
-      "command": "php artisan serve --host=0.0.0.0 --port=8000"
+      "command": "php artisan octane:start --server=frankenphp --host=0.0.0.0 --port=8000"
     },
     {
-      "name": "queue",
-      "command": "php artisan queue:work --tries=1 --timeout=360"
+      "name": "reverb",
+      "command": "php artisan reverb:start --host=0.0.0.0 --port=8080"
+    },
+    {
+      "name": "horizon",
+      "command": "php artisan horizon"
     },
     {
       "name": "scheduler",
@@ -24,6 +29,10 @@
     {
       "name": "web",
       "port": 8000
+    },
+    {
+      "name": "reverb",
+      "port": 8080
     }
   ]
 }

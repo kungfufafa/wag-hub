@@ -25,6 +25,14 @@ fi
 # SQLite database file used by the default configuration.
 touch database/database.sqlite
 
+# Octane runtime (FrankenPHP). Downloads the binary on first run; skip if present.
+if [ ! -f ./frankenphp ] && [ ! -x "$(command -v frankenphp)" ]; then
+    php artisan octane:install --server=frankenphp --no-interaction || true
+fi
+
+# Publish Horizon assets (idempotent).
+php artisan horizon:publish || true
+
 # Schema and baseline management data (seeder is safe to re-run).
 php artisan migrate --force
 php artisan db:seed --force

@@ -29,3 +29,7 @@ Thumbs.db
 
 /engine/.env
 /engine/mock-waha/node_modules
+
+**/caddy
+frankenphp
+frankenphp-worker.php

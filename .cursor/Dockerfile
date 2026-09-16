@@ -13,6 +13,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         nodejs \
+        redis-server \
         php8.4-cli \
         php8.4-common \
         php8.4-mbstring \
@@ -24,6 +25,7 @@ RUN apt-get update \
         php8.4-intl \
         php8.4-zip \
         php8.4-mysql \
+        php8.4-redis \
     && curl -fsSL https://getcomposer.org/installer -o /tmp/composer-setup.php \
     && php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer \
     && rm -f /tmp/composer-setup.php \
