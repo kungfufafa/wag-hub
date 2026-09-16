@@ -111,4 +111,9 @@ class ProviderAccount extends Model
     {
         return $this->hasMany(AutoReplyRule::class);
     }
+
+    public function botFlows(): HasMany
+    {
+        return $this->hasMany(BotFlow::class);
+    }
 }

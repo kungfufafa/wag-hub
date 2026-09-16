@@ -25,6 +25,7 @@ final readonly class AutoResponder
 {
     public function __construct(
         private WhatsAppInbox $inbox,
+        private BotFlowEngine $flows,
     ) {}
 
     public function handle(ProviderAccount $account, InboxEvent $event, bool $conversationExisted): void
@@ -48,6 +49,16 @@ final readonly class AutoResponder
         }
 
         if ($this->humanRecentlyReplied($account, $event->chatId)) {
+            return;
+        }
+
+        // Guided menu flows take precedence: continue an active flow, or start
+        // one when triggered. Falls through to simple auto-reply rules.
+        if ($this->flows->continueActive($account, $event)) {
+            return;
+        }
+
+        if ($this->flows->startIfTriggered($account, $event, ! $conversationExisted)) {
             return;
         }
 

@@ -151,6 +151,22 @@ app.post('/_mock/scan/:name', (req, res) => {
   res.json(doc(s));
 });
 
+// Simulate an arbitrary inbound customer message (drives bot menu demos).
+app.post('/_mock/inbound/:name', (req, res) => {
+  const s = getOrCreate(req.params.name);
+  const from = (req.query.from || req.body?.from || '6289900000002').toString().replace(/\D+/g, '');
+  fireWebhook(s, 'message', {
+    id: `false_${from}@c.us_${Date.now().toString(16)}`,
+    timestamp: Math.floor(Date.now() / 1000),
+    from: `${from}@c.us`,
+    fromMe: false,
+    body: req.body?.body ?? req.query.body ?? 'menu',
+    hasMedia: false,
+    notifyName: req.body?.name || 'Pelanggan Demo',
+  });
+  res.json({ ok: true });
+});
+
 app.get('/', (_req, res) => {
   res.json({ mock: 'waha', sessions: [...sessions.values()].map(doc) });
 });
