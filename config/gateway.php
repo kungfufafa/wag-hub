@@ -34,6 +34,21 @@ return [
             && env('GATEWAY_AUTOMATION_SKIP_GROUPS', true) !== 'false',
     ],
 
+    // AI agent (answers free-text questions from the knowledge base). Retrieval
+    // works with no external service; the LLM layer activates only when an API
+    // key is present and phrases answers grounded on the retrieved entries.
+    'ai' => [
+        'enabled' => env('GATEWAY_AI', true) !== false && env('GATEWAY_AI', true) !== 'false',
+        'min_score' => (int) env('GATEWAY_AI_MIN_SCORE', 1),
+        'llm' => [
+            'enabled' => filled(env('GATEWAY_AI_API_KEY')),
+            'endpoint' => env('GATEWAY_AI_ENDPOINT', 'https://api.openai.com/v1/chat/completions'),
+            'model' => env('GATEWAY_AI_MODEL', 'gpt-4o-mini'),
+            'api_key' => env('GATEWAY_AI_API_KEY'),
+            'timeout' => (int) env('GATEWAY_AI_TIMEOUT', 20),
+        ],
+    ],
+
     'alerts' => [
         // sync = kirim tanpa queue worker (web: afterResponse; console/tests: langsung).
         // async = dispatch ke queue (butuh php artisan queue:work).

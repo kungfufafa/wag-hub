@@ -26,6 +26,7 @@ final readonly class AutoResponder
     public function __construct(
         private WhatsAppInbox $inbox,
         private BotFlowEngine $flows,
+        private KnowledgeBaseResponder $knowledge,
     ) {}
 
     public function handle(ProviderAccount $account, InboxEvent $event, bool $conversationExisted): void
@@ -64,19 +65,31 @@ final readonly class AutoResponder
 
         $rule = $this->match($account, $body, ! $conversationExisted);
 
-        if ($rule === null) {
+        if ($rule !== null) {
+            $this->reply($account, $event, 'rule:'.$rule->id, $rule->reply_body);
+
             return;
         }
 
+        // Last resort: let the AI agent answer from the knowledge base.
+        $aiAnswer = $this->knowledge->answer($account, $body);
+
+        if ($aiAnswer !== null) {
+            $this->reply($account, $event, 'ai', $aiAnswer);
+        }
+    }
+
+    private function reply(ProviderAccount $account, InboxEvent $event, string $context, string $body): void
+    {
         // Derive a stable submission UUID so a re-delivered webhook (or a
         // duplicate event) never sends the same auto-reply twice.
         $submissionUuid = Uuid::uuid5(
             Uuid::NAMESPACE_URL,
-            'autoreply:'.$account->id.':'.$event->messageId.':'.$rule->id,
+            'autoreply:'.$account->id.':'.$event->messageId.':'.$context,
         )->toString();
 
         try {
-            $this->inbox->send($account, $event->chatId, $rule->reply_body, null, $submissionUuid);
+            $this->inbox->send($account, $event->chatId, $body, null, $submissionUuid);
         } catch (Throwable) {
             // Never let automation break inbound webhook processing.
         }

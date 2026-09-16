@@ -116,4 +116,9 @@ class ProviderAccount extends Model
     {
         return $this->hasMany(BotFlow::class);
     }
+
+    public function knowledgeBaseEntries(): HasMany
+    {
+        return $this->hasMany(KnowledgeBaseEntry::class);
+    }
 }
