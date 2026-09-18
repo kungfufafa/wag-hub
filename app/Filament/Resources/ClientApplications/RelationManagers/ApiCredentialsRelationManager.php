@@ -69,7 +69,7 @@ class ApiCredentialsRelationManager extends RelationManager
                     ->readOnly()
                     ->dehydrated(false)
                     ->extraInputAttributes(['class' => 'font-mono text-xs'])
-                    ->suffixAction(
+                    ->hintAction(
                         Action::make('copyEnv')
                             ->label('Salin env')
                             ->icon(Heroicon::ClipboardDocumentList)
