@@ -4,17 +4,14 @@ use App\Http\Controllers\Api\Engine\CesaEngineController;
 use Illuminate\Support\Facades\Route;
 
 $engine = static function (): void {
-    Route::get('/health', [CesaEngineController::class, 'health']);
-    Route::post('/sessions', [CesaEngineController::class, 'startSession'])
-        ->middleware('client.rate:engine');
-    Route::get('/sessions/{session}', [CesaEngineController::class, 'session'])
-        ->middleware('client.rate:engine');
-    Route::delete('/sessions/{session}', [CesaEngineController::class, 'logout'])
-        ->middleware('client.rate:engine');
-    Route::post('/sessions/{session}/send', [CesaEngineController::class, 'send'])
-        ->middleware(['client.ability:messages:send', 'client.rate:engine']);
-    Route::get('/sessions/{session}/messages/{key}', [CesaEngineController::class, 'message'])
-        ->middleware('client.rate:engine');
+    Route::middleware(['client.ability:engine:use', 'client.rate:engine'])->group(function (): void {
+        Route::get('/health', [CesaEngineController::class, 'health']);
+        Route::post('/sessions', [CesaEngineController::class, 'startSession']);
+        Route::get('/sessions/{session}', [CesaEngineController::class, 'session']);
+        Route::delete('/sessions/{session}', [CesaEngineController::class, 'logout']);
+        Route::post('/sessions/{session}/send', [CesaEngineController::class, 'send']);
+        Route::get('/sessions/{session}/messages/{key}', [CesaEngineController::class, 'message']);
+    });
 };
 
 Route::prefix('engine')

@@ -1,71 +1,100 @@
-# Integrasi cesa-web
+# Dua jalur WhatsApp: Hub API vs Engine
 
-[cesa-web](https://github.com/oceanspacedev/cesa-web) tidak perlu menjalankan
-engine Baileys sendiri. Plugin Rekrutmen sudah berbicara ke kontrak HTTP
-engine lokal (`GET /health`, `POST /sessions`, kirim teks, logout). Hub
-mengekspos kontrak yang sama dan mengarahkannya ke engine WAHA/Baileys
-yang sudah ada di repositori ini.
+WAG Hub punya **dua produk yang tidak saling menggantikan**. Jangan campur
+token-nya.
 
 ```mermaid
-flowchart LR
-    C["cesa-web Rekrutmen"] -->|"WhatsAppEngineClient"| E["Hub /engine"]
-    E --> S["Sesi WAHA per akun CESA"]
-    S --> W["Engine WAHA / Baileys"]
-    E --> L["Ledger pesan Hub"]
+flowchart TB
+    subgraph hub ["Jalur Hub — WAG_URL + WAG_TOKEN"]
+        A["Shelf / SAM / lead / OTP"] -->|"POST /api/v1/messages"| R["Routing + fallback"]
+        R --> P["WAHA pool / Fonnte / GOWA / WABA"]
+    end
+
+    subgraph engine ["Jalur Engine — ENGINE_URL + ENGINE_TOKEN"]
+        H["HR / Rekrutmen / nomor sendiri"] -->|"/engine/sessions"| S["Sesi WAHA milik user"]
+        S --> N["Nomor yang di-scan HR"]
+    end
 ```
 
-## Yang berubah di cesa-web
+| | Hub API | Engine |
+|---|---|---|
+| Env | `WAG_URL` + `WAG_TOKEN` | `ENGINE_URL` + token engine |
+| Ability | `messages:send` / `read` / `numbers:check` | `engine:use` saja |
+| Nomor pengirim | Yang diset developer di panel (pool + fallback) | Nomor yang **user tautkan sendiri** (QR/pairing) |
+| Fallback | Ya — provider berikutnya jika gagal definitif | Tidak — hanya nomor sesi itu |
+| Pakai untuk | Notifikasi sistem, OTP, cek nomor lead | Rekrutmen, CS tim, WA pribadi HR |
 
-Tidak perlu Node `whatsapp-engine`, `php artisan rekrutmen:whatsapp-engine`,
-atau `REKRUTMEN_WHATSAPP_ENGINE_AUTO_START=true`.
+Token Hub **ditolak** di `/engine`. Token engine **ditolak** di `/api/v1/messages`.
+
+## Jalur Hub (tetap seperti semula)
+
+Aplikasi sumber memanggil API ledger. Developer menyiapkan provider dan
+`route_key`. Contoh CESA untuk cek nomor / kirim lewat pool:
+
+```dotenv
+WAG_URL=https://gateway.example.com
+WAG_TOKEN=wgh_token_hub_cesa
+```
+
+```http
+POST /api/v1/messages
+Authorization: Bearer wgh_token_hub_cesa
+Idempotency-Key: ...
+```
+
+Rekrutmen **jangan** memakai token ini untuk mengirim undangan dari nomor HR.
+
+## Jalur Engine (nomor yang di-link user)
+
+HR di Rekrutmen ingin memakai WhatsApp miliknya, bukan nomor yang sudah
+dipasang developer. CESA tetap memakai `WhatsAppEngineClient` (kontrak
+`/health`, `/sessions`, `/send`), tetapi menunjuk ke Hub — **bukan** ke
+`WAG_URL` dan **bukan** ke Node lokal.
+
+Di Hub: terbitkan kredensial terpisah, ability hanya `engine:use`.
 
 Di `.env` cesa-web:
 
 ```dotenv
+# Jalur Hub (lead / fallback / API biasa) — jangan dipakai Rekrutmen kirim WA HR
 WAG_URL=https://gateway.example.com
-WAG_TOKEN=wgh_token_web_cesa
-REKRUTMEN_WHATSAPP_ENGINE_URL="${WAG_URL}/engine/t/${WAG_TOKEN}"
+WAG_TOKEN=wgh_token_hub_cesa
+
+# Jalur Engine (QR, pairing, kirim dari nomor yang di-scan)
+REKRUTMEN_WHATSAPP_ENGINE_URL=https://gateway.example.com/engine/t/wgh_token_engine_cesa
 REKRUTMEN_WHATSAPP_ENGINE_AUTO_START=false
 ```
 
-`WhatsAppEngineClient` tidak mengirim header `Authorization`. Token dimasukkan
-di path `/engine/t/{token}` agar drop-in. Bearer di `/engine` juga didukung
-bila client CESA nanti menambahkan header.
+`WhatsAppEngineClient` tidak mengirim header Authorization, jadi token engine
+masuk path `/engine/t/{token}`. Bearer ke `/engine` juga valid jika client
+mengirim header.
 
-Matikan auto-start supaya CESA tidak mencoba spawn `node server.mjs` lokal.
+Matikan auto-start supaya CESA tidak menjalankan `node server.mjs` lokal.
 
-## Yang disiapkan di Hub
+### Perilaku sesi
 
-1. Aplikasi klien `web-cesa` (sudah di-seed).
-2. Kredensial dengan `messages:send` (seeder menambahkan juga `engine:use`).
-3. Akun provider **WAHA** aktif (`waha-primary` atau `GATEWAY_CESA_WAHA_SLUG`)
-   dengan base URL + API key yang menunjuk ke engine di `engine/`.
-4. Host engine masuk allowlist (`GATEWAY_PROVIDER_HTTP_HOSTS` atau HTTPS).
-5. Engine WAHA berjalan (`docker compose -f engine/docker-compose.yml up -d`
-   atau mock `engine/mock-waha` untuk uji pairing).
+1. User Rekrutmen klik Hubungkan → `POST /engine/sessions` `{ id: rekrutmen-12, mode: qr }`.
+2. Hub membuat sesi WAHA khusus (`web-cesa-sess-rekrutmen-12`) di host engine.
+3. User scan QR / masukkan pairing code dari HP-nya.
+4. `POST /engine/sessions/rekrutmen-12/send` dkirim **hanya** dari nomor itu.
+   Pool Fonnte/WABA/route `web-cesa-messages` tidak dipakai.
 
-Setiap akun WhatsApp CESA (`session_id` = `rekrutmen-{id}`) menjadi satu sesi
-WAHA + satu Akun Provider Hub (`{slug-aplikasi}-sess-{session_id}`) + satu
-aturan rute dengan `route_key` yang sama. Pengiriman dipin ke nomor itu,
-bukan fallback antar provider.
+## Setup Hub untuk engine
 
-## Kontrak yang ditiru
+1. Aplikasi klien (mis. `web-cesa`).
+2. Dua kredensial: token Hub (`messages:*`) dan token Engine (`engine:use`).
+   Seeder: `GATEWAY_SEED_WEB_CESA_TOKEN` vs `GATEWAY_SEED_WEB_CESA_ENGINE_TOKEN`.
+3. Satu akun provider **WAHA** sebagai **host** (base URL + API key). Ini mesin
+   engine, bukan “nomor default perusahaan”.
+4. Host WAHA masuk allowlist. Jalankan `engine/docker-compose.yml` (atau mock).
 
-| CESA | Hub |
+## Kontrak engine
+
+| Method | Makna |
 |---|---|
-| `GET /health` | Engine hidup. `ok: true` cukup agar CESA anggap siap. |
-| `POST /sessions` `{id, mode, phone?}` | Mulai QR atau pairing code. |
-| `GET /sessions/{id}` | Status: `qr`, `pairing`, `connecting`, `connected`, `disconnected`. |
-| `DELETE /sessions/{id}` `{logout}` | Logout perangkat. |
-| `POST /sessions/{id}/send` `{phone, text, idempotency_key}` | Kirim teks sync lewat ledger Hub. |
+| `GET /health` | Engine siap. CESA cek `ok: true`. |
+| `POST /sessions` `{id, mode, phone?}` | Mulai QR atau pairing. |
+| `GET /sessions/{id}` | `qr` / `pairing` / `connecting` / `connected` / `disconnected`. |
+| `DELETE /sessions/{id}` | Logout perangkat user. |
+| `POST /sessions/{id}/send` | Kirim teks dari nomor sesi itu. |
 | `GET /sessions/{id}/messages/{key}` | Status idempoten `sent` / `failed` / `unknown`. |
-
-Status kirim: `sent` = Hub `provider_accepted`; `unknown` = hasil ambigu
-(jangan retry buta); `failed` + `retryable` hanya bila aman.
-
-## Alternatif: API Hub biasa
-
-CESA juga bisa memanggil `POST /api/v1/messages` dengan Bearer `WAG_TOKEN`
-dan `route_key=web-cesa-messages` tanpa UI pairing. Engine `/engine`
-diperlukan supaya panel WhatsApp Rekrutmen (QR, multi-nomor) tetap jalan
-tanpa engine Node di cesa-web.

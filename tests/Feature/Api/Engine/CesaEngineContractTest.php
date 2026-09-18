@@ -32,7 +32,7 @@ class CesaEngineContractTest extends TestCase
 
     public function test_health_matches_the_cesa_engine_contract(): void
     {
-        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+        $client = $this->createClientApplication(['engine:use']);
 
         $this->withToken($client['token'])
             ->getJson('/engine/health')
@@ -233,9 +233,28 @@ class CesaEngineContractTest extends TestCase
         $this->assertSame(1, GatewayMessage::query()->where('client_application_id', $client['id'])->count());
     }
 
+    public function test_hub_message_token_cannot_use_engine_and_engine_token_cannot_use_hub_api(): void
+    {
+        $hub = $this->createClientApplication(['messages:send', 'messages:read', 'numbers:check']);
+        $engine = $this->createClientApplication(['engine:use']);
+
+        $this->withToken($hub['token'])
+            ->getJson('/engine/health')
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'forbidden');
+
+        $this->getJson('/engine/t/'.$hub['token'].'/health')
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'forbidden');
+
+        $this->postMessage($engine['token'], 'hub-blocked-1', $this->messagePayload('sync'))
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'forbidden');
+    }
+
     public function test_unknown_message_lookup_is_a_cesa_404(): void
     {
-        $client = $this->createClientApplication(['messages:send']);
+        $client = $this->createClientApplication(['engine:use']);
 
         $this->withToken($client['token'])
             ->getJson('/engine/sessions/rekrutmen-1/messages/missing-key')
@@ -246,7 +265,7 @@ class CesaEngineContractTest extends TestCase
 
     public function test_invalid_session_id_is_rejected(): void
     {
-        $client = $this->createClientApplication(['messages:send']);
+        $client = $this->createClientApplication(['engine:use']);
 
         $this->withToken($client['token'])
             ->postJson('/engine/sessions', ['id' => '../etc/passwd', 'mode' => 'qr'])
@@ -256,7 +275,7 @@ class CesaEngineContractTest extends TestCase
 
     public function test_send_without_a_connected_session_is_retryable(): void
     {
-        $client = $this->createClientApplication(['messages:send']);
+        $client = $this->createClientApplication(['engine:use']);
 
         $this->withToken($client['token'])
             ->postJson('/engine/sessions/rekrutmen-4/send', [
@@ -276,7 +295,7 @@ class CesaEngineContractTest extends TestCase
      */
     private function seedEngineHost(): array
     {
-        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+        $client = $this->createClientApplication(['engine:use']);
 
         $this->createProviderAccount('waha', 'waha-primary', [
             'base_url' => 'https://waha-engine.test',

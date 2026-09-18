@@ -62,7 +62,10 @@ class HubManagementSeederTest extends TestCase
             ],
             'credentials' => [
                 'web-shelf' => 'wgh_shelf_seed_token',
-                'web-cesa'  => 'wgh_cesa_seed_token',
+                'web-cesa' => 'wgh_cesa_seed_token',
+            ],
+            'engine_credentials' => [
+                'web-cesa' => 'wgh_cesa_engine_token',
             ],
         ]);
 
@@ -125,9 +128,19 @@ class HubManagementSeederTest extends TestCase
         $this->assertTrue(hash_equals(hash('sha256', 'wgh_shelf_seed_token'), $shelfCredential->getRawOriginal('token_hash')));
         $this->assertSame(['messages:send', 'messages:read'], $shelfCredential->abilities);
 
-        $cesaCredential = ApiCredential::query()->where('client_application_id', $cesa->id)->sole();
-        $this->assertTrue(hash_equals(hash('sha256', 'wgh_cesa_seed_token'), $cesaCredential->getRawOriginal('token_hash')));
-        $this->assertSame(['messages:send', 'messages:read', 'numbers:check', 'engine:use'], $cesaCredential->abilities);
+        $cesaHub = ApiCredential::query()
+            ->where('client_application_id', $cesa->id)
+            ->where('name', 'Seeded application token')
+            ->sole();
+        $this->assertTrue(hash_equals(hash('sha256', 'wgh_cesa_seed_token'), $cesaHub->getRawOriginal('token_hash')));
+        $this->assertSame(['messages:send', 'messages:read', 'numbers:check'], $cesaHub->abilities);
+
+        $cesaEngine = ApiCredential::query()
+            ->where('client_application_id', $cesa->id)
+            ->where('name', 'Seeded engine token')
+            ->sole();
+        $this->assertTrue(hash_equals(hash('sha256', 'wgh_cesa_engine_token'), $cesaEngine->getRawOriginal('token_hash')));
+        $this->assertSame(['engine:use'], $cesaEngine->abilities);
     }
 
     public function test_it_is_idempotent_and_seeds_disabled_provider_accounts_and_routes_without_provider_credentials(): void

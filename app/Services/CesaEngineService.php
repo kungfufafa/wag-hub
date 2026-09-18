@@ -19,11 +19,11 @@ use InvalidArgumentException;
 use Throwable;
 
 /**
- * CESA Rekrutmen WhatsApp engine facade.
+ * User-linked WhatsApp engine (QR/pairing), separate from Hub API fallback.
  *
- * cesa-web's WhatsAppEngineClient talks to a local Baileys process. This
- * service implements that HTTP contract on the Hub and drives the self-hosted
- * WAHA/Baileys engine already owned by this repository.
+ * A credential with engine:use can start a session for a department number
+ * (HR, recruitment, …). Sends stay pinned to that session and never use the
+ * developer-configured provider pool.
  */
 final readonly class CesaEngineService
 {
@@ -414,7 +414,7 @@ final readonly class CesaEngineService
 
     private function hostProvider(): ?ProviderAccount
     {
-        $slug = (string) config('gateway.cesa_engine.host_provider_slug', 'waha-primary');
+        $slug = (string) config('gateway.engine.host_provider_slug', 'waha-primary');
 
         $account = ProviderAccount::query()
             ->where('slug', $slug)

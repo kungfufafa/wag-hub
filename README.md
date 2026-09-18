@@ -10,7 +10,9 @@
 
 Gateway Laravel terpusat untuk `appscript-ft`, `web-cesa`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA, Fonnte, GOWA, atau WABA, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
 
-`web-cesa` ([cesa-web](https://github.com/oceanspacedev/cesa-web)) dapat memakai Hub sebagai **pengganti engine Baileys lokal**. Lihat [docs/CESA_WEB.md](docs/CESA_WEB.md).
+Dua jalur terpisah: **Hub API** (`WAG_URL` + `WAG_TOKEN`, routing/fallback) dan
+**Engine** (token `engine:use`, user menautkan nomor sendiri lewat QR). Rekrutmen
+CESA memakai jalur engine, bukan token fallback. Lihat [docs/CESA_WEB.md](docs/CESA_WEB.md).
 
 Panduan deploy production dari `git clone`: [docs/DEPLOYMENT_ID.md](docs/DEPLOYMENT_ID.md).
 Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md).

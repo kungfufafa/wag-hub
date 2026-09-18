@@ -60,10 +60,9 @@ return [
     // sync = jalankan DispatchGatewayMessage langsung (tanpa queue:work) — cocok lokal/dev saja.
     'dispatch' => env('GATEWAY_DISPATCH', 'async') === 'sync' ? 'sync' : 'async',
 
-    // CESA Rekrutmen (cesa-web) talks to Hub as if it were the local Baileys engine.
-    // Sessions are created against this WAHA host (same server, per-account session name).
-    'cesa_engine' => [
-        'host_provider_slug' => env('GATEWAY_CESA_WAHA_SLUG', 'waha-primary'),
+    // User-linked WhatsApp engine (QR/pairing). Separate from WAG_URL + WAG_TOKEN fallback.
+    'engine' => [
+        'host_provider_slug' => env('GATEWAY_ENGINE_WAHA_SLUG', env('GATEWAY_CESA_WAHA_SLUG', 'waha-primary')),
     ],
 
     'attachments' => [
@@ -111,6 +110,9 @@ return [
             'web-helpdesk' => env('GATEWAY_SEED_WEB_HELPDESK_TOKEN'),
             'web-sam' => env('GATEWAY_SEED_WEB_SAM_TOKEN'),
             'web-shelf' => env('GATEWAY_SEED_WEB_SHELF_TOKEN'),
+        ],
+        'engine_credentials' => [
+            'web-cesa' => env('GATEWAY_SEED_WEB_CESA_ENGINE_TOKEN'),
         ],
     ],
 ];
