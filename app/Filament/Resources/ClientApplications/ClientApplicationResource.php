@@ -8,6 +8,7 @@ use App\Filament\Resources\ClientApplications\Pages\ListClientApplications;
 use App\Filament\Resources\ClientApplications\RelationManagers\ApiCredentialsRelationManager;
 use App\Filament\Resources\RoutingPolicies\RoutingPolicyResource;
 use App\Filament\Support\ConfigurationListLayout;
+use App\Filament\Support\PanelNavigation;
 use App\Filament\Support\SyncsSlugFromName;
 use App\Models\ClientApplication;
 use BackedEnum;
@@ -41,7 +42,7 @@ class ClientApplicationResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedComputerDesktop;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Konfigurasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::APPS;
 
     protected static ?int $navigationSort = 10;
 
@@ -105,21 +106,19 @@ class ClientApplicationResource extends Resource
                         'lg' => 2,
                     ]),
                 Section::make('Langkah berikutnya')
-                    ->description('Selesaikan setup aplikasi dalam urutan ini.')
+                    ->description('Urutan di panel ini.')
                     ->schema([
                         Placeholder::make('create_credential')
-                            ->label('1. Buat kredensial')
+                            ->label('1. Kredensial API')
                             ->content(fn (string $operation): string => $operation === 'edit'
-                                ? 'Buka tab Kredensial API di bawah formulir untuk menerbitkan token.'
-                                : 'Setelah disimpan, buka tab Kredensial API untuk membuat token aplikasi.'),
+                                ? 'Tab Kredensial API → Buat WAG_TOKEN & ENGINE_URL.'
+                                : 'Simpan dulu, lalu buka tab Kredensial API.'),
                         Placeholder::make('choose_route')
-                            ->label('2. Pilih rute pengiriman')
-                            ->content(fn (string $operation): string => $operation === 'edit'
-                                ? 'Buat aturan rute khusus aplikasi ini, atau pakai rute global.'
-                                : 'Atur rute default aplikasi ini dari menu Aturan Rute.'),
+                            ->label('2. Aturan Rute')
+                            ->content('Untuk POST /api/v1/messages. Sesi /engine tidak memakai baris ini.'),
                         Placeholder::make('activate_application')
-                            ->label('3. Aktifkan aplikasi')
-                            ->content('Nonaktifkan aplikasi untuk menghentikan pengiriman tanpa menghapus riwayat.'),
+                            ->label('3. QR')
+                            ->content('CESA Rekrutmen: POST /engine/sessions. Atau Perangkat WhatsApp → Hubungkan.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',

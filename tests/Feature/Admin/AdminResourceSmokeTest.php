@@ -31,6 +31,7 @@ class AdminResourceSmokeTest extends TestCase
     {
         return [
             'whatsapp inbox' => ['/panel/inbox'],
+            'whatsapp devices' => ['/panel/devices'],
             'client applications' => ['/panel/client-applications'],
             'provider accounts' => ['/panel/provider-accounts'],
             'routing policies' => ['/panel/routing-policies'],
@@ -59,11 +60,49 @@ class AdminResourceSmokeTest extends TestCase
         $this->actingAs($administrator)
             ->get('/panel/dokumentasi-integrasi')
             ->assertOk()
-            ->assertSee('Siapkan aplikasi sumber')
+            ->assertSee('Setup')
+            ->assertSee('Buat WAG_TOKEN')
             ->assertSee('Endpoint cepat')
             ->assertSee('POST /api/v1/messages')
             ->assertSee('Checklist')
             ->assertSee('GATEWAY_DISPATCH=async');
+    }
+
+    public function test_sidebar_separates_daily_work_from_engine_fallback_and_system_tools(): void
+    {
+        $administrator = User::factory()->create([
+            'is_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($administrator)->get('/panel')->assertOk();
+        $html = $response->getContent();
+
+        $response
+            ->assertSee('WhatsApp')
+            ->assertSee('Perangkat')
+            ->assertSee('Aplikasi')
+            ->assertSee('Provider')
+            ->assertSee('Perangkat WhatsApp')
+            ->assertSee('Aplikasi Klien')
+            ->assertSee('Akun Provider')
+            ->assertSee('Aturan Rute')
+            ->assertSee('Horizon')
+            ->assertSee('Log viewer')
+            ->assertSee('/horizon', false)
+            ->assertSee('/log-viewer', false);
+
+        $whatsapp = strpos($html, 'WhatsApp');
+        $devices = strpos($html, 'Perangkat');
+        $apps = strpos($html, 'Aplikasi Klien');
+        $providers = strpos($html, 'Akun Provider');
+
+        $this->assertNotFalse($whatsapp);
+        $this->assertNotFalse($devices);
+        $this->assertNotFalse($apps);
+        $this->assertNotFalse($providers);
+        $this->assertLessThan($devices, $whatsapp);
+        $this->assertLessThan($providers, $apps);
     }
 
     #[DataProvider('configurationCreatePages')]

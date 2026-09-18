@@ -4,6 +4,7 @@ namespace App\Filament\Resources\NumberCheckRequests;
 
 use App\Filament\Resources\NumberCheckRequests\Pages\ListNumberCheckRequests;
 use App\Filament\Resources\NumberCheckRequests\Pages\ViewNumberCheckRequest;
+use App\Filament\Support\PanelNavigation;
 use App\Models\NumberCheckRequest;
 use BackedEnum;
 use Filament\Actions\ViewAction;
@@ -30,7 +31,7 @@ class NumberCheckRequestResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentMagnifyingGlass;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Operasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::WHATSAPP;
 
     protected static ?int $navigationSort = 20;
 

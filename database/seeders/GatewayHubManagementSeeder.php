@@ -375,6 +375,38 @@ class GatewayHubManagementSeeder extends Seeder
                 ],
             );
         }
+
+        $this->seedEngineCredentials($applications);
+    }
+
+    /**
+     * @param  array<string, ClientApplication>  $applications
+     */
+    private function seedEngineCredentials(array $applications): void
+    {
+        $tokens = config('gateway.seed.engine_credentials', []);
+
+        foreach ($applications as $slug => $application) {
+            $token = $this->value($tokens[$slug] ?? null);
+
+            if ($token === null) {
+                continue;
+            }
+
+            ApiCredential::query()->updateOrCreate(
+                [
+                    'client_application_id' => $application->id,
+                    'name' => 'Seeded engine token',
+                ],
+                [
+                    'token_hash' => hash('sha256', $token),
+                    'token_prefix' => substr($token, 0, 16),
+                    'abilities' => ['engine:use'],
+                    'revoked_at' => null,
+                    'expires_at' => null,
+                ],
+            );
+        }
     }
 
     /**

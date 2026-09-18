@@ -56,8 +56,8 @@ final readonly class GatewayMessageDispatcher
 
         $message = $this->markProcessing($message);
 
-        if ((string) $message->origin === 'inbox') {
-            return $this->dispatchInbox($message);
+        if (in_array((string) $message->origin, ['inbox', 'engine'], true)) {
+            return $this->dispatchPinned($message);
         }
 
         if ((string) $message->purpose === ProviderAccountTester::PURPOSE) {
@@ -203,16 +203,20 @@ final readonly class GatewayMessageDispatcher
         );
     }
 
-    private function dispatchInbox(GatewayMessage $message): GatewayMessage
+    private function dispatchPinned(GatewayMessage $message): GatewayMessage
     {
         $provider = $message->pinned_provider_account_id === null
             ? null
             : ProviderAccount::query()->find($message->pinned_provider_account_id);
 
+        $unavailableCode = (string) $message->origin === 'engine'
+            ? 'engine_provider_unavailable'
+            : 'inbox_provider_unavailable';
+
         if ($provider === null || ! $this->providerIsUsable($provider)) {
             return $this->markFailed(
                 $message,
-                errorCode: 'inbox_provider_unavailable',
+                errorCode: $unavailableCode,
                 errorMessage: 'Akun provider percakapan tidak tersedia.',
             );
         }
@@ -505,7 +509,7 @@ final readonly class GatewayMessageDispatcher
         ProviderAccount $provider,
         ProviderResult $result,
     ): void {
-        if ((string) $message->origin !== 'api'
+        if (! in_array((string) $message->origin, ['api', 'engine'], true)
             || (string) $message->purpose === ProviderAccountTester::PURPOSE) {
             return;
         }

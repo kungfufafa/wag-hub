@@ -6,6 +6,7 @@ use App\Filament\Resources\RoutingPolicies\Pages\CreateRoutingPolicy;
 use App\Filament\Resources\RoutingPolicies\Pages\EditRoutingPolicy;
 use App\Filament\Resources\RoutingPolicies\Pages\ListRoutingPolicies;
 use App\Filament\Support\ConfigurationListLayout;
+use App\Filament\Support\PanelNavigation;
 use App\Models\ClientApplication;
 use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
@@ -46,9 +47,9 @@ class RoutingPolicyResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQueueList;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Konfigurasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::PROVIDERS;
 
-    protected static ?int $navigationSort = 30;
+    protected static ?int $navigationSort = 20;
 
     protected static ?string $navigationLabel = 'Aturan Rute';
 

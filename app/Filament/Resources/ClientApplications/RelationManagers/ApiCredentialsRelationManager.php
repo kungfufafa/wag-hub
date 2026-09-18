@@ -4,9 +4,11 @@ namespace App\Filament\Resources\ClientApplications\RelationManagers;
 
 use App\Models\ApiCredential;
 use App\Models\ClientApplication;
+use App\Services\IntegrationPack;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -23,6 +25,66 @@ class ApiCredentialsRelationManager extends RelationManager
     protected static string $relationship = 'apiCredentials';
 
     protected static ?string $title = 'Kredensial API';
+
+    public function showIssuedPackAction(): Action
+    {
+        return Action::make('showIssuedPack')
+            ->modalHeading('Salin ke .env')
+            ->modalDescription('WAG_TOKEN = Authorization Bearer di /api/v1/messages. ENGINE_URL = /engine/t/{token} untuk WhatsAppEngineClient. Modal ditutup, plaintext hilang.')
+            ->modalIcon(Heroicon::OutlinedClipboardDocumentList)
+            ->modalIconColor('success')
+            ->modalWidth(Width::Large)
+            ->schema([
+                TextInput::make('hub_token')
+                    ->label('WAG_TOKEN')
+                    ->password()
+                    ->revealable()
+                    ->readOnly()
+                    ->dehydrated(false)
+                    ->extraInputAttributes(['class' => 'font-mono'])
+                    ->suffixAction(
+                        Action::make('copyHubToken')
+                            ->label('Salin')
+                            ->icon(Heroicon::ClipboardDocumentList)
+                            ->color('gray')
+                            ->alpineClickHandler(fn (mixed $state): string => static::copyToClipboardAlpine((string) ($state ?? ''))),
+                    ),
+                TextInput::make('engine_token')
+                    ->label('Token /engine/t/{token}')
+                    ->password()
+                    ->revealable()
+                    ->readOnly()
+                    ->dehydrated(false)
+                    ->extraInputAttributes(['class' => 'font-mono'])
+                    ->suffixAction(
+                        Action::make('copyEngineToken')
+                            ->label('Salin')
+                            ->icon(Heroicon::ClipboardDocumentList)
+                            ->color('gray')
+                            ->alpineClickHandler(fn (mixed $state): string => static::copyToClipboardAlpine((string) ($state ?? ''))),
+                    ),
+                Textarea::make('env')
+                    ->label('.env (cesa-web / helpdesk / SAM)')
+                    ->rows(8)
+                    ->readOnly()
+                    ->dehydrated(false)
+                    ->extraInputAttributes(['class' => 'font-mono text-xs'])
+                    ->hintAction(
+                        Action::make('copyEnv')
+                            ->label('Salin env')
+                            ->icon(Heroicon::ClipboardDocumentList)
+                            ->color('primary')
+                            ->alpineClickHandler(fn (mixed $state): string => static::copyToClipboardAlpine((string) ($state ?? ''))),
+                    ),
+            ])
+            ->fillForm(fn (array $arguments): array => [
+                'hub_token' => $arguments['hub_token'] ?? '',
+                'engine_token' => $arguments['engine_token'] ?? '',
+                'env' => $arguments['env'] ?? '',
+            ])
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Selesai');
+    }
 
     public function showIssuedTokenAction(): Action
     {
@@ -179,8 +241,26 @@ class ApiCredentialsRelationManager extends RelationManager
                     ->color(fn ($state): string => $state ? 'danger' : 'success'),
             ])
             ->headerActions([
+                Action::make('issuePack')
+                    ->label('Buat WAG_TOKEN & ENGINE_URL')
+                    ->icon(Heroicon::OutlinedSparkles)
+                    ->color('primary')
+                    ->modalHeading('Buat WAG_TOKEN dan token engine?')
+                    ->modalDescription('Dua baris di api_credentials: messages:send/read (plus numbers:check untuk web-cesa), dan engine:use.')
+                    ->modalSubmitActionLabel('Buat token')
+                    ->action(function (): void {
+                        /** @var ClientApplication $application */
+                        $application = $this->getOwnerRecord();
+                        $pack = app(IntegrationPack::class)->issue($application);
+
+                        $this->replaceMountedAction('showIssuedPack', [
+                            'hub_token' => $pack['hub']->plainTextToken,
+                            'engine_token' => $pack['engine']->plainTextToken,
+                            'env' => $pack['env'],
+                        ]);
+                    }),
                 Action::make('issue')
-                    ->label('Terbitkan kredensial')
+                    ->label('Kredensial custom')
                     ->icon(Heroicon::OutlinedKey)
                     ->slideOver()
                     ->modalWidth(Width::Medium)
@@ -206,6 +286,7 @@ class ApiCredentialsRelationManager extends RelationManager
                                 'messages:send' => 'Kirim pesan',
                                 'messages:read' => 'Baca status pesan',
                                 'numbers:check' => 'Cek nomor WhatsApp',
+                                'engine:use' => 'engine:use',
                             ])
                             ->default(['messages:send', 'messages:read'])
                             ->required()

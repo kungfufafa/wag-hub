@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\PanelNavigation;
 use BackedEnum;
 use Filament\Forms\Components\Placeholder;
 use Filament\Pages\Page;
@@ -10,6 +11,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
+use UnitEnum;
 
 /**
  * @property-read Schema $content
@@ -24,7 +26,11 @@ class IntegrationDocumentation extends Page
 
     protected static ?string $slug = 'dokumentasi-integrasi';
 
-    protected static bool $shouldRegisterNavigation = false;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::SERVER;
+
+    protected static ?int $navigationSort = 30;
+
+    protected static bool $shouldRegisterNavigation = true;
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
@@ -36,22 +42,22 @@ class IntegrationDocumentation extends Page
                 'lg' => 3,
             ])
             ->components([
-                Section::make('Siapkan aplikasi sumber')
-                    ->description('Urutan setup di panel ini sebelum aplikasi lain memanggil API Hub.')
+                Section::make('Setup')
+                    ->description('Layar di /panel sebelum repo lain memanggil API.')
                     ->icon(Heroicon::OutlinedQueueList)
                     ->schema([
                         Placeholder::make('step_1')
-                            ->label('1. Buat Aplikasi Klien')
-                            ->content('Satu sistem sumber = satu aplikasi. Beri nama yang jelas (misalnya Web Shelf).'),
+                            ->label('1. Aplikasi Klien')
+                            ->content('Satu baris per repo: web-cesa, web-helpdesk, web-sam, web-shelf, appscript-ft.'),
                         Placeholder::make('step_2')
-                            ->label('2. Terbitkan kredensial API')
-                            ->content('Salin Bearer token saat ditampilkan. Plaintext tidak bisa dilihat lagi setelah itu.'),
+                            ->label('2. Kredensial API')
+                            ->content('Tombol Buat WAG_TOKEN & ENGINE_URL. WAG_TOKEN ke Authorization Bearer. ENGINE_URL ke /engine/t/{token}.'),
                         Placeholder::make('step_3')
-                            ->label('3. Siapkan provider & aturan rute')
-                            ->content('Pastikan ada Akun Provider aktif dan Aturan Rute untuk route_key + purpose yang akan dipakai aplikasi.'),
+                            ->label('3. Akun Provider WAHA')
+                            ->content('Driver WAHA: base_url, session, api_key. Host masuk GATEWAY_PROVIDER_HTTP_HOSTS.'),
                         Placeholder::make('step_4')
-                            ->label('4. Panggil API dari aplikasi sumber')
-                            ->content('Kirim request dengan Authorization + Idempotency-Key. Hub yang memilih provider dan fallback.'),
+                            ->label('4. QR')
+                            ->content('Perangkat WhatsApp → Hubungkan, atau POST /engine/sessions dari WhatsAppEngineClient.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -74,6 +80,9 @@ class IntegrationDocumentation extends Page
                         Placeholder::make('endpoint_check')
                             ->label('Cek nomor')
                             ->content(new HtmlString('<code class="text-xs">POST /api/v1/number-checks</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Butuh ability numbers:check</div>')),
+                        Placeholder::make('endpoint_engine')
+                            ->label('/engine')
+                            ->content(new HtmlString('<code class="text-xs">GET/POST /engine/t/{token}/sessions</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Ability engine:use. WhatsAppEngineClient tidak mengirim Authorization.</div>')),
                     ])
                     ->columnSpan([
                         'default' => 'full',

@@ -7,6 +7,7 @@ use App\Filament\Resources\AutoReplyRules\Pages\EditAutoReplyRule;
 use App\Filament\Resources\AutoReplyRules\Pages\ListAutoReplyRules;
 use App\Filament\Resources\AutoReplyRules\Schemas\AutoReplyRuleForm;
 use App\Filament\Resources\AutoReplyRules\Tables\AutoReplyRulesTable;
+use App\Filament\Support\PanelNavigation;
 use App\Models\AutoReplyRule;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -21,7 +22,7 @@ class AutoReplyRuleResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Automasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::AUTOMATION;
 
     protected static ?int $navigationSort = 10;
 

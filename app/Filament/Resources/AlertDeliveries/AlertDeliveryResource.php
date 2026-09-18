@@ -4,6 +4,7 @@ namespace App\Filament\Resources\AlertDeliveries;
 
 use App\Filament\Resources\AlertDeliveries\Pages\ListAlertDeliveries;
 use App\Filament\Resources\AlertDeliveries\Pages\ViewAlertDelivery;
+use App\Filament\Support\PanelNavigation;
 use App\Models\AlertDelivery;
 use BackedEnum;
 use Filament\Actions\ViewAction;
@@ -29,7 +30,7 @@ class AlertDeliveryResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBellAlert;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Alert';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::ALERTS;
 
     protected static ?int $navigationSort = 30;
 

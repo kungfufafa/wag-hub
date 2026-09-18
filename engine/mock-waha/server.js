@@ -113,6 +113,18 @@ app.get('/api/sessions/:name', (req, res) => {
 });
 
 // --- QR --------------------------------------------------------------------
+app.post('/api/:name/auth/request-code', (req, res) => {
+  const s = getOrCreate(req.params.name);
+  if (s.status !== 'SCAN_QR_CODE' && s.status !== 'STARTING') {
+    toScanQr(s, 0);
+  }
+  const phone = String(req.body?.phoneNumber || req.body?.phone || '').replace(/\D+/g, '');
+  const code = '12-34';
+  s.pairingCode = code;
+  s.pairingPhone = phone || null;
+  res.json({ code });
+});
+
 app.get('/api/:name/auth/qr', async (req, res) => {
   const s = getOrCreate(req.params.name);
   if (s.status !== 'SCAN_QR_CODE') {

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\GatewayMessages;
 use App\Filament\Resources\GatewayMessages\Pages\ListGatewayMessages;
 use App\Filament\Resources\GatewayMessages\Pages\ViewGatewayMessage;
 use App\Filament\Support\CopiesToClipboard;
+use App\Filament\Support\PanelNavigation;
 use App\Models\GatewayMessage;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -35,7 +36,7 @@ class GatewayMessageResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Operasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::WHATSAPP;
 
     protected static ?int $navigationSort = 10;
 

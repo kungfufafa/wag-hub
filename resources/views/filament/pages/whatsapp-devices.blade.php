@@ -2,18 +2,21 @@
     use App\Domain\WhatsApp\SessionStatus;
 
     $devices = $this->devices();
+    $hosts = $this->hostDevices();
+    $linked = $this->linkedDevices();
     $selected = $this->selected();
     $selectedStatus = $selected?->sessionStatus();
+    $selectedLinked = $selected?->isUserLinkedSession() ?? false;
 @endphp
 
 <div class="wa-devices" @if ($selected && ! $selectedStatus->isConnected()) wire:poll.3s="poll" @endif>
     @if ($devices->isEmpty())
         <div class="wa-devices-empty">
             <x-filament::icon icon="heroicon-o-device-phone-mobile" class="wa-devices-empty-icon" />
-            <h3 class="wa-devices-empty-title">Belum ada engine self-hosted</h3>
+            <h3 class="wa-devices-empty-title">Tidak ada akun WAHA</h3>
             <p class="wa-devices-empty-text">
-                Buat <strong>Akun Provider</strong> dengan driver <strong>WAHA</strong> yang menunjuk ke engine
-                WAHA/Baileys Anda sendiri, lalu kembali ke sini untuk memindai QR dan menautkan nomor.
+                Buka <strong>Akun Provider</strong>, pilih driver <strong>WAHA</strong>,
+                isi base URL dan API key.
             </p>
             <x-filament::button tag="a" icon="heroicon-o-plus"
                 :href="\App\Filament\Resources\ProviderAccounts\ProviderAccountResource::getUrl('create')">
@@ -25,30 +28,26 @@
             <aside class="wa-devices-col wa-devices-list">
                 <div class="wa-devices-head">
                     <h2 class="wa-devices-heading">Perangkat</h2>
-                    <p class="wa-devices-sub">Engine WhatsApp self-hosted (WAHA/Baileys).</p>
+                    <p class="wa-devices-sub">Akun driver WAHA di provider_accounts.</p>
                 </div>
                 <div class="wa-devices-scroll">
-                    @foreach ($devices as $device)
-                        @php($status = $this->statusFor($device))
-                        <button type="button"
-                                wire:click="selectDevice({{ $device->id }})"
-                                class="wa-devices-item @if ($selected && $selected->id === $device->id) is-active @endif">
-                            <span class="wa-devices-avatar" @class(['is-on' => $status->isConnected()])>
-                                <x-filament::icon icon="heroicon-o-device-phone-mobile" class="wa-devices-avatar-icon" />
-                                <span class="wa-devices-dot" @class([
-                                    'is-on' => $status->isConnected(),
-                                    'is-wait' => in_array($status, [SessionStatus::ScanQr, SessionStatus::Starting], true),
-                                ])></span>
-                            </span>
-                            <span class="wa-devices-item-body">
-                                <span class="wa-devices-item-name">{{ $device->name }}</span>
-                                <span class="wa-devices-item-sub">
-                                    {{ $this->connectedNumber($device) ?? ($device->configuration['session'] ?? $device->slug) }}
-                                </span>
-                            </span>
-                            <x-filament::badge :color="$status->color()" size="sm">{{ $status->label() }}</x-filament::badge>
-                        </button>
-                    @endforeach
+                    @if ($hosts->isNotEmpty())
+                        <p class="wa-devices-group">Host WAHA</p>
+                        @foreach ($hosts as $device)
+                            @include('filament.pages.partials.whatsapp-device-item', ['device' => $device, 'selected' => $selected])
+                        @endforeach
+                    @endif
+                    @if ($linked->isNotEmpty())
+                        <p class="wa-devices-group">Sesi /engine</p>
+                        @foreach ($linked as $device)
+                            @include('filament.pages.partials.whatsapp-device-item', ['device' => $device, 'selected' => $selected])
+                        @endforeach
+                    @endif
+                    @if ($hosts->isEmpty() && $linked->isEmpty())
+                        @foreach ($devices as $device)
+                            @include('filament.pages.partials.whatsapp-device-item', ['device' => $device, 'selected' => $selected])
+                        @endforeach
+                    @endif
                 </div>
             </aside>
 
@@ -88,7 +87,8 @@
                                 </span>
                                 <h3 class="wa-devices-state-title">Terhubung</h3>
                                 <p class="wa-devices-state-text">
-                                    Nomor {{ $this->connectedNumber($selected) ?? 'ini' }} sudah tertaut.
+                                    {{ $this->connectedNumber($selected) ?? $selected->configuration['session'] ?? $selected->slug }}
+                                    WORKING.
                                 </p>
                                 <x-filament::button tag="a" size="sm" icon="heroicon-o-inbox"
                                     :href="\App\Filament\Pages\WhatsAppInbox::getUrl() . '?provider=' . $selected->id">
@@ -108,14 +108,13 @@
                                     @endif
                                 </div>
                                 <div class="wa-devices-qr-steps">
-                                    <h3 class="wa-devices-state-title">Tautkan perangkat</h3>
+                                    <h3 class="wa-devices-state-title">Scan di HP</h3>
                                     <ol>
-                                        <li>Buka WhatsApp di ponsel.</li>
-                                        <li>Ketuk <strong>Setelan &rsaquo; Perangkat tertaut</strong>.</li>
+                                        <li>WhatsApp → <strong>Perangkat tertaut</strong>.</li>
                                         <li>Ketuk <strong>Tautkan perangkat</strong>.</li>
-                                        <li>Arahkan kamera ke kode QR ini.</li>
+                                        <li>Arahkan kamera ke QR ini.</li>
                                     </ol>
-                                    <p class="wa-devices-hint">QR menyegar otomatis. Status dipantau tiap 3 detik.</p>
+                                    <p class="wa-devices-hint">QR menyegar otomatis.</p>
                                 </div>
                             </div>
                         @else
@@ -124,13 +123,15 @@
                                     <x-filament::icon icon="heroicon-o-qr-code" />
                                 </span>
                                 <p class="wa-devices-state-text">
-                                    Sesi berstatus <strong>{{ $selectedStatus->label() }}</strong>.
-                                    Klik <strong>Hubungkan</strong> untuk memulai pairing dan menampilkan kode QR.
+                                    {{ $selectedStatus->label() }}.
+                                    Session
+                                    <code>{{ $selected->configuration['session'] ?? $selected->slug }}</code>.
                                 </p>
-                                <p class="wa-devices-meta">
-                                    Engine {{ $selected->configuration['base_url'] ?? '—' }} · session
-                                    <code>{{ $selected->configuration['session'] ?? '—' }}</code>
-                                </p>
+                                @unless ($selectedLinked)
+                                    <p class="wa-devices-meta">
+                                        base_url {{ $selected->configuration['base_url'] ?? '—' }}
+                                    </p>
+                                @endunless
                             </div>
                         @endif
                     </div>
@@ -208,6 +209,15 @@
     .wa-devices-sub { font-size: 0.8rem; color: var(--wa-muted); }
 
     .wa-devices-scroll { flex: 1; min-height: 0; overflow: auto; }
+    .wa-devices-group {
+        margin: 0;
+        padding: 0.7rem 1rem 0.25rem;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--wa-muted);
+    }
 
     .wa-devices-item {
         display: flex;

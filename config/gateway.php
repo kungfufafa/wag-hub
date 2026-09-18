@@ -60,6 +60,11 @@ return [
     // sync = jalankan DispatchGatewayMessage langsung (tanpa queue:work) — cocok lokal/dev saja.
     'dispatch' => env('GATEWAY_DISPATCH', 'async') === 'sync' ? 'sync' : 'async',
 
+    // User-linked WhatsApp engine (QR/pairing). Separate from WAG_URL + WAG_TOKEN fallback.
+    'engine' => [
+        'host_provider_slug' => env('GATEWAY_ENGINE_WAHA_SLUG', env('GATEWAY_CESA_WAHA_SLUG', 'waha-primary')),
+    ],
+
     'attachments' => [
         'disk' => env('GATEWAY_ATTACHMENT_DISK', 'local'),
         'max_bytes' => (int) env('GATEWAY_ATTACHMENT_MAX_BYTES', 16 * 1024 * 1024),
@@ -105,6 +110,9 @@ return [
             'web-helpdesk' => env('GATEWAY_SEED_WEB_HELPDESK_TOKEN'),
             'web-sam' => env('GATEWAY_SEED_WEB_SAM_TOKEN'),
             'web-shelf' => env('GATEWAY_SEED_WEB_SHELF_TOKEN'),
+        ],
+        'engine_credentials' => [
+            'web-cesa' => env('GATEWAY_SEED_WEB_CESA_ENGINE_TOKEN'),
         ],
     ],
 ];

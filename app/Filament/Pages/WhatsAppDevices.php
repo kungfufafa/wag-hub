@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Domain\WhatsApp\SessionStatus;
+use App\Filament\Support\PanelNavigation;
 use App\Models\ProviderAccount;
 use App\Services\WhatsAppSessionManager;
 use BackedEnum;
@@ -26,9 +27,9 @@ class WhatsAppDevices extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDevicePhoneMobile;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Konfigurasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::DEVICES;
 
-    protected static ?int $navigationSort = 25;
+    protected static ?int $navigationSort = 10;
 
     protected static ?string $navigationLabel = 'Perangkat WhatsApp';
 
@@ -62,6 +63,22 @@ class WhatsAppDevices extends Page
             ->orderByDesc('is_active')
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * @return Collection<int, ProviderAccount>
+     */
+    public function hostDevices(): Collection
+    {
+        return $this->devices()->reject(fn (ProviderAccount $account): bool => $account->isUserLinkedSession())->values();
+    }
+
+    /**
+     * @return Collection<int, ProviderAccount>
+     */
+    public function linkedDevices(): Collection
+    {
+        return $this->devices()->filter(fn (ProviderAccount $account): bool => $account->isUserLinkedSession())->values();
     }
 
     public function selected(): ?ProviderAccount
@@ -183,7 +200,7 @@ class WhatsAppDevices extends Page
 
     public function getSubheading(): ?string
     {
-        return 'Sambungkan nomor WhatsApp Anda sendiri lewat engine self-hosted (WAHA/Baileys), lalu balas dari Inbox.';
+        return 'Sesi WAHA yang tercatat di Akun Provider driver WAHA.';
     }
 
     protected function getHeaderActions(): array
