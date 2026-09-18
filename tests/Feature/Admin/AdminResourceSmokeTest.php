@@ -31,6 +31,7 @@ class AdminResourceSmokeTest extends TestCase
     {
         return [
             'whatsapp inbox' => ['/panel/inbox'],
+            'whatsapp devices' => ['/panel/devices'],
             'client applications' => ['/panel/client-applications'],
             'provider accounts' => ['/panel/provider-accounts'],
             'routing policies' => ['/panel/routing-policies'],
@@ -60,6 +61,7 @@ class AdminResourceSmokeTest extends TestCase
             ->get('/panel/dokumentasi-integrasi')
             ->assertOk()
             ->assertSee('Siapkan aplikasi sumber')
+            ->assertSee('Terbitkan paket')
             ->assertSee('Endpoint cepat')
             ->assertSee('POST /api/v1/messages')
             ->assertSee('Checklist')

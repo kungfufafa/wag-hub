@@ -72,6 +72,18 @@ class ProviderAccount extends Model
         return $this->driver === 'waha';
     }
 
+    /**
+     * Session created when an app user (HR/CS) links their own number via /engine.
+     */
+    public function isUserLinkedSession(): bool
+    {
+        $config = $this->configuration ?? [];
+
+        return filled($config['owned_by_application_id'] ?? null)
+            || filled($config['cesa_session_id'] ?? null)
+            || str_contains((string) $this->slug, '-sess-');
+    }
+
     public function sessionStatus(): SessionStatus
     {
         return SessionStatus::from($this->session_status ?: SessionStatus::Unknown->value);

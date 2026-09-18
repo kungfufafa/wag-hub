@@ -64,6 +64,22 @@ class WhatsAppDevices extends Page
             ->get();
     }
 
+    /**
+     * @return Collection<int, ProviderAccount>
+     */
+    public function hostDevices(): Collection
+    {
+        return $this->devices()->reject(fn (ProviderAccount $account): bool => $account->isUserLinkedSession())->values();
+    }
+
+    /**
+     * @return Collection<int, ProviderAccount>
+     */
+    public function linkedDevices(): Collection
+    {
+        return $this->devices()->filter(fn (ProviderAccount $account): bool => $account->isUserLinkedSession())->values();
+    }
+
     public function selected(): ?ProviderAccount
     {
         if ($this->deviceId === null) {
@@ -183,7 +199,7 @@ class WhatsAppDevices extends Page
 
     public function getSubheading(): ?string
     {
-        return 'Sambungkan nomor WhatsApp Anda sendiri lewat engine self-hosted (WAHA/Baileys), lalu balas dari Inbox.';
+        return 'Mesin host di sini. User CESA/Helpdesk/SAM menautkan nomor dari aplikasi mereka (satu tombol, scan QR).';
     }
 
     protected function getHeaderActions(): array

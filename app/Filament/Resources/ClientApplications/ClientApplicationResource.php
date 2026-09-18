@@ -108,18 +108,16 @@ class ClientApplicationResource extends Resource
                     ->description('Selesaikan setup aplikasi dalam urutan ini.')
                     ->schema([
                         Placeholder::make('create_credential')
-                            ->label('1. Buat kredensial')
+                            ->label('1. Terbitkan paket')
                             ->content(fn (string $operation): string => $operation === 'edit'
-                                ? 'Buka tab Kredensial API di bawah formulir untuk menerbitkan token.'
-                                : 'Setelah disimpan, buka tab Kredensial API untuk membuat token aplikasi.'),
+                                ? 'Di tab Kredensial: “Terbitkan paket” — dapat Hub + Engine dan blok .env siap salin.'
+                                : 'Setelah disimpan, terbitkan paket (bukan merakit token satu-satu).'),
                         Placeholder::make('choose_route')
-                            ->label('2. Pilih rute pengiriman')
-                            ->content(fn (string $operation): string => $operation === 'edit'
-                                ? 'Buat aturan rute khusus aplikasi ini, atau pakai rute global.'
-                                : 'Atur rute default aplikasi ini dari menu Aturan Rute.'),
+                            ->label('2. Rute fallback (opsional)')
+                            ->content('Hanya untuk OTP/notifikasi sistem. Nomor yang di-scan user tidak memakai rute ini.'),
                         Placeholder::make('activate_application')
-                            ->label('3. Aktifkan aplikasi')
-                            ->content('Nonaktifkan aplikasi untuk menghentikan pengiriman tanpa menghapus riwayat.'),
+                            ->label('3. User scan di aplikasi mereka')
+                            ->content('HR/CS tidak buka panel Hub. Mereka Hubungkan WhatsApp di CESA/Helpdesk/SAM.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',

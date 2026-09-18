@@ -44,14 +44,14 @@ class IntegrationDocumentation extends Page
                             ->label('1. Buat Aplikasi Klien')
                             ->content('Satu sistem sumber = satu aplikasi. Beri nama yang jelas (misalnya Web Shelf).'),
                         Placeholder::make('step_2')
-                            ->label('2. Terbitkan kredensial API')
-                            ->content('Salin Bearer token saat ditampilkan. Plaintext tidak bisa dilihat lagi setelah itu.'),
+                            ->label('2. Terbitkan paket')
+                            ->content('Satu klik: token Hub (fallback) + token Engine (nomor sendiri) dan blok .env. Jangan campur kedua token.'),
                         Placeholder::make('step_3')
-                            ->label('3. Siapkan provider & aturan rute')
-                            ->content('Pastikan ada Akun Provider aktif dan Aturan Rute untuk route_key + purpose yang akan dipakai aplikasi.'),
+                            ->label('3. Provider host WAHA')
+                            ->content('Satu mesin engine. User menautkan nomor dari CESA/Helpdesk/SAM, bukan dari sini.'),
                         Placeholder::make('step_4')
-                            ->label('4. Panggil API dari aplikasi sumber')
-                            ->content('Kirim request dengan Authorization + Idempotency-Key. Hub yang memilih provider dan fallback.'),
+                            ->label('4. User: Hubungkan → scan → selesai')
+                            ->content('Di aplikasi sumber, satu tombol. Jangan tampilkan token atau pilihan provider ke HR/CS.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',

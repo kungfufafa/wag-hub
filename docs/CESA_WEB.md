@@ -26,6 +26,20 @@ flowchart TB
 
 Token Hub **ditolak** di `/engine`. Token engine **ditolak** di `/api/v1/messages`.
 
+## Perjalanan yang dipersingkat
+
+Tiga langkah. Token tidak pernah dilihat user bisnis.
+
+1. **IT di Hub** — buka Aplikasi Klien → **Terbitkan paket**. Salin blok `.env`.
+2. **IT di aplikasi sumber** — tempel env, restart. Jangan nyalakan Node lokal.
+3. **User bisnis** — di CESA / Helpdesk / SAM: **Hubungkan** → scan QR → selesai.
+
+HR/CS tidak buka panel Hub, tidak pilih provider, tidak pegang token.
+
+Di Hub, **Perangkat WhatsApp** memisahkan *mesin engine* (host WAHA) dari
+*nomor yang di-scan user*. Operator boleh pantau; pairing utama tetap di
+aplikasi sumber.
+
 ## Jalur Hub (tetap seperti semula)
 
 Aplikasi sumber memanggil API ledger. Developer menyiapkan provider dan

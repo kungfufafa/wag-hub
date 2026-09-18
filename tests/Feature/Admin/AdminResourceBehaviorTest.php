@@ -269,7 +269,7 @@ class AdminResourceBehaviorTest extends TestCase
             'ownerRecord' => $application,
             'pageClass' => EditClientApplication::class,
         ])
-            ->assertTableHeaderActionsExistInOrder(['issue'])
+            ->assertTableHeaderActionsExistInOrder(['issuePack', 'issue'])
             ->callTableAction('issue', data: [
                 'name' => 'Shelf production',
                 'abilities' => ['messages:send', 'messages:read'],
@@ -285,6 +285,40 @@ class AdminResourceBehaviorTest extends TestCase
         $this->assertMatchesRegularExpression('/^wgh_[A-Za-z0-9]{64}$/', $token);
         $this->assertStringNotContainsString($token, json_encode($raw, JSON_THROW_ON_ERROR));
         $this->assertSame(hash('sha256', $token), $raw->token_hash);
+    }
+
+    public function test_integration_pack_issues_separate_hub_and_engine_tokens_and_shows_env(): void
+    {
+        $application = $this->createClient('pack-action');
+        $application->forceFill(['slug' => 'web-cesa'])->save();
+
+        $component = Livewire::test(ApiCredentialsRelationManager::class, [
+            'ownerRecord' => $application,
+            'pageClass' => EditClientApplication::class,
+        ])
+            ->callTableAction('issuePack')
+            ->assertHasNoActionErrors()
+            ->assertActionMounted('showIssuedPack');
+
+        $arguments = data_get($component->get('mountedActions'), '0.arguments');
+        $hubToken = (string) ($arguments['hub_token'] ?? '');
+        $engineToken = (string) ($arguments['engine_token'] ?? '');
+        $env = (string) ($arguments['env'] ?? '');
+
+        $this->assertMatchesRegularExpression('/^wgh_[A-Za-z0-9]{64}$/', $hubToken);
+        $this->assertMatchesRegularExpression('/^wgh_[A-Za-z0-9]{64}$/', $engineToken);
+        $this->assertNotSame($hubToken, $engineToken);
+        $this->assertStringContainsString('REKRUTMEN_WHATSAPP_ENGINE_URL=', $env);
+        $this->assertStringContainsString($engineToken, $env);
+        $this->assertStringContainsString('WAG_TOKEN='.$hubToken, $env);
+        $this->assertStringContainsString('AUTO_START=false', $env);
+
+        $hub = ApiCredential::query()->where('name', 'like', 'Paket Hub%')->sole();
+        $engine = ApiCredential::query()->where('name', 'like', 'Paket Engine%')->sole();
+        $this->assertSame(['messages:send', 'messages:read', 'numbers:check'], $hub->abilities);
+        $this->assertSame(['engine:use'], $engine->abilities);
+        $this->assertSame(hash('sha256', $hubToken), $hub->getRawOriginal('token_hash'));
+        $this->assertSame(hash('sha256', $engineToken), $engine->getRawOriginal('token_hash'));
     }
 
     public function test_credential_issue_action_rejects_duplicate_names_for_the_same_application(): void
