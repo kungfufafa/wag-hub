@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Domain\Delivery\AttachmentKind;
 use App\Domain\Delivery\OutboundAttachment;
+use App\Filament\Support\PanelNavigation;
 use App\Models\ProviderAccount;
 use App\Services\AttachmentService;
 use App\Services\WhatsAppInbox as Inbox;
@@ -30,11 +31,11 @@ class WhatsAppInbox extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInbox;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Operasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::TODAY;
 
     protected static ?int $navigationSort = 5;
 
-    protected static ?string $navigationLabel = 'Inbox WhatsApp';
+    protected static ?string $navigationLabel = 'Inbox';
 
     protected static ?string $title = 'Inbox WhatsApp';
 

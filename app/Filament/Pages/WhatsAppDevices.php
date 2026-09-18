@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Domain\WhatsApp\SessionStatus;
+use App\Filament\Support\PanelNavigation;
 use App\Models\ProviderAccount;
 use App\Services\WhatsAppSessionManager;
 use BackedEnum;
@@ -26,11 +27,11 @@ class WhatsAppDevices extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDevicePhoneMobile;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Konfigurasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::OWN_NUMBER;
 
-    protected static ?int $navigationSort = 25;
+    protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Perangkat WhatsApp';
+    protected static ?string $navigationLabel = 'Mesin & nomor';
 
     protected static ?string $title = 'Perangkat WhatsApp';
 

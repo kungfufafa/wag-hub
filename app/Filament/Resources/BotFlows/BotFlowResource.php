@@ -7,6 +7,7 @@ use App\Filament\Resources\BotFlows\Pages\EditBotFlow;
 use App\Filament\Resources\BotFlows\Pages\ListBotFlows;
 use App\Filament\Resources\BotFlows\Schemas\BotFlowForm;
 use App\Filament\Resources\BotFlows\Tables\BotFlowsTable;
+use App\Filament\Support\PanelNavigation;
 use App\Models\BotFlow;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -21,7 +22,7 @@ class BotFlowResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSquares2x2;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Automasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::BOTS;
 
     protected static ?int $navigationSort = 20;
 

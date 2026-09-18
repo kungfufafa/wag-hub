@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\PanelNavigation;
 use BackedEnum;
 use Filament\Forms\Components\Placeholder;
 use Filament\Pages\Page;
@@ -10,6 +11,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
+use UnitEnum;
 
 /**
  * @property-read Schema $content
@@ -18,13 +20,17 @@ class IntegrationDocumentation extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBookOpen;
 
-    protected static ?string $navigationLabel = 'Dokumentasi Integrasi';
+    protected static ?string $navigationLabel = 'Dokumentasi';
 
     protected static ?string $title = 'Dokumentasi Integrasi';
 
     protected static ?string $slug = 'dokumentasi-integrasi';
 
-    protected static bool $shouldRegisterNavigation = false;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::SYSTEM;
+
+    protected static ?int $navigationSort = 30;
+
+    protected static bool $shouldRegisterNavigation = true;
 
     protected Width|string|null $maxContentWidth = Width::Full;
 

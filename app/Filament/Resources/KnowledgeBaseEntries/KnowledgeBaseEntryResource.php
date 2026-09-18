@@ -7,6 +7,7 @@ use App\Filament\Resources\KnowledgeBaseEntries\Pages\EditKnowledgeBaseEntry;
 use App\Filament\Resources\KnowledgeBaseEntries\Pages\ListKnowledgeBaseEntries;
 use App\Filament\Resources\KnowledgeBaseEntries\Schemas\KnowledgeBaseEntryForm;
 use App\Filament\Resources\KnowledgeBaseEntries\Tables\KnowledgeBaseEntriesTable;
+use App\Filament\Support\PanelNavigation;
 use App\Models\KnowledgeBaseEntry;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -21,11 +22,11 @@ class KnowledgeBaseEntryResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBookOpen;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Automasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::BOTS;
 
     protected static ?int $navigationSort = 30;
 
-    protected static ?string $navigationLabel = 'Knowledge Base (AI)';
+    protected static ?string $navigationLabel = 'Knowledge base';
 
     protected static ?string $modelLabel = 'Knowledge Base';
 

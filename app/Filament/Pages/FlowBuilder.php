@@ -2,8 +2,10 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\PanelNavigation;
 use App\Models\BotGraph;
 use App\Models\ProviderAccount;
+use App\Services\BotGraphEngine;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -15,17 +17,17 @@ use UnitEnum;
 /**
  * n8n-style visual builder for bot logic graphs. The canvas (Drawflow) lives
  * client-side; this page handles selecting, loading, and saving the graph
- * definition consumed by {@see \App\Services\BotGraphEngine}.
+ * definition consumed by {@see BotGraphEngine}.
  */
 class FlowBuilder extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCpuChip;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Automasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::BOTS;
 
     protected static ?int $navigationSort = 5;
 
-    protected static ?string $navigationLabel = 'Flow Builder';
+    protected static ?string $navigationLabel = 'Flow';
 
     protected static ?string $title = 'Flow Builder';
 

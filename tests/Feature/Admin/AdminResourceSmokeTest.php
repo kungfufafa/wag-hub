@@ -68,6 +68,40 @@ class AdminResourceSmokeTest extends TestCase
             ->assertSee('GATEWAY_DISPATCH=async');
     }
 
+    public function test_sidebar_separates_daily_work_from_engine_fallback_and_system_tools(): void
+    {
+        $administrator = User::factory()->create([
+            'is_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($administrator)->get('/panel')->assertOk();
+        $html = $response->getContent();
+
+        $response
+            ->assertSee('Hari ini')
+            ->assertSee('Nomor sendiri')
+            ->assertSee('Aplikasi sumber')
+            ->assertSee('OTP & cadangan')
+            ->assertSee('Mesin & nomor')
+            ->assertSee('Aplikasi & token')
+            ->assertSee('Provider cadangan')
+            ->assertSee('Urutan fallback')
+            ->assertSee('Antrian')
+            ->assertSee('Log')
+            ->assertSee('/horizon', false)
+            ->assertSee('/log-viewer', false);
+
+        $this->assertLessThan(
+            (int) strpos($html, 'Nomor sendiri'),
+            (int) strpos($html, 'Hari ini'),
+        );
+        $this->assertLessThan(
+            (int) strpos($html, 'OTP & cadangan'),
+            (int) strpos($html, 'Aplikasi sumber'),
+        );
+    }
+
     #[DataProvider('configurationCreatePages')]
     public function test_configuration_create_pages_show_a_next_step_sidebar(
         string $path,

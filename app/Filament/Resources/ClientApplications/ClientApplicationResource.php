@@ -8,6 +8,7 @@ use App\Filament\Resources\ClientApplications\Pages\ListClientApplications;
 use App\Filament\Resources\ClientApplications\RelationManagers\ApiCredentialsRelationManager;
 use App\Filament\Resources\RoutingPolicies\RoutingPolicyResource;
 use App\Filament\Support\ConfigurationListLayout;
+use App\Filament\Support\PanelNavigation;
 use App\Filament\Support\SyncsSlugFromName;
 use App\Models\ClientApplication;
 use BackedEnum;
@@ -41,11 +42,11 @@ class ClientApplicationResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedComputerDesktop;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Konfigurasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::APPS;
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Aplikasi Klien';
+    protected static ?string $navigationLabel = 'Aplikasi & token';
 
     protected static ?string $modelLabel = 'Aplikasi Klien';
 

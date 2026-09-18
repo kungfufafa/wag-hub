@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\PanelNavigation;
 use App\Models\UserAlertPreference;
 use App\Services\Alerts\AlertTestSender;
 use BackedEnum;
@@ -28,11 +29,11 @@ class MyAlertPreferences extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBell;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Alert';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::ALERTS;
 
     protected static ?int $navigationSort = 20;
 
-    protected static ?string $navigationLabel = 'Preferensi Alert';
+    protected static ?string $navigationLabel = 'Preferensi saya';
 
     protected static ?string $title = 'Preferensi Alert';
 

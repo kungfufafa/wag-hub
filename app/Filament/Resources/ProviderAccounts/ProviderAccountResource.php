@@ -9,6 +9,7 @@ use App\Filament\Resources\ProviderAccounts\Pages\CreateProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\ListProviderAccounts;
 use App\Filament\Support\ConfigurationListLayout;
+use App\Filament\Support\PanelNavigation;
 use App\Filament\Support\SyncsSlugFromName;
 use App\Http\Requests\StoreMessageRequest;
 use App\Models\ProviderAccount;
@@ -57,11 +58,11 @@ class ProviderAccountResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServerStack;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Konfigurasi';
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::FALLBACK;
 
-    protected static ?int $navigationSort = 20;
+    protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Akun Provider';
+    protected static ?string $navigationLabel = 'Provider cadangan';
 
     protected static ?string $modelLabel = 'Akun Provider';
 

@@ -3,7 +3,7 @@
 Selain provider pihak ketiga (Fonnte, GOWA, WABA), Hub bisa memakai **engine
 WhatsApp milik sendiri**: WAHA menjalankan engine **NOWEB** yang berbasis
 **Baileys** (WhatsApp Web multi-device). Anda menautkan nomor sendiri dengan
-memindai QR dari panel Hub (**Konfigurasi → Perangkat WhatsApp**), lalu kirim/
+memindai QR dari panel Hub (**Nomor sendiri → Mesin & nomor**), lalu kirim/
 terima lewat **Inbox** yang sama seperti provider lain.
 
 Karena driver `waha` di Hub sudah lengkap (kirim, inbox reader, webhook),
@@ -19,7 +19,7 @@ docker compose -f engine/docker-compose.yml up -d
 
 Lalu di Hub:
 
-1. **Konfigurasi → Akun Provider → Tambah**, driver **WAHA**:
+1. **OTP & cadangan → Provider cadangan → Tambah**, driver **WAHA**:
    - Base URL: `http://<host>:3000`
    - Session: `default`
    - API key: nilai `WAHA_API_KEY`
