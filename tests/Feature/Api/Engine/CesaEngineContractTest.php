@@ -7,6 +7,7 @@ use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -107,20 +108,40 @@ class CesaEngineContractTest extends TestCase
     public function test_session_poll_and_logout_follow_the_cesa_contract(): void
     {
         $client = $this->seedEngineHost();
-        $this->fakeWahaQrSession('rekrutmen-3');
+        $wahaStatus = 'SCAN_QR_CODE';
+
+        Http::fake(function (Request $request) use (&$wahaStatus) {
+            $url = $request->url();
+
+            if (str_contains($url, '/auth/qr')) {
+                return Http::response(base64_decode(self::PNG), 200, ['Content-Type' => 'image/png']);
+            }
+
+            if (str_contains($url, '/logout')) {
+                $wahaStatus = 'STOPPED';
+
+                return Http::response([], 200);
+            }
+
+            if (str_contains($url, '/api/sessions')) {
+                return Http::response([
+                    'name' => 'rekrutmen-3',
+                    'status' => $wahaStatus,
+                    ...($wahaStatus === 'WORKING' ? [
+                        'me' => ['id' => '628111222333@c.us', 'pushName' => 'CESA HR'],
+                    ] : []),
+                ], str_contains($url, '/start') || $request->method() === 'POST' ? 201 : 200);
+            }
+
+            return Http::response(['error' => 'unexpected '.$url], 599);
+        });
 
         $this->withToken($client['token'])
             ->postJson('/engine/sessions', ['id' => 'rekrutmen-3', 'mode' => 'qr'])
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('status', 'qr');
 
-        Http::fake([
-            '*/api/sessions/rekrutmen-3' => Http::response([
-                'name' => 'rekrutmen-3',
-                'status' => 'WORKING',
-                'me' => ['id' => '628111222333@c.us', 'pushName' => 'CESA HR'],
-            ], 200),
-            '*/api/sessions/rekrutmen-3/logout' => Http::response([], 200),
-        ]);
+        $wahaStatus = 'WORKING';
 
         $this->withToken($client['token'])
             ->getJson('/engine/sessions/rekrutmen-3')
@@ -139,7 +160,24 @@ class CesaEngineContractTest extends TestCase
     public function test_send_text_uses_the_session_provider_and_returns_cesa_sent_status(): void
     {
         $client = $this->seedEngineHost();
-        $this->fakeWahaQrSession('rekrutmen-9');
+
+        Http::fake(function (Request $request) {
+            $url = $request->url();
+
+            if (str_contains($url, '/api/sendText')) {
+                return Http::response(['id' => 'waha-cesa-001'], 201);
+            }
+
+            if (str_contains($url, '/auth/qr')) {
+                return Http::response(base64_decode(self::PNG), 200, ['Content-Type' => 'image/png']);
+            }
+
+            if (str_contains($url, '/api/sessions')) {
+                return Http::response(['name' => 'rekrutmen-9', 'status' => 'SCAN_QR_CODE'], 200);
+            }
+
+            return Http::response(['error' => 'unexpected '.$url], 599);
+        });
 
         $this->withToken($client['token'])
             ->postJson('/engine/sessions', ['id' => 'rekrutmen-9', 'mode' => 'qr'])
@@ -147,15 +185,6 @@ class CesaEngineContractTest extends TestCase
 
         $provider = ProviderAccount::query()->where('slug', 'web-cesa-sess-rekrutmen-9')->sole();
         $provider->forceFill(['session_status' => 'working'])->save();
-
-        Http::fake([
-            '*/api/sessions/rekrutmen-9' => Http::response([
-                'name' => 'rekrutmen-9',
-                'status' => 'WORKING',
-                'me' => ['id' => '6281200000001@c.us'],
-            ], 200),
-            '*/api/sendText' => Http::response(['id' => 'waha-cesa-001'], 201),
-        ]);
 
         $this->withToken($client['token'])
             ->postJson('/engine/sessions/rekrutmen-9/send', [
@@ -255,7 +284,7 @@ class CesaEngineContractTest extends TestCase
             'api_key' => 'waha-engine-secret',
         ]);
 
-        \Illuminate\Support\Facades\DB::table('client_applications')
+        DB::table('client_applications')
             ->where('id', $client['id'])
             ->update(['slug' => 'web-cesa']);
 
