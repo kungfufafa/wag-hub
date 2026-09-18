@@ -35,6 +35,10 @@ Webhook pesan masuk dikonfigurasi otomatis oleh Hub saat sesi dimulai
 > Baileys/WA Web bersifat tidak resmi. Cocok untuk percakapan bisnis/CS, bukan
 > trafik OTP/volume tinggi (risiko banned). OTP tetap disarankan lewat WABA resmi.
 
+Aplikasi [cesa-web](https://github.com/oceanspacedev/cesa-web) menghubungkan
+panel WhatsApp Rekrutmen ke Hub lewat `/engine` (bukan ke `whatsapp-engine`
+lokal). Satu akun CESA = satu sesi WAHA. Panduan: [docs/CESA_WEB.md](../docs/CESA_WEB.md).
+
 ## Dev / test — mock engine
 
 `mock-waha/` adalah engine tiruan kompatibel-WAHA untuk mengembangkan dan

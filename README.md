@@ -8,7 +8,9 @@
   Gateway Laravel terpusat untuk pemilihan provider WhatsApp, routing, dan fallback pesan.
 </p>
 
-Gateway Laravel terpusat untuk `appscript-ft`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA, Fonnte, GOWA, atau WABA, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
+Gateway Laravel terpusat untuk `appscript-ft`, `web-cesa`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA, Fonnte, GOWA, atau WABA, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
+
+`web-cesa` ([cesa-web](https://github.com/oceanspacedev/cesa-web)) dapat memakai Hub sebagai **pengganti engine Baileys lokal**. Lihat [docs/CESA_WEB.md](docs/CESA_WEB.md).
 
 Panduan deploy production dari `git clone`: [docs/DEPLOYMENT_ID.md](docs/DEPLOYMENT_ID.md).
 Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md).
@@ -52,7 +54,7 @@ php artisan db:seed
 `admin12345`. Nilai tersebut dapat diubah sebelum seed lewat
 `GATEWAY_SEED_ADMIN_NAME`, `GATEWAY_SEED_ADMIN_EMAIL`, dan
 `GATEWAY_SEED_ADMIN_PASSWORD` di `.env`.
-Seeder menyiapkan aplikasi `appscript-ft`, `web-shelf`, `web-sam`, dan
+Seeder menyiapkan aplikasi `appscript-ft`, `web-cesa`, `web-shelf`, `web-sam`, dan
 `web-helpdesk`. Nama `appscript-ft` digunakan sebagai aplikasi Apps Script yang
 tersedia di repository. Jika yang dimaksud adalah aplikasi lain, buat Client
 Application baru dari panel.

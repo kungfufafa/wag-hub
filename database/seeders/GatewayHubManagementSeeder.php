@@ -368,7 +368,7 @@ class GatewayHubManagementSeeder extends Seeder
                     'token_hash' => hash('sha256', $token),
                     'token_prefix' => substr($token, 0, 16),
                     'abilities' => $slug === 'web-cesa'
-                        ? ['messages:send', 'messages:read', 'numbers:check']
+                        ? ['messages:send', 'messages:read', 'numbers:check', 'engine:use']
                         : ['messages:send', 'messages:read'],
                     'revoked_at' => null,
                     'expires_at' => null,

@@ -127,7 +127,7 @@ class HubManagementSeederTest extends TestCase
 
         $cesaCredential = ApiCredential::query()->where('client_application_id', $cesa->id)->sole();
         $this->assertTrue(hash_equals(hash('sha256', 'wgh_cesa_seed_token'), $cesaCredential->getRawOriginal('token_hash')));
-        $this->assertSame(['messages:send', 'messages:read', 'numbers:check'], $cesaCredential->abilities);
+        $this->assertSame(['messages:send', 'messages:read', 'numbers:check', 'engine:use'], $cesaCredential->abilities);
     }
 
     public function test_it_is_idempotent_and_seeds_disabled_provider_accounts_and_routes_without_provider_credentials(): void

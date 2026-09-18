@@ -90,6 +90,23 @@ final readonly class WahaSessionClient
     }
 
     /**
+     * Request a pairing code for the given phone (digits, country code included).
+     */
+    public function requestPairingCode(ProviderAccount $account, string $phone): ?string
+    {
+        $session = $this->session($account);
+        $path = '/api/'.$session.'/auth/request-code';
+        $json = $this->postJson($account, $path, [
+            'phoneNumber' => $phone,
+            'phone' => $phone,
+        ]);
+
+        $code = InboxPayload::string($json['code'] ?? $json['pairingCode'] ?? $json['pairing_code'] ?? null);
+
+        return $code !== null && $code !== '' ? $code : null;
+    }
+
+    /**
      * Fetch the current pairing QR as a data URI, or null when unavailable
      * (e.g. the session is already paired or still starting).
      */

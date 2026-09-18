@@ -74,6 +74,9 @@ class IntegrationDocumentation extends Page
                         Placeholder::make('endpoint_check')
                             ->label('Cek nomor')
                             ->content(new HtmlString('<code class="text-xs">POST /api/v1/number-checks</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Butuh ability numbers:check</div>')),
+                        Placeholder::make('endpoint_engine')
+                            ->label('Engine cesa-web')
+                            ->content(new HtmlString('<code class="text-xs">/engine</code> atau <code class="text-xs">/engine/t/{token}</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Kontrak health/session/send yang sama dengan engine Rekrutmen CESA</div>')),
                     ])
                     ->columnSpan([
                         'default' => 'full',

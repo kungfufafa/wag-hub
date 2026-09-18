@@ -19,11 +19,54 @@ final readonly class WhatsAppSessionManager
         private WahaSessionClient $client,
     ) {}
 
-    public function connect(ProviderAccount $account): SessionStatus
+    public function connect(ProviderAccount $account, ?string $pairingPhone = null): SessionStatus
     {
         $this->assertSupported($account);
 
-        return $this->persist($account, $this->client->start($account));
+        $status = $this->persist($account, $this->client->start($account));
+
+        if ($pairingPhone !== null && $pairingPhone !== '') {
+            $code = $this->client->requestPairingCode($account, $pairingPhone);
+            $meta = is_array($account->session_meta) ? $account->session_meta : [];
+            $meta['pairing_phone'] = $pairingPhone;
+
+            if ($code !== null) {
+                $meta['pairing_code'] = $code;
+            }
+
+            $account->forceFill(['session_meta' => $meta])->save();
+        }
+
+        return $status;
+    }
+
+    public function pairingCode(ProviderAccount $account): ?string
+    {
+        $this->assertSupported($account);
+
+        $meta = is_array($account->session_meta) ? $account->session_meta : [];
+        $stored = is_string($meta['pairing_code'] ?? null) ? trim((string) $meta['pairing_code']) : '';
+
+        if ($stored !== '') {
+            return $stored;
+        }
+
+        $phone = is_string($meta['pairing_phone'] ?? null) ? trim((string) $meta['pairing_phone']) : '';
+
+        if ($phone === '') {
+            return null;
+        }
+
+        $code = $this->client->requestPairingCode($account, $phone);
+
+        if ($code === null) {
+            return null;
+        }
+
+        $meta['pairing_code'] = $code;
+        $account->forceFill(['session_meta' => $meta])->save();
+
+        return $code;
     }
 
     public function disconnect(ProviderAccount $account): SessionStatus

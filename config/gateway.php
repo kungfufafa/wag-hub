@@ -60,6 +60,12 @@ return [
     // sync = jalankan DispatchGatewayMessage langsung (tanpa queue:work) — cocok lokal/dev saja.
     'dispatch' => env('GATEWAY_DISPATCH', 'async') === 'sync' ? 'sync' : 'async',
 
+    // CESA Rekrutmen (cesa-web) talks to Hub as if it were the local Baileys engine.
+    // Sessions are created against this WAHA host (same server, per-account session name).
+    'cesa_engine' => [
+        'host_provider_slug' => env('GATEWAY_CESA_WAHA_SLUG', 'waha-primary'),
+    ],
+
     'attachments' => [
         'disk' => env('GATEWAY_ATTACHMENT_DISK', 'local'),
         'max_bytes' => (int) env('GATEWAY_ATTACHMENT_MAX_BYTES', 16 * 1024 * 1024),
