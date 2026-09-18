@@ -92,14 +92,17 @@ class AdminResourceSmokeTest extends TestCase
             ->assertSee('/horizon', false)
             ->assertSee('/log-viewer', false);
 
-        $this->assertLessThan(
-            (int) strpos($html, 'Nomor sendiri'),
-            (int) strpos($html, 'Hari ini'),
-        );
-        $this->assertLessThan(
-            (int) strpos($html, 'OTP & cadangan'),
-            (int) strpos($html, 'Aplikasi sumber'),
-        );
+        $today = strpos($html, 'Hari ini');
+        $ownNumber = strpos($html, 'Nomor sendiri');
+        $apps = strpos($html, 'Aplikasi sumber');
+        $fallback = strpos($html, 'OTP &amp; cadangan');
+
+        $this->assertNotFalse($today);
+        $this->assertNotFalse($ownNumber);
+        $this->assertNotFalse($apps);
+        $this->assertNotFalse($fallback);
+        $this->assertLessThan($ownNumber, $today);
+        $this->assertLessThan($fallback, $apps);
     }
 
     #[DataProvider('configurationCreatePages')]
