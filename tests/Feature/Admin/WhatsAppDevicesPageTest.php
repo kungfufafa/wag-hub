@@ -46,11 +46,11 @@ class WhatsAppDevicesPageTest extends TestCase
         ]);
 
         $page = Livewire::test(WhatsAppDevices::class)
-            ->assertSee('Mesin engine')
-            ->assertSee('Nomor dari CESA / Helpdesk / SAM')
+            ->assertSee('Host WAHA')
+            ->assertSee('Sesi /engine')
             ->assertSee($host->name)
             ->assertSee($linked->name)
-            ->assertSee('User CESA/Helpdesk/SAM menautkan nomor');
+            ->assertSee('Sesi WAHA');
 
         $this->assertSame([$host->id], $page->instance()->hostDevices()->pluck('id')->all());
         $this->assertSame([$linked->id], $page->instance()->linkedDevices()->pluck('id')->all());
@@ -67,7 +67,7 @@ class WhatsAppDevicesPageTest extends TestCase
         ]);
 
         Livewire::test(WhatsAppDevices::class)
-            ->assertSee('Satu tombol')
+            ->assertSee('cs-1')
             ->assertSee('Hubungkan')
             ->assertDontSee('https://waha-engine.test');
     }

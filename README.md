@@ -271,7 +271,7 @@ rate-limit sendiri sehingga tidak mengurangi kuota pengiriman pesan.
 
 Setiap request valid memiliki `data.id` sebagai ID audit. Bila route/provider tidak
 tersedia, ID yang sama dikembalikan melalui `error.audit_id`. Riwayat dapat dilihat
-di **Hari ini → Cek nomor** (`/panel/number-checks`) dan mencatat:
+di **WhatsApp → Pengecekan Nomor** (`/panel/number-checks`) dan mencatat:
 
 - aplikasi serta credential peminta;
 - ID korelasi, route, waktu mulai dan selesai;

@@ -13,10 +13,10 @@
     @if ($devices->isEmpty())
         <div class="wa-devices-empty">
             <x-filament::icon icon="heroicon-o-device-phone-mobile" class="wa-devices-empty-icon" />
-            <h3 class="wa-devices-empty-title">Belum ada engine self-hosted</h3>
+            <h3 class="wa-devices-empty-title">Tidak ada akun WAHA</h3>
             <p class="wa-devices-empty-text">
-                IT memasang satu mesin <strong>WAHA</strong> di sini. User CESA / Helpdesk / SAM
-                menautkan nomor mereka sendiri dari aplikasi itu — cukup Hubungkan, lalu scan.
+                Buka <strong>Akun Provider</strong>, pilih driver <strong>WAHA</strong>,
+                isi base URL dan API key.
             </p>
             <x-filament::button tag="a" icon="heroicon-o-plus"
                 :href="\App\Filament\Resources\ProviderAccounts\ProviderAccountResource::getUrl('create')">
@@ -28,17 +28,17 @@
             <aside class="wa-devices-col wa-devices-list">
                 <div class="wa-devices-head">
                     <h2 class="wa-devices-heading">Perangkat</h2>
-                    <p class="wa-devices-sub">Host = mesin. Nomor aplikasi = yang di-scan user.</p>
+                    <p class="wa-devices-sub">Akun driver WAHA di provider_accounts.</p>
                 </div>
                 <div class="wa-devices-scroll">
                     @if ($hosts->isNotEmpty())
-                        <p class="wa-devices-group">Mesin engine</p>
+                        <p class="wa-devices-group">Host WAHA</p>
                         @foreach ($hosts as $device)
                             @include('filament.pages.partials.whatsapp-device-item', ['device' => $device, 'selected' => $selected])
                         @endforeach
                     @endif
                     @if ($linked->isNotEmpty())
-                        <p class="wa-devices-group">Nomor dari CESA / Helpdesk / SAM</p>
+                        <p class="wa-devices-group">Sesi /engine</p>
                         @foreach ($linked as $device)
                             @include('filament.pages.partials.whatsapp-device-item', ['device' => $device, 'selected' => $selected])
                         @endforeach
@@ -87,11 +87,8 @@
                                 </span>
                                 <h3 class="wa-devices-state-title">Terhubung</h3>
                                 <p class="wa-devices-state-text">
-                                    @if ($selectedLinked)
-                                        Nomor {{ $this->connectedNumber($selected) ?? 'user' }} sudah tertaut dari aplikasi sumber.
-                                    @else
-                                        Mesin host siap. Nomor aplikasi ditautkan user lewat CESA / Helpdesk / SAM.
-                                    @endif
+                                    {{ $this->connectedNumber($selected) ?? $selected->configuration['session'] ?? $selected->slug }}
+                                    WORKING.
                                 </p>
                                 <x-filament::button tag="a" size="sm" icon="heroicon-o-inbox"
                                     :href="\App\Filament\Pages\WhatsAppInbox::getUrl() . '?provider=' . $selected->id">
@@ -126,17 +123,13 @@
                                     <x-filament::icon icon="heroicon-o-qr-code" />
                                 </span>
                                 <p class="wa-devices-state-text">
-                                    @if ($selectedLinked)
-                                        Satu tombol: <strong>Hubungkan</strong>, lalu scan QR di HP.
-                                        User tidak perlu melihat token atau pilih provider.
-                                    @else
-                                        Klik <strong>Hubungkan</strong> jika Anda menautkan mesin host.
-                                        Nomor HR/CS di-scan dari aplikasi mereka, bukan dari sini.
-                                    @endif
+                                    {{ $selectedStatus->label() }}.
+                                    Session
+                                    <code>{{ $selected->configuration['session'] ?? $selected->slug }}</code>.
                                 </p>
                                 @unless ($selectedLinked)
                                     <p class="wa-devices-meta">
-                                        Engine {{ $selected->configuration['base_url'] ?? '—' }}
+                                        base_url {{ $selected->configuration['base_url'] ?? '—' }}
                                     </p>
                                 @endunless
                             </div>

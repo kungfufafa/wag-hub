@@ -26,19 +26,13 @@ flowchart TB
 
 Token Hub **ditolak** di `/engine`. Token engine **ditolak** di `/api/v1/messages`.
 
-## Perjalanan yang dipersingkat
+## Setup
 
-Tiga langkah. Token tidak pernah dilihat user bisnis.
+1. `/panel/client-applications` → Kredensial API → **Buat WAG_TOKEN & ENGINE_URL**.
+2. Tempel blok itu ke `.env` cesa-web (atau helpdesk/SAM). `REKRUTMEN_WHATSAPP_ENGINE_AUTO_START=false`.
+3. QR: `POST /engine/sessions` dari `WhatsAppEngineClient`, atau `/panel/devices` → Hubungkan.
 
-1. **IT di Hub** — buka Aplikasi Klien → **Terbitkan paket**. Salin blok `.env`.
-2. **IT di aplikasi sumber** — tempel env, restart. Jangan nyalakan Node lokal.
-3. **User bisnis** — di CESA / Helpdesk / SAM: **Hubungkan** → scan QR → selesai.
-
-HR/CS tidak buka panel Hub, tidak pilih provider, tidak pegang token.
-
-Di Hub, **Perangkat WhatsApp** memisahkan *mesin engine* (host WAHA) dari
-*nomor yang di-scan user*. Operator boleh pantau; pairing utama tetap di
-aplikasi sumber.
+`/panel/devices` membagi host WAHA (slug tanpa `-sess-`) dan sesi `/engine` (`{app}-sess-{id}`).
 
 ## Jalur Hub (tetap seperti semula)
 

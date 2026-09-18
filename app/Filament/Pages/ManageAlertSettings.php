@@ -33,7 +33,7 @@ class ManageAlertSettings extends Page
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Pengaturan';
+    protected static ?string $navigationLabel = 'Pengaturan Alert';
 
     protected static ?string $title = 'Pengaturan Alert';
 

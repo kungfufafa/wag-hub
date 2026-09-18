@@ -33,7 +33,7 @@ class MyAlertPreferences extends Page
 
     protected static ?int $navigationSort = 20;
 
-    protected static ?string $navigationLabel = 'Preferensi saya';
+    protected static ?string $navigationLabel = 'Preferensi Alert';
 
     protected static ?string $title = 'Preferensi Alert';
 

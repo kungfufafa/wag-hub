@@ -19,12 +19,12 @@ final readonly class IntegrationPack
     {
         $hub = ApiCredential::issue(
             $application,
-            $this->uniqueName($application, 'Paket Hub'),
+            $this->uniqueName($application, 'WAG_TOKEN'),
             $this->hubAbilities($application),
         );
         $engine = ApiCredential::issue(
             $application,
-            $this->uniqueName($application, 'Paket Engine'),
+            $this->uniqueName($application, 'ENGINE_URL'),
             ['engine:use'],
         );
 
@@ -51,7 +51,7 @@ final readonly class IntegrationPack
         $slug = (string) $application->slug;
 
         $lines = [
-            '# Tempel di aplikasi sumber. User bisnis tidak perlu melihat token ini.',
+            '# '.$slug,
             'WAG_URL='.$baseUrl,
             'WAG_TOKEN='.$hubToken,
         ];
@@ -62,9 +62,6 @@ final readonly class IntegrationPack
         } else {
             $lines[] = 'ENGINE_URL='.$engineUrl;
         }
-
-        $lines[] = '';
-        $lines[] = '# WAG_TOKEN = OTP/notifikasi (fallback). ENGINE = nomor yang user scan sendiri.';
 
         return implode("\n", $lines);
     }

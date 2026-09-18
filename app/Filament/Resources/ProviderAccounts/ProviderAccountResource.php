@@ -58,11 +58,11 @@ class ProviderAccountResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServerStack;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::FALLBACK;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::PROVIDERS;
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Provider cadangan';
+    protected static ?string $navigationLabel = 'Akun Provider';
 
     protected static ?string $modelLabel = 'Akun Provider';
 

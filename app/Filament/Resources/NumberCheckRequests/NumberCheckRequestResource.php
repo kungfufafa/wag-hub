@@ -31,11 +31,11 @@ class NumberCheckRequestResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentMagnifyingGlass;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::TODAY;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::WHATSAPP;
 
     protected static ?int $navigationSort = 20;
 
-    protected static ?string $navigationLabel = 'Cek nomor';
+    protected static ?string $navigationLabel = 'Pengecekan Nomor';
 
     protected static ?string $modelLabel = 'Pengecekan Nomor';
 

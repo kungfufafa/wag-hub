@@ -3,22 +3,21 @@
 namespace App\Filament\Support;
 
 /**
- * Sidebar groups, ordered by the job a Hub operator is doing.
- * Daily work first; engine vs fallback stay apart; bots/alerts/system collapse.
+ * Sidebar group labels. Names match the screens under them.
  */
 final class PanelNavigation
 {
-    public const TODAY = 'Hari ini';
+    public const WHATSAPP = 'WhatsApp';
 
-    public const OWN_NUMBER = 'Nomor sendiri';
+    public const DEVICES = 'Perangkat';
 
-    public const APPS = 'Aplikasi sumber';
+    public const APPS = 'Aplikasi';
 
-    public const FALLBACK = 'OTP & cadangan';
+    public const PROVIDERS = 'Provider';
 
-    public const BOTS = 'Bot';
+    public const AUTOMATION = 'Automasi';
 
-    public const ALERTS = 'Peringatan';
+    public const ALERTS = 'Alert';
 
-    public const SYSTEM = 'Sistem';
+    public const SERVER = 'Server';
 }

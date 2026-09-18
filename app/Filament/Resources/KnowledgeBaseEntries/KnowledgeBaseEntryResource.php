@@ -22,11 +22,11 @@ class KnowledgeBaseEntryResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBookOpen;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::BOTS;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::AUTOMATION;
 
     protected static ?int $navigationSort = 30;
 
-    protected static ?string $navigationLabel = 'Knowledge base';
+    protected static ?string $navigationLabel = 'Knowledge Base (AI)';
 
     protected static ?string $modelLabel = 'Knowledge Base';
 

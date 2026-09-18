@@ -34,7 +34,7 @@ class AlertDeliveryResource extends Resource
 
     protected static ?int $navigationSort = 30;
 
-    protected static ?string $navigationLabel = 'Riwayat';
+    protected static ?string $navigationLabel = 'Riwayat Alert';
 
     protected static ?string $modelLabel = 'Pengiriman Alert';
 

@@ -313,8 +313,8 @@ class AdminResourceBehaviorTest extends TestCase
         $this->assertStringContainsString('WAG_TOKEN='.$hubToken, $env);
         $this->assertStringContainsString('AUTO_START=false', $env);
 
-        $hub = ApiCredential::query()->where('name', 'like', 'Paket Hub%')->sole();
-        $engine = ApiCredential::query()->where('name', 'like', 'Paket Engine%')->sole();
+        $hub = ApiCredential::query()->where('name', 'like', 'WAG_TOKEN%')->sole();
+        $engine = ApiCredential::query()->where('name', 'like', 'ENGINE_URL%')->sole();
         $this->assertSame(['messages:send', 'messages:read', 'numbers:check'], $hub->abilities);
         $this->assertSame(['engine:use'], $engine->abilities);
         $this->assertSame(hash('sha256', $hubToken), $hub->getRawOriginal('token_hash'));

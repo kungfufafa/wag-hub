@@ -22,7 +22,7 @@ class BotFlowResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSquares2x2;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::BOTS;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::AUTOMATION;
 
     protected static ?int $navigationSort = 20;
 

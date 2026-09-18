@@ -31,11 +31,11 @@ class WhatsAppInbox extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInbox;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::TODAY;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::WHATSAPP;
 
     protected static ?int $navigationSort = 5;
 
-    protected static ?string $navigationLabel = 'Inbox';
+    protected static ?string $navigationLabel = 'Inbox WhatsApp';
 
     protected static ?string $title = 'Inbox WhatsApp';
 

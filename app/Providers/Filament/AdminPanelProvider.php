@@ -51,23 +51,23 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Emerald,
             ])
             ->navigationGroups([
-                NavigationGroup::make(PanelNavigation::TODAY),
-                NavigationGroup::make(PanelNavigation::OWN_NUMBER),
+                NavigationGroup::make(PanelNavigation::WHATSAPP),
+                NavigationGroup::make(PanelNavigation::DEVICES),
                 NavigationGroup::make(PanelNavigation::APPS),
-                NavigationGroup::make(PanelNavigation::FALLBACK),
-                NavigationGroup::make(PanelNavigation::BOTS)->collapsed(),
+                NavigationGroup::make(PanelNavigation::PROVIDERS),
+                NavigationGroup::make(PanelNavigation::AUTOMATION)->collapsed(),
                 NavigationGroup::make(PanelNavigation::ALERTS)->collapsed(),
-                NavigationGroup::make(PanelNavigation::SYSTEM)->collapsed(),
+                NavigationGroup::make(PanelNavigation::SERVER)->collapsed(),
             ])
             ->navigationItems([
-                NavigationItem::make('Antrian')
+                NavigationItem::make('Horizon')
                     ->icon(Heroicon::OutlinedQueueList)
-                    ->group(PanelNavigation::SYSTEM)
+                    ->group(PanelNavigation::SERVER)
                     ->sort(10)
                     ->url('/horizon', shouldOpenInNewTab: true),
-                NavigationItem::make('Log')
+                NavigationItem::make('Log viewer')
                     ->icon(Heroicon::OutlinedDocumentText)
-                    ->group(PanelNavigation::SYSTEM)
+                    ->group(PanelNavigation::SERVER)
                     ->sort(20)
                     ->url('/log-viewer', shouldOpenInNewTab: true),
             ])

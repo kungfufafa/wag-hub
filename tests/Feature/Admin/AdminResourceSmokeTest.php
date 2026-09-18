@@ -60,8 +60,8 @@ class AdminResourceSmokeTest extends TestCase
         $this->actingAs($administrator)
             ->get('/panel/dokumentasi-integrasi')
             ->assertOk()
-            ->assertSee('Siapkan aplikasi sumber')
-            ->assertSee('Terbitkan paket')
+            ->assertSee('Setup')
+            ->assertSee('Buat WAG_TOKEN')
             ->assertSee('Endpoint cepat')
             ->assertSee('POST /api/v1/messages')
             ->assertSee('Checklist')
@@ -79,30 +79,30 @@ class AdminResourceSmokeTest extends TestCase
         $html = $response->getContent();
 
         $response
-            ->assertSee('Hari ini')
-            ->assertSee('Nomor sendiri')
-            ->assertSee('Aplikasi sumber')
-            ->assertSee('OTP & cadangan')
-            ->assertSee('Mesin & nomor')
-            ->assertSee('Aplikasi & token')
-            ->assertSee('Provider cadangan')
-            ->assertSee('Urutan fallback')
-            ->assertSee('Antrian')
-            ->assertSee('Log')
+            ->assertSee('WhatsApp')
+            ->assertSee('Perangkat')
+            ->assertSee('Aplikasi')
+            ->assertSee('Provider')
+            ->assertSee('Perangkat WhatsApp')
+            ->assertSee('Aplikasi Klien')
+            ->assertSee('Akun Provider')
+            ->assertSee('Aturan Rute')
+            ->assertSee('Horizon')
+            ->assertSee('Log viewer')
             ->assertSee('/horizon', false)
             ->assertSee('/log-viewer', false);
 
-        $today = strpos($html, 'Hari ini');
-        $ownNumber = strpos($html, 'Nomor sendiri');
-        $apps = strpos($html, 'Aplikasi sumber');
-        $fallback = strpos($html, 'OTP &amp; cadangan');
+        $whatsapp = strpos($html, 'WhatsApp');
+        $devices = strpos($html, 'Perangkat');
+        $apps = strpos($html, 'Aplikasi Klien');
+        $providers = strpos($html, 'Akun Provider');
 
-        $this->assertNotFalse($today);
-        $this->assertNotFalse($ownNumber);
+        $this->assertNotFalse($whatsapp);
+        $this->assertNotFalse($devices);
         $this->assertNotFalse($apps);
-        $this->assertNotFalse($fallback);
-        $this->assertLessThan($ownNumber, $today);
-        $this->assertLessThan($fallback, $apps);
+        $this->assertNotFalse($providers);
+        $this->assertLessThan($devices, $whatsapp);
+        $this->assertLessThan($providers, $apps);
     }
 
     #[DataProvider('configurationCreatePages')]

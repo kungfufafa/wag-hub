@@ -36,11 +36,11 @@ class GatewayMessageResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::TODAY;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::WHATSAPP;
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Pesan terkirim';
+    protected static ?string $navigationLabel = 'Pesan';
 
     protected static ?string $modelLabel = 'Pesan';
 

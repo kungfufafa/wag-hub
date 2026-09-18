@@ -46,7 +46,7 @@ class ClientApplicationResource extends Resource
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Aplikasi & token';
+    protected static ?string $navigationLabel = 'Aplikasi Klien';
 
     protected static ?string $modelLabel = 'Aplikasi Klien';
 
@@ -106,19 +106,19 @@ class ClientApplicationResource extends Resource
                         'lg' => 2,
                     ]),
                 Section::make('Langkah berikutnya')
-                    ->description('Selesaikan setup aplikasi dalam urutan ini.')
+                    ->description('Urutan di panel ini.')
                     ->schema([
                         Placeholder::make('create_credential')
-                            ->label('1. Terbitkan paket')
+                            ->label('1. Kredensial API')
                             ->content(fn (string $operation): string => $operation === 'edit'
-                                ? 'Di tab Kredensial: “Terbitkan paket” — dapat Hub + Engine dan blok .env siap salin.'
-                                : 'Setelah disimpan, terbitkan paket (bukan merakit token satu-satu).'),
+                                ? 'Tab Kredensial API → Buat WAG_TOKEN & ENGINE_URL.'
+                                : 'Simpan dulu, lalu buka tab Kredensial API.'),
                         Placeholder::make('choose_route')
-                            ->label('2. Rute fallback (opsional)')
-                            ->content('Hanya untuk OTP/notifikasi sistem. Nomor yang di-scan user tidak memakai rute ini.'),
+                            ->label('2. Aturan Rute')
+                            ->content('Untuk POST /api/v1/messages. Sesi /engine tidak memakai baris ini.'),
                         Placeholder::make('activate_application')
-                            ->label('3. User scan di aplikasi mereka')
-                            ->content('HR/CS tidak buka panel Hub. Mereka Hubungkan WhatsApp di CESA/Helpdesk/SAM.'),
+                            ->label('3. QR')
+                            ->content('CESA Rekrutmen: POST /engine/sessions. Atau Perangkat WhatsApp → Hubungkan.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',

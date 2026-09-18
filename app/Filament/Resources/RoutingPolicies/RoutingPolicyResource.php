@@ -47,11 +47,11 @@ class RoutingPolicyResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQueueList;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::FALLBACK;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::PROVIDERS;
 
     protected static ?int $navigationSort = 20;
 
-    protected static ?string $navigationLabel = 'Urutan fallback';
+    protected static ?string $navigationLabel = 'Aturan Rute';
 
     protected static ?string $modelLabel = 'Aturan Rute';
 

@@ -27,11 +27,11 @@ class WhatsAppDevices extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDevicePhoneMobile;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::OWN_NUMBER;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::DEVICES;
 
     protected static ?int $navigationSort = 10;
 
-    protected static ?string $navigationLabel = 'Mesin & nomor';
+    protected static ?string $navigationLabel = 'Perangkat WhatsApp';
 
     protected static ?string $title = 'Perangkat WhatsApp';
 
@@ -200,7 +200,7 @@ class WhatsAppDevices extends Page
 
     public function getSubheading(): ?string
     {
-        return 'Mesin host di sini. User CESA/Helpdesk/SAM menautkan nomor dari aplikasi mereka (satu tombol, scan QR).';
+        return 'Sesi WAHA yang tercatat di Akun Provider driver WAHA.';
     }
 
     protected function getHeaderActions(): array

@@ -20,13 +20,13 @@ class IntegrationDocumentation extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBookOpen;
 
-    protected static ?string $navigationLabel = 'Dokumentasi';
+    protected static ?string $navigationLabel = 'Dokumentasi Integrasi';
 
     protected static ?string $title = 'Dokumentasi Integrasi';
 
     protected static ?string $slug = 'dokumentasi-integrasi';
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::SYSTEM;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::SERVER;
 
     protected static ?int $navigationSort = 30;
 
@@ -42,22 +42,22 @@ class IntegrationDocumentation extends Page
                 'lg' => 3,
             ])
             ->components([
-                Section::make('Siapkan aplikasi sumber')
-                    ->description('Urutan setup di panel ini sebelum aplikasi lain memanggil API Hub.')
+                Section::make('Setup')
+                    ->description('Layar di /panel sebelum repo lain memanggil API.')
                     ->icon(Heroicon::OutlinedQueueList)
                     ->schema([
                         Placeholder::make('step_1')
-                            ->label('1. Buat Aplikasi Klien')
-                            ->content('Satu sistem sumber = satu aplikasi. Beri nama yang jelas (misalnya Web Shelf).'),
+                            ->label('1. Aplikasi Klien')
+                            ->content('Satu baris per repo: web-cesa, web-helpdesk, web-sam, web-shelf, appscript-ft.'),
                         Placeholder::make('step_2')
-                            ->label('2. Terbitkan paket')
-                            ->content('Satu klik: token Hub (fallback) + token Engine (nomor sendiri) dan blok .env. Jangan campur kedua token.'),
+                            ->label('2. Kredensial API')
+                            ->content('Tombol Buat WAG_TOKEN & ENGINE_URL. WAG_TOKEN ke Authorization Bearer. ENGINE_URL ke /engine/t/{token}.'),
                         Placeholder::make('step_3')
-                            ->label('3. Provider host WAHA')
-                            ->content('Satu mesin engine. User menautkan nomor dari CESA/Helpdesk/SAM, bukan dari sini.'),
+                            ->label('3. Akun Provider WAHA')
+                            ->content('Driver WAHA: base_url, session, api_key. Host masuk GATEWAY_PROVIDER_HTTP_HOSTS.'),
                         Placeholder::make('step_4')
-                            ->label('4. User: Hubungkan → scan → selesai')
-                            ->content('Di aplikasi sumber, satu tombol. Jangan tampilkan token atau pilihan provider ke HR/CS.'),
+                            ->label('4. QR')
+                            ->content('Perangkat WhatsApp → Hubungkan, atau POST /engine/sessions dari WhatsAppEngineClient.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -81,8 +81,8 @@ class IntegrationDocumentation extends Page
                             ->label('Cek nomor')
                             ->content(new HtmlString('<code class="text-xs">POST /api/v1/number-checks</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Butuh ability numbers:check</div>')),
                         Placeholder::make('endpoint_engine')
-                            ->label('Engine (nomor sendiri)')
-                            ->content(new HtmlString('<code class="text-xs">/engine</code> — token <code class="text-xs">engine:use</code>, terpisah dari WAG_TOKEN<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">QR/pairing; kirim tanpa fallback pool</div>')),
+                            ->label('/engine')
+                            ->content(new HtmlString('<code class="text-xs">GET/POST /engine/t/{token}/sessions</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Ability engine:use. WhatsAppEngineClient tidak mengirim Authorization.</div>')),
                     ])
                     ->columnSpan([
                         'default' => 'full',

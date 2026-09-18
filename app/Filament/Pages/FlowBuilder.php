@@ -23,11 +23,11 @@ class FlowBuilder extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCpuChip;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::BOTS;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::AUTOMATION;
 
     protected static ?int $navigationSort = 5;
 
-    protected static ?string $navigationLabel = 'Flow';
+    protected static ?string $navigationLabel = 'Flow Builder';
 
     protected static ?string $title = 'Flow Builder';
 

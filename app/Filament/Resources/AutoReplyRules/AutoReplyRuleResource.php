@@ -22,7 +22,7 @@ class AutoReplyRuleResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 
-    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::BOTS;
+    protected static string|UnitEnum|null $navigationGroup = PanelNavigation::AUTOMATION;
 
     protected static ?int $navigationSort = 10;
 

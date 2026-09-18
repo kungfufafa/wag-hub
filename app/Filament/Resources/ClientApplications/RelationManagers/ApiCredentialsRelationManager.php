@@ -29,14 +29,14 @@ class ApiCredentialsRelationManager extends RelationManager
     public function showIssuedPackAction(): Action
     {
         return Action::make('showIssuedPack')
-            ->modalHeading('Paket siap ditempel')
-            ->modalDescription('Salin blok env ke CESA/Helpdesk/SAM. Setelah modal ditutup, token tidak dapat dilihat lagi. User bisnis hanya scan QR di aplikasi mereka.')
+            ->modalHeading('Salin ke .env')
+            ->modalDescription('WAG_TOKEN = Authorization Bearer di /api/v1/messages. ENGINE_URL = /engine/t/{token} untuk WhatsAppEngineClient. Modal ditutup, plaintext hilang.')
             ->modalIcon(Heroicon::OutlinedClipboardDocumentList)
             ->modalIconColor('success')
             ->modalWidth(Width::Large)
             ->schema([
                 TextInput::make('hub_token')
-                    ->label('Token Hub (OTP / fallback)')
+                    ->label('WAG_TOKEN')
                     ->password()
                     ->revealable()
                     ->readOnly()
@@ -50,7 +50,7 @@ class ApiCredentialsRelationManager extends RelationManager
                             ->alpineClickHandler(fn (mixed $state): string => static::copyToClipboardAlpine((string) ($state ?? ''))),
                     ),
                 TextInput::make('engine_token')
-                    ->label('Token Engine (nomor sendiri)')
+                    ->label('Token /engine/t/{token}')
                     ->password()
                     ->revealable()
                     ->readOnly()
@@ -64,7 +64,7 @@ class ApiCredentialsRelationManager extends RelationManager
                             ->alpineClickHandler(fn (mixed $state): string => static::copyToClipboardAlpine((string) ($state ?? ''))),
                     ),
                 Textarea::make('env')
-                    ->label('Tempel ke .env aplikasi sumber')
+                    ->label('.env (cesa-web / helpdesk / SAM)')
                     ->rows(8)
                     ->readOnly()
                     ->dehydrated(false)
@@ -242,12 +242,12 @@ class ApiCredentialsRelationManager extends RelationManager
             ])
             ->headerActions([
                 Action::make('issuePack')
-                    ->label('Terbitkan paket')
+                    ->label('Buat WAG_TOKEN & ENGINE_URL')
                     ->icon(Heroicon::OutlinedSparkles)
                     ->color('primary')
-                    ->modalHeading('Terbitkan paket Hub + Engine?')
-                    ->modalDescription('Dua token terpisah: Hub untuk OTP/fallback, Engine agar user menautkan nomornya sendiri. User tidak melihat layar ini.')
-                    ->modalSubmitActionLabel('Terbitkan paket')
+                    ->modalHeading('Buat WAG_TOKEN dan token engine?')
+                    ->modalDescription('Dua baris di api_credentials: messages:send/read (plus numbers:check untuk web-cesa), dan engine:use.')
+                    ->modalSubmitActionLabel('Buat token')
                     ->action(function (): void {
                         /** @var ClientApplication $application */
                         $application = $this->getOwnerRecord();
@@ -286,7 +286,7 @@ class ApiCredentialsRelationManager extends RelationManager
                                 'messages:send' => 'Kirim pesan',
                                 'messages:read' => 'Baca status pesan',
                                 'numbers:check' => 'Cek nomor WhatsApp',
-                                'engine:use' => 'Engine (tautkan nomor sendiri)',
+                                'engine:use' => 'engine:use',
                             ])
                             ->default(['messages:send', 'messages:read'])
                             ->required()
