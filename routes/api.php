@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AttachmentController;
+use App\Http\Controllers\Api\V1\ConnectionController;
 use App\Http\Controllers\Api\V1\MessageController;
 use App\Http\Controllers\Api\V1\NumberCheckController;
 use Illuminate\Support\Facades\Route;
@@ -13,6 +14,28 @@ Route::prefix('v1')
 
         Route::get('/attachments/{uuid}', [AttachmentController::class, 'show'])
             ->whereUuid('uuid')
+            ->middleware(['client.ability:messages:read', 'client.rate:messages']);
+
+        Route::get('/connections', [ConnectionController::class, 'index'])
+            ->middleware(['client.ability:messages:read', 'client.rate:messages']);
+
+        Route::post('/connections', [ConnectionController::class, 'store'])
+            ->middleware(['client.ability:engine:use', 'client.rate:engine']);
+
+        Route::get('/connections/{connectionId}', [ConnectionController::class, 'show'])
+            ->whereUuid('connectionId')
+            ->middleware(['client.ability:messages:read', 'client.rate:messages']);
+
+        Route::post('/connections/{connectionId}/setup', [ConnectionController::class, 'setup'])
+            ->whereUuid('connectionId')
+            ->middleware(['client.ability:engine:use', 'client.rate:engine']);
+
+        Route::post('/connections/{connectionId}/test', [ConnectionController::class, 'test'])
+            ->whereUuid('connectionId')
+            ->middleware(['client.ability:messages:send', 'client.rate:messages']);
+
+        Route::get('/connections/{connectionId}/integration', [ConnectionController::class, 'integration'])
+            ->whereUuid('connectionId')
             ->middleware(['client.ability:messages:read', 'client.rate:messages']);
 
         Route::post('/messages', [MessageController::class, 'store'])

@@ -11,10 +11,11 @@
 WAG Hub menyediakan provider WhatsApp sendiri melalui runner Baileys dan juga menjadi router untuk WAHA, GOWA, Fonnte, serta WABA. CESA, DND, dan aplikasi lain memakai API yang sama. UI login QR/pairing, status, dan logout dapat ditampilkan di aplikasi klien; socket, kredensial WhatsApp, dan riwayat pengiriman dikelola di WAG Hub.
 
 Untuk memakai WhatsApp dari **CESA, DND, atau aplikasi lain**, buat Aplikasi
-Klien lalu klik **Hubungkan aplikasi**. Salin `WAG_URL` dan `WAG_TOKEN` ke
-backend aplikasi. WAG Hub mengelola login QR/pairing, logout, sesi, dan
-pengiriman lewat `/api/v1/engine`; aplikasi klien tidak perlu menjalankan engine.
-Lihat [panduan plug and play](docs/PLUG_AND_PLAY_GUIDE.md) dan
+Klien lalu hubungkan **Koneksi WhatsApp** (atau klik **Hubungkan aplikasi** untuk
+kredensial). Salin `WAG_URL`, `WAG_TOKEN`, dan opsional `WAG_CONNECTION_ID` ke
+backend aplikasi. Kirim pesan lewat `/api/v1/messages` dengan `connection_id`, atau
+tetap memakai `/api/v1/engine` untuk kontrol sesi per nomor.
+Lihat [panduan koneksi](docs/CONNECTIONS_GUIDE.md), [panduan plug and play](docs/PLUG_AND_PLAY_GUIDE.md), dan
 [migrasi CESA](docs/CESA_WEB.md).
 
 Kirim melalui nomor yang dipilih di `/api/v1/engine/sessions/{id}/send`, atau

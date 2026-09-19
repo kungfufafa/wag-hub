@@ -57,7 +57,7 @@ final readonly class GatewayMessageDispatcher
 
         $message = $this->markProcessing($message);
 
-        if (in_array((string) $message->origin, ['inbox', 'engine'], true)) {
+        if ($this->requiresPinnedDispatch($message)) {
             return $this->dispatchPinned($message);
         }
 
@@ -240,9 +240,10 @@ final readonly class GatewayMessageDispatcher
             ? null
             : ProviderAccount::query()->find($message->pinned_provider_account_id);
 
-        $unavailableCode = (string) $message->origin === 'engine'
-            ? 'engine_provider_unavailable'
-            : 'inbox_provider_unavailable';
+        $unavailableCode = match ((string) $message->origin) {
+            'engine', 'connection' => 'engine_provider_unavailable',
+            default => 'inbox_provider_unavailable',
+        };
 
         if ($provider === null || ! $this->providerIsUsable($provider)) {
             return $this->markFailed(
@@ -680,5 +681,15 @@ final readonly class GatewayMessageDispatcher
         }
 
         return mb_substr(trim($value), 0, $length);
+    }
+
+    private function requiresPinnedDispatch(GatewayMessage $message): bool
+    {
+        if (in_array((string) $message->origin, ['inbox', 'engine'], true)) {
+            return true;
+        }
+
+        return (string) $message->origin === 'connection'
+            && $message->pinned_provider_account_id !== null;
     }
 }

@@ -9,7 +9,9 @@ use App\Models\Attachment;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
+use App\Exceptions\ConnectionException;
 use App\Services\AttachmentService;
+use App\Services\Connection\ConnectionMessageSender;
 use App\Services\GatewayMessageDispatcher;
 use App\Services\GatewayMessageEnqueuer;
 use BackedEnum;
@@ -29,6 +31,11 @@ class MessageController extends Controller
     {
         /** @var ClientApplication $application */
         $application = $request->attributes->get('client_application');
+
+        if ($request->usesConnectionPath()) {
+            return $this->storeViaConnection($request, $application);
+        }
+
         $payloadHash = $request->payloadHash();
 
         $existing = $this->findExisting(
@@ -319,6 +326,56 @@ class MessageController extends Controller
         ], $httpStatus);
     }
 
+    private function storeViaConnection(StoreMessageRequest $request, ClientApplication $application): JsonResponse
+    {
+        $sender = app(ConnectionMessageSender::class);
+        $payloadHash = app(\App\Support\PayloadHasher::class)->hash(
+            $request->connectionPayload(),
+            (string) config('app.key'),
+        );
+
+        try {
+            $connection = $request->connectionId() !== null
+                ? $sender->resolveConnection($application, (string) $request->connectionId())
+                : $sender->resolveDefaultConnection($application);
+
+            $message = $sender->send(
+                application: $application,
+                payload: $request->connectionPayload(),
+                idempotencyKey: $request->idempotencyKey(),
+                payloadHash: $payloadHash,
+                correlationId: $this->requestId($request),
+                connection: $connection,
+            );
+        } catch (ConnectionException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'error' => $exception->toErrorPayload(),
+                'request_id' => $this->requestId($request),
+            ], $exception->httpStatus);
+        }
+
+        if ($this->statusValue($message->mode) === 'async') {
+            if (! app(GatewayMessageEnqueuer::class)->usesAsyncDispatch()) {
+                return $this->inlineDispatchResponse($request, $message, false);
+            }
+
+            return response()->json([
+                'data' => $this->messageData($message, false),
+                'request_id' => $this->requestId($request),
+            ], 202);
+        }
+
+        if ($this->statusValue($message->status) === 'provider_accepted') {
+            return response()->json([
+                'data' => $this->messageData($message, false),
+                'request_id' => $this->requestId($request),
+            ], 201);
+        }
+
+        return $this->dispatchFailureResponse($request, $message);
+    }
+
     private function findExisting(int $applicationId, string $idempotencyKey): ?GatewayMessage
     {
         return GatewayMessage::query()
@@ -358,6 +415,11 @@ class MessageController extends Controller
 
         if ($duplicate !== null) {
             $data['duplicate'] = $duplicate;
+        }
+
+        if ($message->whatsapp_connection_id !== null) {
+            $data['connection_id'] = $message->whatsappConnection?->uuid
+                ?? DB::table('whatsapp_connections')->where('id', $message->whatsapp_connection_id)->value('uuid');
         }
 
         if ($message->accepted_provider_account_id !== null) {

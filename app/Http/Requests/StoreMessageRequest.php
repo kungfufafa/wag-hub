@@ -44,7 +44,7 @@ class StoreMessageRequest extends FormRequest
             'idempotency_key' => trim((string) $this->header('Idempotency-Key', '')),
         ];
 
-        if (! $this->exists('route_key')) {
+        if (! $this->exists('route_key') && ! $this->filled('connection_id') && ! $this->usesDefaultConnection()) {
             $defaults['route_key'] = 'default';
         }
 
@@ -122,7 +122,8 @@ class StoreMessageRequest extends FormRequest
             ],
             'purpose' => ['required', Rule::in(['otp', 'transactional', 'notification'])],
             'mode' => ['required', Rule::in(['sync', 'async'])],
-            'route_key' => ['required', 'string', 'min:1', 'max:80', 'regex:/\A[a-zA-Z0-9._:-]+\z/'],
+            'connection_id' => ['nullable', 'uuid'],
+            'route_key' => ['required_without:connection_id', 'string', 'min:1', 'max:80', 'regex:/\A[a-zA-Z0-9._:-]+\z/'],
             'expires_at' => ['nullable', 'date', 'after:now', 'required_if:purpose,otp'],
             'client_reference' => ['nullable', 'string', 'max:160'],
             'metadata' => ['nullable', 'array', 'max:20'],
@@ -302,6 +303,34 @@ class StoreMessageRequest extends FormRequest
             $this->canonicalPayload(),
             (string) config('app.key'),
         );
+    }
+
+    public function connectionId(): ?string
+    {
+        $value = $this->validated('connection_id');
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    public function usesConnectionPath(): bool
+    {
+        return $this->connectionId() !== null || $this->usesDefaultConnection();
+    }
+
+    public function usesDefaultConnection(): bool
+    {
+        return strtolower((string) $this->header('X-WAG-Use-Default-Connection', '')) === 'true';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function connectionPayload(): array
+    {
+        $payload = $this->canonicalPayload();
+        unset($payload['route_key']);
+
+        return $payload;
     }
 
     protected function failedValidation(ValidatorContract $validator): never

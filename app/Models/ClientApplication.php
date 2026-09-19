@@ -79,4 +79,9 @@ class ClientApplication extends Model
     {
         return $this->hasMany(NumberCheckRequest::class);
     }
+
+    public function whatsappConnections(): HasMany
+    {
+        return $this->hasMany(WhatsAppConnection::class);
+    }
 }

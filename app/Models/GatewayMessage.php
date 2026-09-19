@@ -20,6 +20,7 @@ class GatewayMessage extends Model
     protected $fillable = [
         'uuid',
         'client_application_id',
+        'whatsapp_connection_id',
         'routing_policy_id',
         'accepted_provider_account_id',
         'idempotency_key',
@@ -107,6 +108,11 @@ class GatewayMessage extends Model
     public function pinnedProviderAccount(): BelongsTo
     {
         return $this->belongsTo(ProviderAccount::class, 'pinned_provider_account_id')->withTrashed();
+    }
+
+    public function whatsappConnection(): BelongsTo
+    {
+        return $this->belongsTo(WhatsAppConnection::class)->withTrashed();
     }
 
     public function originUser(): BelongsTo
