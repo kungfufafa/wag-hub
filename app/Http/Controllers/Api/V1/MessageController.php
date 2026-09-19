@@ -14,6 +14,7 @@ use App\Services\AttachmentService;
 use App\Services\Connection\ConnectionMessageSender;
 use App\Services\GatewayMessageDispatcher;
 use App\Services\GatewayMessageEnqueuer;
+use App\Support\ApplicationErrorMapper;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
@@ -198,11 +199,10 @@ class MessageController extends Controller
         if (! hash_equals((string) $message->payload_hash, $payloadHash)) {
             return response()->json([
                 'message' => 'The idempotency key was already used with a different payload.',
-                'error' => [
-                    'code' => 'idempotency_conflict',
-                    'retryable' => false,
-                    'original_message_id' => $message->uuid,
-                ],
+                'error' => array_merge(
+                    ApplicationErrorMapper::payload('idempotency_conflict'),
+                    ['original_message_id' => $message->uuid],
+                ),
                 'request_id' => $this->requestId($request),
             ], 409);
         }
@@ -242,10 +242,7 @@ class MessageController extends Controller
 
             return response()->json([
                 'message' => 'The message was saved, but the queue is currently unavailable.',
-                'error' => [
-                    'code' => 'queue_unavailable',
-                    'retryable' => true,
-                ],
+                'error' => ApplicationErrorMapper::payload('queue_unavailable', true),
                 'data' => $this->messageData($message, $duplicate),
                 'request_id' => $this->requestId($request),
             ], 503);
@@ -269,10 +266,7 @@ class MessageController extends Controller
         if ($this->statusValue($message->status) === 'queued') {
             return response()->json([
                 'message' => 'The message was saved, but the queue is currently unavailable.',
-                'error' => [
-                    'code' => 'queue_unavailable',
-                    'retryable' => true,
-                ],
+                'error' => ApplicationErrorMapper::payload('queue_unavailable', true),
                 'data' => $this->messageData($message, $duplicate),
                 'request_id' => $this->requestId($request),
             ], 503);
@@ -317,10 +311,7 @@ class MessageController extends Controller
                 'attachment_size_unsupported' => 'Ukuran attachment melebihi batas provider.',
                 default => 'No provider accepted the message.',
             },
-            'error' => [
-                'code' => $code,
-                'retryable' => $retryable,
-            ],
+            'error' => ApplicationErrorMapper::payload($code, $retryable),
             'data' => $this->messageData($message),
             'request_id' => $this->requestId($request),
         ], $httpStatus);

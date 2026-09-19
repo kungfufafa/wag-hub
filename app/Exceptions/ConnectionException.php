@@ -2,6 +2,7 @@
 
 namespace App\Exceptions;
 
+use App\Support\ApplicationErrorMapper;
 use RuntimeException;
 
 final class ConnectionException extends RuntimeException
@@ -21,10 +22,7 @@ final class ConnectionException extends RuntimeException
      */
     public function toErrorPayload(): array
     {
-        $payload = [
-            'code' => $this->errorCode,
-            'retryable' => $this->retryable,
-        ];
+        $payload = ApplicationErrorMapper::payload($this->errorCode, $this->retryable);
 
         if ($this->nextAction !== null) {
             $payload['next_action'] = $this->nextAction;
