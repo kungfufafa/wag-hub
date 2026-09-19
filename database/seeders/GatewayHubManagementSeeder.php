@@ -8,6 +8,7 @@ use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
 use App\Models\RoutingStep;
 use App\Models\User;
+use App\Services\Connection\ConnectionBackfillService;
 use Illuminate\Database\Seeder;
 
 class GatewayHubManagementSeeder extends Seeder
@@ -38,6 +39,7 @@ class GatewayHubManagementSeeder extends Seeder
         $providers = $this->seedProviders();
 
         $this->seedDefaultRoutes($applications, $providers);
+        $this->seedDefaultConnections();
 
         $this->seedApplicationCredentials($applications);
     }
@@ -345,6 +347,11 @@ class GatewayHubManagementSeeder extends Seeder
             ->delete();
     }
 
+    private function seedDefaultConnections(): void
+    {
+        app(ConnectionBackfillService::class)->backfill();
+    }
+
     /**
      * @param  array<string, ClientApplication>  $applications
      */
@@ -368,8 +375,8 @@ class GatewayHubManagementSeeder extends Seeder
                     'token_hash' => hash('sha256', $token),
                     'token_prefix' => substr($token, 0, 16),
                     'abilities' => $slug === 'web-cesa'
-                        ? ['messages:send', 'messages:read', 'numbers:check']
-                        : ['messages:send', 'messages:read'],
+                        ? ['messages:send', 'messages:read', 'numbers:check', 'engine:use']
+                        : ['messages:send', 'messages:read', 'engine:use'],
                     'revoked_at' => null,
                     'expires_at' => null,
                 ],

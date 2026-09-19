@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ApiCredential;
 use App\Models\ClientApplication;
 use App\Models\IssuedApiCredential;
+use App\Models\WhatsAppConnection;
 use Illuminate\Support\Str;
 
 final readonly class IntegrationPack
@@ -26,11 +27,22 @@ final readonly class IntegrationPack
 
     public function envSnippet(ClientApplication $application, string $baseUrl, string $token): string
     {
-        return implode("\n", [
+        $lines = [
             '# '.$application->slug,
             'WAG_URL='.rtrim($baseUrl, '/'),
             'WAG_TOKEN='.$token,
-        ]);
+        ];
+
+        $defaultConnection = WhatsAppConnection::query()
+            ->where('client_application_id', $application->getKey())
+            ->where('is_default', true)
+            ->value('uuid');
+
+        if (is_string($defaultConnection) && $defaultConnection !== '') {
+            $lines[] = 'WAG_CONNECTION_ID='.$defaultConnection;
+        }
+
+        return implode("\n", $lines);
     }
 
     public function hubUrl(): string

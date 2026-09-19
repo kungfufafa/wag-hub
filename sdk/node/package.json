@@ -1,0 +1,15 @@
+{
+  "name": "@wag-hub/client",
+  "version": "0.1.0",
+  "description": "Minimal WAG Hub application client",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["whatsapp", "wag-hub", "gateway"],
+  "license": "MIT"
+}

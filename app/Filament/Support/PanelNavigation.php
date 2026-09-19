@@ -13,7 +13,11 @@ final class PanelNavigation
 
     public const APPS = 'Aplikasi';
 
-    public const PROVIDERS = 'Provider';
+    /** Advanced operator controls: provider accounts, routing tables, diagnostics. */
+    public const ADVANCED = 'Lanjutan';
+
+    /** @deprecated Use ADVANCED */
+    public const PROVIDERS = self::ADVANCED;
 
     public const AUTOMATION = 'Automasi';
 

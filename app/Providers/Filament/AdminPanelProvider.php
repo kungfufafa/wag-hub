@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Pages\IntegrationDocumentation;
 use App\Filament\Support\PanelNavigation;
+use App\Filament\Widgets\ConnectionHealthOverview;
 use App\Filament\Widgets\GatewayStatsOverview;
 use Apriansyahrs\MekayaTheme\MekayaPlugin;
 use Filament\Http\Middleware\Authenticate;
@@ -54,7 +55,7 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make(PanelNavigation::WHATSAPP),
                 NavigationGroup::make(PanelNavigation::DEVICES),
                 NavigationGroup::make(PanelNavigation::APPS),
-                NavigationGroup::make(PanelNavigation::PROVIDERS),
+                NavigationGroup::make(PanelNavigation::ADVANCED)->collapsed(),
                 NavigationGroup::make(PanelNavigation::AUTOMATION)->collapsed(),
                 NavigationGroup::make(PanelNavigation::ALERTS)->collapsed(),
                 NavigationGroup::make(PanelNavigation::SERVER)->collapsed(),
@@ -79,6 +80,7 @@ class AdminPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
                 GatewayStatsOverview::class,
+                ConnectionHealthOverview::class,
                 AccountWidget::class,
             ])
             ->middleware([

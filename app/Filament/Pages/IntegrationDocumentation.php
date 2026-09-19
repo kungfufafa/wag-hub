@@ -42,8 +42,8 @@ class IntegrationDocumentation extends Page
                 'lg' => 3,
             ])
             ->components([
-                Section::make('Setup')
-                    ->description('Layar di /panel sebelum repo lain memanggil API.')
+                Section::make('Setup (happy path)')
+                    ->description('App → Koneksi WhatsApp → Kirim pesan. Lihat docs/CONNECTIONS_GUIDE.md.')
                     ->icon(Heroicon::OutlinedQueueList)
                     ->schema([
                         Placeholder::make('step_1')
@@ -51,13 +51,16 @@ class IntegrationDocumentation extends Page
                             ->content('Satu baris per repo: web-cesa, web-helpdesk, web-sam, web-shelf, appscript-ft.'),
                         Placeholder::make('step_2')
                             ->label('2. Kredensial API')
-                            ->content('Tombol Buat WAG_TOKEN & ENGINE_URL. WAG_TOKEN ke Authorization Bearer. ENGINE_URL ke /engine/t/{token}.'),
+                            ->content('Hubungkan aplikasi → salin WAG_URL dan WAG_TOKEN ke backend klien.'),
                         Placeholder::make('step_3')
-                            ->label('3. Akun Provider WAHA')
-                            ->content('Driver WAHA: base_url, session, api_key. Host masuk GATEWAY_PROVIDER_HTTP_HOSTS.'),
+                            ->label('3. Koneksi WhatsApp')
+                            ->content('Koneksi WhatsApp → Hubungkan WhatsApp. Provider & rute dibuat otomatis.'),
                         Placeholder::make('step_4')
-                            ->label('4. QR')
-                            ->content('Perangkat WhatsApp → Hubungkan, atau POST /engine/sessions dari WhatsAppEngineClient.'),
+                            ->label('4. Uji & integrasi')
+                            ->content('Kirim pesan uji dari detail koneksi, salin WAG_CONNECTION_ID, POST /api/v1/messages dengan connection_id.'),
+                        Placeholder::make('step_advanced')
+                            ->label('Lanjutan')
+                            ->content('Akun Provider & Aturan Rute untuk multi-provider, fallback, dan diagnostik.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -68,9 +71,12 @@ class IntegrationDocumentation extends Page
                     ->description('Base URL diganti sesuai host Hub Anda.')
                     ->icon(Heroicon::OutlinedGlobeAlt)
                     ->schema([
+                        Placeholder::make('endpoint_connections')
+                            ->label('Koneksi WhatsApp')
+                            ->content(new HtmlString('<code class="text-xs">GET/POST /api/v1/connections</code>')),
                         Placeholder::make('endpoint_send')
                             ->label('Kirim pesan')
-                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/messages</code>')),
+                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/messages</code> (+ connection_id opsional)')),
                         Placeholder::make('endpoint_attachment')
                             ->label('Upload attachment')
                             ->content(new HtmlString('<code class="text-xs">POST /api/v1/attachments</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">multipart file, maksimum 16 MB</div>')),

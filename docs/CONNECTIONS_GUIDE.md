@@ -21,6 +21,8 @@ Provider account, routing policy, dan route key dibuat otomatis di belakang laya
 
 ## Happy path developer
 
+**PHP (in-repo helper)**
+
 ```php
 use App\Support\WagClient;
 
@@ -31,6 +33,19 @@ $wag->messages()->send(
     text: 'Halo dari WAG Hub',
     idempotencyKey: 'order-123',
 );
+```
+
+**Node.js** — lihat `sdk/node/README.md`
+
+```javascript
+import { WagClient } from '@wag-hub/client';
+
+const wag = WagClient.fromEnv();
+await wag.messages().send({
+  recipient: '6281234567890',
+  text: 'Halo dari WAG Hub',
+  idempotencyKey: 'order-123',
+});
 ```
 
 Tanpa `WAG_CONNECTION_ID`, set header `X-WAG-Use-Default-Connection: true` atau kirim `connection_id` eksplisit.

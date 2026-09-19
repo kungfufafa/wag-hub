@@ -7,6 +7,7 @@ use App\Models\ClientApplication;
 use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
 use App\Models\User;
+use App\Models\WhatsAppConnection;
 use Database\Seeders\GatewayHubManagementSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -124,16 +125,25 @@ class HubManagementSeederTest extends TestCase
             $numberCheckPolicy->steps->pluck('providerAccount.slug')->all(),
         );
 
+        $this->assertSame(5, WhatsAppConnection::query()->count());
+        $this->assertTrue(
+            WhatsAppConnection::query()
+                ->where('client_application_id', $shelf->id)
+                ->where('is_default', true)
+                ->where('type', 'provider_route')
+                ->exists(),
+        );
+
         $shelfCredential = ApiCredential::query()->where('client_application_id', $shelf->id)->sole();
         $this->assertTrue(hash_equals(hash('sha256', 'wgh_shelf_seed_token'), $shelfCredential->getRawOriginal('token_hash')));
-        $this->assertSame(['messages:send', 'messages:read'], $shelfCredential->abilities);
+        $this->assertSame(['messages:send', 'messages:read', 'engine:use'], $shelfCredential->abilities);
 
         $cesaHub = ApiCredential::query()
             ->where('client_application_id', $cesa->id)
             ->where('name', 'Seeded application token')
             ->sole();
         $this->assertTrue(hash_equals(hash('sha256', 'wgh_cesa_seed_token'), $cesaHub->getRawOriginal('token_hash')));
-        $this->assertSame(['messages:send', 'messages:read', 'numbers:check'], $cesaHub->abilities);
+        $this->assertSame(['messages:send', 'messages:read', 'numbers:check', 'engine:use'], $cesaHub->abilities);
 
         $cesaEngine = ApiCredential::query()
             ->where('client_application_id', $cesa->id)
@@ -162,6 +172,7 @@ class HubManagementSeederTest extends TestCase
         $this->assertDatabaseCount('client_applications', 5);
         $this->assertDatabaseCount('provider_accounts', 4);
         $this->assertDatabaseCount('routing_policies', 6);
+        $this->assertDatabaseCount('whatsapp_connections', 5);
         $this->assertDatabaseCount('api_credentials', 0);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'waha-primary')->sole()->is_active);
         $this->assertFalse(ProviderAccount::query()->where('slug', 'fonnte-primary')->sole()->is_active);
