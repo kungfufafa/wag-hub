@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ClientApplications\Pages;
 
+use App\Filament\Pages\ConnectWhatsApp;
 use App\Filament\Resources\ClientApplications\ClientApplicationResource;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
@@ -18,6 +19,11 @@ class CreateClientApplication extends CreateRecord
         return Notification::make()
             ->success()
             ->title('Aplikasi klien dibuat')
-            ->body('Terbitkan kredensial API dari tab Kredensial API di halaman ini.');
+            ->body('Lanjutkan dengan Hubungkan WhatsApp, kirim uji, lalu salin konfigurasi.');
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return ConnectWhatsApp::getUrl(['application' => $this->record->uuid]);
     }
 }

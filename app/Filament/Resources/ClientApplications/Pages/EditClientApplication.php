@@ -2,9 +2,12 @@
 
 namespace App\Filament\Resources\ClientApplications\Pages;
 
+use App\Filament\Pages\ConnectWhatsApp;
 use App\Filament\Resources\ClientApplications\ClientApplicationResource;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Width;
+use Filament\Support\Icons\Heroicon;
 
 class EditClientApplication extends EditRecord
 {
@@ -20,7 +23,12 @@ class EditClientApplication extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            ClientApplicationResource::createRoutingPolicyAction(),
+            Action::make('connectWhatsApp')
+                ->label('Hubungkan WhatsApp')
+                ->icon(Heroicon::OutlinedSignal)
+                ->url(fn (): string => ConnectWhatsApp::getUrl(['application' => $this->record->uuid])),
+            ClientApplicationResource::createRoutingPolicyAction()
+                ->label('Pengiriman & fallback'),
             ClientApplicationResource::deleteAction(),
         ];
     }
