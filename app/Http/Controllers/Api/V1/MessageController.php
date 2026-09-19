@@ -3,13 +3,18 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Domain\Delivery\OutboundAttachment;
+use App\Exceptions\WhatsAppConnectionException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreMessageRequest;
 use App\Models\Attachment;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
+use App\Models\WhatsAppConnection;
 use App\Services\AttachmentService;
+use App\Services\Connections\ApplicationErrorMapper;
+use App\Services\Connections\ConnectionCapabilityCatalog;
+use App\Services\Connections\ConnectionResolver;
 use App\Services\GatewayMessageDispatcher;
 use App\Services\GatewayMessageEnqueuer;
 use BackedEnum;
@@ -29,6 +34,31 @@ class MessageController extends Controller
     {
         /** @var ClientApplication $application */
         $application = $request->attributes->get('client_application');
+
+        try {
+            $connection = $this->resolvedConnection($request, $application);
+        } catch (WhatsAppConnectionException $exception) {
+            return $this->connectionFailure($request, $exception);
+        }
+
+        if ($connection !== null) {
+            $capabilityError = $this->capabilityFailure($request, $connection);
+
+            if ($capabilityError !== null) {
+                return $capabilityError;
+            }
+
+            if (! $connection->statusEnum()->canAttemptSend()) {
+                return $this->connectionFailure($request, new WhatsAppConnectionException(
+                    'WhatsApp connection is not ready.',
+                    409,
+                    'connection_not_ready',
+                    true,
+                    $connection->uuid,
+                ));
+            }
+        }
+
         $payloadHash = $request->payloadHash();
 
         $existing = $this->findExisting(
@@ -41,8 +71,8 @@ class MessageController extends Controller
         }
 
         try {
-            $message = DB::transaction(function () use ($request, $application, $payloadHash): GatewayMessage {
-                $message = $this->createMessage($request, $application, $payloadHash);
+            $message = DB::transaction(function () use ($request, $application, $payloadHash, $connection): GatewayMessage {
+                $message = $this->createMessage($request, $application, $payloadHash, $connection);
                 $this->recordIngressEvent($message);
 
                 return $message;
@@ -123,6 +153,7 @@ class MessageController extends Controller
         StoreMessageRequest $request,
         ClientApplication $application,
         string $payloadHash,
+        ?WhatsAppConnection $connection = null,
     ): GatewayMessage {
         $payload = $request->canonicalPayload();
         $recipient = $request->canonicalRecipient();
@@ -139,7 +170,8 @@ class MessageController extends Controller
         $message->forceFill([
             'uuid' => (string) Str::uuid(),
             'client_application_id' => $application->getKey(),
-            'routing_policy_id' => null,
+            'whatsapp_connection_id' => $connection?->getKey(),
+            'routing_policy_id' => $connection?->routing_policy_id,
             'accepted_provider_account_id' => null,
             'idempotency_key' => $request->idempotencyKey(),
             'payload_hash' => $payloadHash,
@@ -152,9 +184,10 @@ class MessageController extends Controller
             'message_type' => $request->messageType(),
             'attachment' => $attachment?->toArray(),
             'purpose' => $payload['purpose'],
-            'route_key' => $payload['route_key'],
+            'route_key' => $connection?->routingPolicy?->key ?? $payload['route_key'],
             'mode' => $mode,
             'origin' => 'api',
+            'pinned_provider_account_id' => $connection?->pinsSender() ? $connection->provider_account_id : null,
             'priority' => $this->priorityFor((string) $payload['purpose']),
             'status' => $mode === 'async' ? 'queued' : 'processing',
             'metadata' => $payload['metadata'],
@@ -299,6 +332,8 @@ class MessageController extends Controller
             default => [503, 'gateway_dispatch_incomplete', true],
         };
 
+        $connectionOriented = $request instanceof StoreMessageRequest && $request->usesConnectionAbstraction();
+
         return response()->json([
             'message' => match ($code) {
                 'provider_outcome_unknown' => 'The provider outcome could not be determined.',
@@ -310,13 +345,56 @@ class MessageController extends Controller
                 'attachment_size_unsupported' => 'Ukuran attachment melebihi batas provider.',
                 default => 'No provider accepted the message.',
             },
-            'error' => [
-                'code' => $code,
-                'retryable' => $retryable,
-            ],
+            'error' => app(ApplicationErrorMapper::class)->applicationError(
+                $code,
+                $retryable,
+                $message->uuid,
+                $connectionOriented,
+            ),
             'data' => $this->messageData($message),
             'request_id' => $this->requestId($request),
         ], $httpStatus);
+    }
+
+    private function resolvedConnection(StoreMessageRequest $request, ClientApplication $application): ?WhatsAppConnection
+    {
+        if (! $request->usesConnectionAbstraction()) {
+            return null;
+        }
+
+        return app(ConnectionResolver::class)->resolve($application, $request->connectionId());
+    }
+
+    private function capabilityFailure(StoreMessageRequest $request, WhatsAppConnection $connection): ?JsonResponse
+    {
+        $catalog = app(ConnectionCapabilityCatalog::class);
+        $capabilities = $connection->capabilities ?? [];
+
+        if ($catalog->supports($capabilities, $request->messageType())) {
+            return null;
+        }
+
+        return $this->connectionFailure($request, new WhatsAppConnectionException(
+            'This connection does not support the requested message type.',
+            422,
+            'capability_not_supported',
+            false,
+            $connection->uuid,
+        ));
+    }
+
+    private function connectionFailure(StoreMessageRequest $request, WhatsAppConnectionException $exception): JsonResponse
+    {
+        return response()->json([
+            'message' => $exception->getMessage(),
+            'error' => app(ApplicationErrorMapper::class)->applicationError(
+                $exception->errorCode,
+                $exception->retryable,
+                $exception->auditId,
+                true,
+            ),
+            'request_id' => $this->requestId($request),
+        ], $exception->statusCode);
     }
 
     private function findExisting(int $applicationId, string $idempotencyKey): ?GatewayMessage
@@ -339,6 +417,7 @@ class MessageController extends Controller
             'purpose' => $this->statusValue($message->purpose),
             'message_type' => (string) ($message->message_type ?: 'text'),
             'route_key' => (string) $message->route_key,
+            'connection_id' => $message->whatsappConnection?->uuid,
             'client_reference' => $message->client_reference,
             'provider_message_id' => $message->provider_message_id,
             'created_at' => $this->iso8601($message->created_at),
