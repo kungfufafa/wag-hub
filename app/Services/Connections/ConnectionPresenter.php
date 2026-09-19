@@ -17,7 +17,7 @@ final class ConnectionPresenter
      */
     public function toArray(WhatsAppConnection $connection, bool $includePairingSecrets = false): array
     {
-        $connection = $this->health->refresh($connection);
+        $connection = $this->health->hydrate($connection);
         $account = $connection->providerAccount;
         $application = $connection->clientApplication;
         $status = $connection->statusEnum();

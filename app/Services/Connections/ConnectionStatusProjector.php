@@ -27,12 +27,14 @@ final class ConnectionStatusProjector
 
     public function projectRoute(?string $health, bool $circuitOpen, bool $configured): ConnectionStatus
     {
-        if ($health === null) {
-            return ConnectionStatus::SetupRequired;
+        if (! $configured) {
+            return $health === null
+                ? ConnectionStatus::SetupRequired
+                : ConnectionStatus::Disconnected;
         }
 
-        if (! $configured) {
-            return ConnectionStatus::Disconnected;
+        if ($health === null || $health === 'unknown') {
+            return ConnectionStatus::SetupRequired;
         }
 
         if ($health === 'unavailable') {
@@ -54,6 +56,7 @@ final class ConnectionStatusProjector
         ConnectionType $type,
         ConnectionStatus $status,
         ?SessionStatus $session = null,
+        bool $configured = false,
     ): ?string {
         if ($status === ConnectionStatus::Ready) {
             return null;
@@ -73,7 +76,9 @@ final class ConnectionStatusProjector
         }
 
         return match ($status) {
-            ConnectionStatus::SetupRequired => 'Fix credentials',
+            ConnectionStatus::SetupRequired => $configured
+                ? 'Send a test message'
+                : 'Fix credentials',
             ConnectionStatus::Error => 'Fix credentials',
             ConnectionStatus::Degraded => 'Provider temporarily unavailable',
             ConnectionStatus::Disconnected => 'Fix credentials',

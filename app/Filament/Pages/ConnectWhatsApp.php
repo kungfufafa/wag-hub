@@ -7,10 +7,11 @@ use App\Filament\Support\CopiesToClipboard;
 use App\Filament\Support\PanelNavigation;
 use App\Models\ClientApplication;
 use App\Models\WhatsAppConnection;
+use App\Services\Connections\ConnectionHealthProjector;
 use App\Services\Connections\ConnectionPresenter;
 use App\Services\Connections\ConnectionProvisioner;
+use App\Services\Connections\ConnectionTestSender;
 use App\Services\IntegrationPack;
-use App\Services\ProviderAccountTester;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -98,7 +99,16 @@ class ConnectWhatsApp extends Page
             return null;
         }
 
-        return WhatsAppConnection::query()->where('uuid', $this->connectionUuid)->first();
+        $connection = WhatsAppConnection::query()->where('uuid', $this->connectionUuid)->first();
+
+        return $connection === null
+            ? null
+            : app(ConnectionHealthProjector::class)->hydrate($connection);
+    }
+
+    public function canSendTest(): bool
+    {
+        return $this->connection()?->canAttemptSend() ?? false;
     }
 
     /**
@@ -121,9 +131,17 @@ class ConnectWhatsApp extends Page
             return;
         }
 
+        if ($this->type === ConnectionType::ManagedNumber->value
+            && $this->mode === 'pairing'
+            && trim($this->phone) === '') {
+            Notification::make()->title('Nomor HP pairing wajib diisi')->danger()->send();
+
+            return;
+        }
+
         try {
-            $connection = app(ConnectionProvisioner::class)->provision($application, $this->provisioningPayload());
-            $this->connectionUuid = $connection->uuid;
+            $provisioned = app(ConnectionProvisioner::class)->provision($application, $this->provisioningPayload());
+            $this->connectionUuid = $provisioned->connection->uuid;
             $this->step = 3;
             Notification::make()->title('Koneksi disiapkan')->success()->send();
         } catch (Throwable $exception) {
@@ -157,20 +175,27 @@ class ConnectWhatsApp extends Page
     public function sendTest(): void
     {
         $connection = $this->connection();
-        $account = $connection?->providerAccount;
 
-        if ($account === null) {
-            Notification::make()->title('Koneksi belum siap')->danger()->send();
+        if ($connection === null || ! $connection->canAttemptSend()) {
+            Notification::make()->title('Koneksi belum siap untuk uji kirim')->danger()->send();
 
             return;
         }
 
         try {
-            $result = app(ProviderAccountTester::class)->send($account, $this->testRecipient, $this->testText);
-            Notification::make()->title($result->title)->body($result->body)->{$result->success ? 'success' : 'danger'}()->send();
+            $response = app(ConnectionTestSender::class)->send($connection, $this->testRecipient, $this->testText);
+            $payload = $response->getData(true);
+            $success = ($payload['data']['status'] ?? null) === 'provider_accepted';
+            Notification::make()
+                ->title($success ? 'Uji kirim berhasil' : 'Uji kirim gagal')
+                ->body($success
+                    ? 'Provider menerima pesan melalui POST /api/v1/messages.'
+                    : (string) ($payload['message'] ?? 'Provider menolak atau gagal menerima pesan.'))
+                ->{$success ? 'success' : 'danger'}()
+                ->send();
 
-            if ($result->success) {
-                $this->step = 4;
+            if ($success) {
+                $this->step = 5;
             }
         } catch (Throwable $exception) {
             Notification::make()->title('Uji kirim gagal')->body($exception->getMessage())->danger()->send();
@@ -185,7 +210,7 @@ class ConnectWhatsApp extends Page
             return;
         }
 
-        $pack = app(IntegrationPack::class)->issue($application);
+        $pack = app(IntegrationPack::class)->copyOrIssue($application);
         $this->issuedEnv = $pack['env'];
         $this->step = 5;
     }
@@ -203,7 +228,7 @@ class ConnectWhatsApp extends Page
         $payload = [
             'name' => $this->name !== '' ? $this->name : 'WhatsApp',
             'type' => $this->type,
-            'is_default' => true,
+            'is_default' => false,
             'mode' => $this->mode,
             'phone' => $this->phone !== '' ? $this->phone : null,
         ];

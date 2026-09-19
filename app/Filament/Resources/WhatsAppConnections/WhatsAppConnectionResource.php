@@ -109,6 +109,6 @@ class WhatsAppConnectionResource extends Resource
 
     public static function refresh(WhatsAppConnection $connection): WhatsAppConnection
     {
-        return app(ConnectionHealthProjector::class)->refresh($connection);
+        return app(ConnectionHealthProjector::class)->hydrate($connection);
     }
 }

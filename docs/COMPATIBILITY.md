@@ -45,8 +45,9 @@ New resources:
 - `POST /api/v1/connections/{id}/messages`
 
 Connection-oriented errors use actionable codes such as
-`connection_not_ready` and keep `error.internal_code` plus `error.audit_id`.
-Legacy payloads keep their original `error.code` and gain `error.action`.
+`connection_not_ready` and `connection_not_found`, and keep
+`error.internal_code` plus `error.audit_id`. Legacy payloads keep their
+original `error.code` and gain `error.action`.
 
 ## Delivery semantics
 

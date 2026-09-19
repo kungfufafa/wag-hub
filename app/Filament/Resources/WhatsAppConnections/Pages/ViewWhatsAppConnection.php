@@ -6,8 +6,8 @@ use App\Filament\Resources\WhatsAppConnections\WhatsAppConnectionResource;
 use App\Filament\Support\CopiesToClipboard;
 use App\Services\Connections\ConnectionHealthProjector;
 use App\Services\Connections\ConnectionProvisioner;
+use App\Services\Connections\ConnectionTestSender;
 use App\Services\IntegrationPack;
-use App\Services\ProviderAccountTester;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
@@ -134,23 +134,31 @@ class ViewWhatsAppConnection extends ViewRecord
                         ->default('Tes koneksi WAG Hub')
                         ->required(),
                 ])
+                ->visible(fn (): bool => $this->getRecord()->canAttemptSend())
                 ->action(function (array $data): void {
                     $connection = $this->getRecord();
-                    $account = $connection->providerAccount;
 
-                    if ($account === null) {
-                        Notification::make()->title('Koneksi belum siap')->danger()->send();
+                    if (! $connection->canAttemptSend()) {
+                        Notification::make()->title('Koneksi belum siap untuk uji kirim')->danger()->send();
 
                         return;
                     }
 
                     try {
-                        $result = app(ProviderAccountTester::class)->send(
-                            $account,
+                        $response = app(ConnectionTestSender::class)->send(
+                            $connection,
                             (string) $data['recipient'],
                             (string) $data['text'],
                         );
-                        Notification::make()->title($result->title)->body($result->body)->{$result->success ? 'success' : 'danger'}()->send();
+                        $payload = $response->getData(true);
+                        $success = ($payload['data']['status'] ?? null) === 'provider_accepted';
+                        Notification::make()
+                            ->title($success ? 'Uji kirim berhasil' : 'Uji kirim gagal')
+                            ->body($success
+                                ? 'Provider menerima pesan melalui POST /api/v1/messages.'
+                                : (string) ($payload['message'] ?? 'Provider menolak atau gagal menerima pesan.'))
+                            ->{$success ? 'success' : 'danger'}()
+                            ->send();
                     } catch (Throwable $exception) {
                         Notification::make()->title('Uji kirim gagal')->body($exception->getMessage())->danger()->send();
                     }

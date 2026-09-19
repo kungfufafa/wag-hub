@@ -65,9 +65,9 @@ final class ConnectionHealthProjector
     }
 
     /**
-     * Refresh persisted status, capabilities, and recommended action from live internals.
+     * Project live status in memory without writing the connection row.
      */
-    public function refresh(WhatsAppConnection $connection): WhatsAppConnection
+    public function hydrate(WhatsAppConnection $connection): WhatsAppConnection
     {
         $connection->loadMissing(['providerAccount', 'routingPolicy.steps.providerAccount']);
 
@@ -82,7 +82,24 @@ final class ConnectionHealthProjector
                 $connection->typeEnum(),
                 $status,
                 $session,
+                $connection->isConfigured(),
             ),
+        ]);
+        $connection->syncOriginal();
+
+        return $connection;
+    }
+
+    /**
+     * Persist projected status, capabilities, and recommended action from live internals.
+     */
+    public function refresh(WhatsAppConnection $connection): WhatsAppConnection
+    {
+        $connection = $this->hydrate($connection);
+        $connection->forceFill([
+            'capabilities' => $connection->capabilities,
+            'status' => $connection->status,
+            'recommended_action' => $connection->recommended_action,
         ])->save();
 
         return $connection->fresh() ?? $connection;

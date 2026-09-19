@@ -30,7 +30,7 @@ final class ConnectionProvisioner
     /**
      * @param  array<string, mixed>  $input
      */
-    public function provision(ClientApplication $application, array $input): WhatsAppConnection
+    public function provision(ClientApplication $application, array $input): ProvisionedConnection
     {
         $type = ConnectionType::from((string) ($input['type'] ?? ConnectionType::ManagedNumber->value));
         $name = trim((string) ($input['name'] ?? ''));
@@ -39,7 +39,14 @@ final class ConnectionProvisioner
             $name = $type === ConnectionType::ManagedNumber ? 'WhatsApp' : 'Provider';
         }
 
-        $connection = $this->findOrCreate($application, $name, $type, (bool) ($input['is_default'] ?? false));
+        $this->assertPairingPhone($type, $input);
+
+        [$connection, $created] = $this->findOrCreate(
+            $application,
+            $name,
+            $type,
+            (bool) ($input['is_default'] ?? false),
+        );
 
         try {
             if ($type === ConnectionType::ManagedNumber) {
@@ -65,7 +72,10 @@ final class ConnectionProvisioner
             );
         }
 
-        return $this->health->refresh($connection->fresh() ?? $connection);
+        return new ProvisionedConnection(
+            $this->health->refresh($connection->fresh() ?? $connection),
+            $created,
+        );
     }
 
     /**
@@ -74,7 +84,11 @@ final class ConnectionProvisioner
     public function connect(WhatsAppConnection $connection, array $input = []): WhatsAppConnection
     {
         $mode = ($input['mode'] ?? 'qr') === 'pairing' ? 'pairing' : 'qr';
-        $phone = is_string($input['phone'] ?? null) ? (string) $input['phone'] : null;
+        $phone = is_string($input['phone'] ?? null) ? trim((string) $input['phone']) : null;
+
+        if ($connection->typeEnum() === ConnectionType::ManagedNumber) {
+            $this->assertPairingPhone($connection->typeEnum(), ['mode' => $mode, 'phone' => $phone]);
+        }
 
         if ($connection->provider_account_id === null) {
             return $this->provision($connection->clientApplication, [
@@ -87,7 +101,7 @@ final class ConnectionProvisioner
                     'driver' => $input['driver'] ?? $connection->providerAccount?->driver,
                     'configuration' => $input['configuration'] ?? [],
                 ],
-            ]);
+            ])->connection;
         }
 
         $account = $connection->providerAccount;
@@ -122,22 +136,26 @@ final class ConnectionProvisioner
                 'driver' => $connection->providerAccount?->driver,
                 'configuration' => $connection->providerAccount?->configuration ?? [],
             ],
-        ]);
+        ])->connection;
     }
 
+    /**
+     * @return array{0: WhatsAppConnection, 1: bool}
+     */
     private function findOrCreate(
         ClientApplication $application,
         string $name,
         ConnectionType $type,
         bool $makeDefault,
-    ): WhatsAppConnection {
-        return DB::transaction(function () use ($application, $name, $type, $makeDefault): WhatsAppConnection {
+    ): array {
+        return DB::transaction(function () use ($application, $name, $type, $makeDefault): array {
             ClientApplication::query()->whereKey($application->getKey())->lockForUpdate()->firstOrFail();
 
             $connection = WhatsAppConnection::query()
                 ->where('client_application_id', $application->getKey())
                 ->where('name', $name)
                 ->first();
+            $created = false;
 
             if ($connection === null) {
                 $connection = new WhatsAppConnection;
@@ -154,6 +172,13 @@ final class ConnectionProvisioner
                     'setup_state' => [],
                 ]);
                 $connection->save();
+                $created = true;
+            } elseif ($connection->type !== $type->value) {
+                throw new WhatsAppConnectionException(
+                    'A connection named '.$name.' already exists as '.$connection->type.'.',
+                    409,
+                    'capability_not_supported',
+                );
             }
 
             if ($makeDefault || ! WhatsAppConnection::query()
@@ -164,7 +189,7 @@ final class ConnectionProvisioner
                 $this->markDefault($connection);
             }
 
-            return $connection->fresh() ?? $connection;
+            return [$connection->fresh() ?? $connection, $created];
         });
     }
 
@@ -174,7 +199,7 @@ final class ConnectionProvisioner
     private function provisionManaged(WhatsAppConnection $connection, array $input): void
     {
         $mode = ($input['mode'] ?? 'qr') === 'pairing' ? 'pairing' : 'qr';
-        $phone = is_string($input['phone'] ?? null) ? (string) $input['phone'] : null;
+        $phone = is_string($input['phone'] ?? null) ? trim((string) $input['phone']) : null;
         $sessionId = $connection->sessionId();
 
         $account = $this->engine->provisionOwnedSession(
@@ -214,7 +239,6 @@ final class ConnectionProvisioner
 
         if ($driver === 'wag_hub') {
             $this->provisionManaged($connection, $input);
-            $this->ensureDefaultMessageRoute($connection);
 
             return;
         }
@@ -224,8 +248,8 @@ final class ConnectionProvisioner
 
         DB::transaction(function () use ($connection, $driver, $validated): void {
             $account = $this->reuseOrCreateProviderAccount($connection, $driver, $validated);
-            $policy = $this->reuseOrCreateMessagePolicy($connection, $account);
-            $lookupPolicy = $this->reuseOrCreateNumberCheckPolicy($connection, $account, $driver);
+            $policy = $this->dedicatedPolicy($connection, $account, 'message', $connection->routing_policy_id);
+            $lookupPolicy = $this->dedicatedNumberCheckPolicy($connection, $account, $driver);
 
             $connection->forceFill([
                 'provider_account_id' => $account->getKey(),
@@ -264,15 +288,15 @@ final class ConnectionProvisioner
         }
 
         $account = ProviderAccount::query()
-            ->get()
-            ->first(function (ProviderAccount $candidate) use ($connection): bool {
-                return (string) ($candidate->configuration['whatsapp_connection_id'] ?? '') === (string) $connection->getKey();
-            });
+            ->where('slug', $this->accountSlug($connection))
+            ->first();
 
         if ($account !== null) {
             $account->forceFill([
                 'driver' => $driver,
-                'configuration' => array_merge($account->configuration ?? [], $configuration),
+                'configuration' => array_merge($account->configuration ?? [], $configuration, [
+                    'whatsapp_connection_id' => $connection->getKey(),
+                ]),
                 'is_active' => true,
             ])->save();
 
@@ -283,13 +307,13 @@ final class ConnectionProvisioner
         $account->forceFill([
             'uuid' => (string) Str::uuid(),
             'name' => $connection->clientApplication->name.' '.$connection->name,
-            'slug' => 'conn-acct-'.hash('sha256', $connection->uuid),
+            'slug' => $this->accountSlug($connection),
             'driver' => $driver,
             'configuration' => array_merge($configuration, [
                 'whatsapp_connection_id' => $connection->getKey(),
             ]),
             'is_active' => true,
-            'health_status' => 'healthy',
+            'health_status' => 'unknown',
             'timeout_seconds' => 15,
         ]);
         $account->save();
@@ -297,49 +321,47 @@ final class ConnectionProvisioner
         return $account;
     }
 
-    private function reuseOrCreateMessagePolicy(WhatsAppConnection $connection, ProviderAccount $account): RoutingPolicy
-    {
-        if ($connection->routing_policy_id !== null) {
-            $existing = RoutingPolicy::query()->find($connection->routing_policy_id);
+    private function dedicatedPolicy(
+        WhatsAppConnection $connection,
+        ProviderAccount $account,
+        string $operation,
+        ?int $existingPolicyId,
+        string $nameSuffix = '',
+    ): RoutingPolicy {
+        if ($existingPolicyId !== null) {
+            $existing = RoutingPolicy::query()->find($existingPolicyId);
 
             if ($existing !== null) {
-                $this->ensureStep($existing, $account);
+                $this->ensureOwnedStep($existing, $account);
 
                 return $existing;
             }
         }
 
-        $default = RoutingPolicy::query()
-            ->where('client_application_id', $connection->client_application_id)
-            ->where('operation', 'message')
-            ->where('is_default', true)
-            ->where('is_active', true)
-            ->whereNull('deleted_at')
-            ->first();
+        $key = $this->policyKey($connection, $operation);
+        $makeDefault = $this->shouldBecomeDefaultPolicy($connection, $operation);
 
-        if ($default !== null) {
-            $this->ensureStep($default, $account);
-
-            return $default;
+        if ($makeDefault && $this->policyKeyAvailable($connection, $operation, 'default')) {
+            $key = 'default';
         }
 
         $policy = new RoutingPolicy;
         $policy->forceFill([
             'client_application_id' => $connection->client_application_id,
-            'operation' => 'message',
-            'key' => 'default',
+            'operation' => $operation,
+            'key' => $key,
             'purpose' => null,
-            'name' => $connection->name,
-            'is_default' => true,
+            'name' => trim($connection->name.($nameSuffix !== '' ? ' '.$nameSuffix : '')),
+            'is_default' => $makeDefault,
             'is_active' => true,
         ]);
         $policy->save();
-        $this->ensureStep($policy, $account);
+        $this->ensureOwnedStep($policy, $account);
 
         return $policy;
     }
 
-    private function reuseOrCreateNumberCheckPolicy(
+    private function dedicatedNumberCheckPolicy(
         WhatsAppConnection $connection,
         ProviderAccount $account,
         string $driver,
@@ -348,58 +370,51 @@ final class ConnectionProvisioner
             return $connection->numberCheckPolicy;
         }
 
-        if ($connection->number_check_policy_id !== null) {
-            $existing = RoutingPolicy::query()->find($connection->number_check_policy_id);
+        return $this->dedicatedPolicy(
+            $connection,
+            $account,
+            'number_check',
+            $connection->number_check_policy_id,
+            'lookup',
+        );
+    }
 
-            if ($existing !== null) {
-                $this->ensureStep($existing, $account);
+    private function policyKey(WhatsAppConnection $connection, string $operation): string
+    {
+        $suffix = $operation === 'number_check' ? ':lookup' : '';
 
-                return $existing;
-            }
+        return 'conn-'.substr(hash('sha256', $connection->uuid.$suffix), 0, 16);
+    }
+
+    private function shouldBecomeDefaultPolicy(WhatsAppConnection $connection, string $operation): bool
+    {
+        if (! $connection->is_default) {
+            return false;
         }
 
-        $existing = RoutingPolicy::query()
+        return ! RoutingPolicy::query()
             ->where('client_application_id', $connection->client_application_id)
-            ->where('operation', 'number_check')
+            ->where('operation', $operation)
             ->where('is_default', true)
             ->where('is_active', true)
-            ->first();
-
-        if ($existing !== null) {
-            $this->ensureStep($existing, $account);
-
-            return $existing;
-        }
-
-        $policy = new RoutingPolicy;
-        $policy->forceFill([
-            'client_application_id' => $connection->client_application_id,
-            'operation' => 'number_check',
-            'key' => 'default',
-            'purpose' => null,
-            'name' => $connection->name.' lookup',
-            'is_default' => true,
-            'is_active' => true,
-        ]);
-        $policy->save();
-        $this->ensureStep($policy, $account);
-
-        return $policy;
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
-    private function ensureDefaultMessageRoute(WhatsAppConnection $connection): void
-    {
-        $account = $connection->providerAccount;
-
-        if ($account === null) {
-            return;
-        }
-
-        $policy = $this->reuseOrCreateMessagePolicy($connection, $account);
-        $connection->forceFill(['routing_policy_id' => $policy->getKey()])->save();
+    private function policyKeyAvailable(
+        WhatsAppConnection $connection,
+        string $operation,
+        string $key,
+    ): bool {
+        return ! RoutingPolicy::query()
+            ->where('client_application_id', $connection->client_application_id)
+            ->where('operation', $operation)
+            ->where('key', $key)
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
-    private function ensureStep(RoutingPolicy $policy, ProviderAccount $account): void
+    private function ensureOwnedStep(RoutingPolicy $policy, ProviderAccount $account): void
     {
         $existing = RoutingStep::query()
             ->where('routing_policy_id', $policy->getKey())
@@ -414,14 +429,42 @@ final class ConnectionProvisioner
             return;
         }
 
-        $position = ((int) RoutingStep::query()->where('routing_policy_id', $policy->getKey())->max('position')) + 1;
+        if (RoutingStep::query()->where('routing_policy_id', $policy->getKey())->exists()) {
+            return;
+        }
 
         RoutingStep::query()->create([
             'routing_policy_id' => $policy->getKey(),
             'provider_account_id' => $account->getKey(),
-            'position' => max(1, $position),
+            'position' => 1,
             'is_active' => true,
         ]);
+    }
+
+    private function accountSlug(WhatsAppConnection $connection): string
+    {
+        return 'conn-acct-'.hash('sha256', $connection->uuid);
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     */
+    private function assertPairingPhone(ConnectionType $type, array $input): void
+    {
+        if ($type !== ConnectionType::ManagedNumber) {
+            return;
+        }
+
+        $mode = ($input['mode'] ?? 'qr') === 'pairing' ? 'pairing' : 'qr';
+        $phone = is_string($input['phone'] ?? null) ? trim((string) $input['phone']) : '';
+
+        if ($mode === 'pairing' && $phone === '') {
+            throw new WhatsAppConnectionException(
+                'Pairing requires a phone number.',
+                422,
+                'recipient_invalid',
+            );
+        }
     }
 
     private function markDefault(WhatsAppConnection $connection): void

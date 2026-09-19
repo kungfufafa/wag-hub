@@ -26,23 +26,23 @@ final class ConnectionResolver
                 throw new WhatsAppConnectionException(
                     'WhatsApp connection was not found.',
                     404,
-                    'connection_not_ready',
+                    'connection_not_found',
                 );
             }
 
-            return $this->health->refresh($connection);
+            return $this->health->hydrate($connection);
         }
 
         $default = (clone $query)->where('is_default', true)->first();
 
         if ($default !== null) {
-            return $this->health->refresh($default);
+            return $this->health->hydrate($default);
         }
 
         $only = $query->get();
 
         if ($only->count() === 1) {
-            return $this->health->refresh($only->first());
+            return $this->health->hydrate($only->first());
         }
 
         throw new WhatsAppConnectionException(
@@ -65,7 +65,7 @@ final class ConnectionResolver
             ->orderByDesc('is_default')
             ->orderBy('name')
             ->get()
-            ->map(fn (WhatsAppConnection $connection): WhatsAppConnection => $this->health->refresh($connection))
+            ->map(fn (WhatsAppConnection $connection): WhatsAppConnection => $this->health->hydrate($connection))
             ->all();
     }
 }

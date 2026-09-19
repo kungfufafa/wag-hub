@@ -16,6 +16,7 @@ class ApplicationErrorMapperTest extends TestCase
         $this->assertSame(ApplicationErrorCode::AuthenticationFailed, $mapper->map('forbidden'));
         $this->assertSame(ApplicationErrorCode::RateLimited, $mapper->map('rate_limited'));
         $this->assertSame(ApplicationErrorCode::RecipientInvalid, $mapper->map('invalid_phone'));
+        $this->assertSame(ApplicationErrorCode::ConnectionNotFound, $mapper->map('connection_not_found'));
         $this->assertSame(ApplicationErrorCode::ConnectionNotReady, $mapper->map('not_connected'));
         $this->assertSame(ApplicationErrorCode::ConnectionNotReady, $mapper->map('route_unavailable'));
         $this->assertSame(ApplicationErrorCode::CapabilityNotSupported, $mapper->map('attachment_format_unsupported'));

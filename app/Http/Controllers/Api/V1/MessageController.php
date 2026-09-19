@@ -48,7 +48,7 @@ class MessageController extends Controller
                 return $capabilityError;
             }
 
-            if (! $connection->statusEnum()->canAttemptSend()) {
+            if (! $connection->canAttemptSend()) {
                 return $this->connectionFailure($request, new WhatsAppConnectionException(
                     'WhatsApp connection is not ready.',
                     409,
