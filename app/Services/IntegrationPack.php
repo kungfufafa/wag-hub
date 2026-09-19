@@ -24,7 +24,7 @@ final readonly class IntegrationPack
         );
         $engine = ApiCredential::issue(
             $application,
-            $this->uniqueName($application, 'ENGINE_URL'),
+            $this->uniqueName($application, 'WAG_ENGINE_TOKEN'),
             ['engine:use'],
         );
 
@@ -47,20 +47,22 @@ final readonly class IntegrationPack
         string $engineToken,
     ): string {
         $baseUrl = rtrim($baseUrl, '/');
-        $engineUrl = $baseUrl.'/engine/t/'.$engineToken;
+        $engineUrl = $baseUrl.'/api/v1/engine';
         $slug = (string) $application->slug;
 
         $lines = [
             '# '.$slug,
             'WAG_URL='.$baseUrl,
             'WAG_TOKEN='.$hubToken,
+            'WAG_ENGINE_URL='.$engineUrl,
+            'WAG_ENGINE_TOKEN='.$engineToken,
         ];
 
         if ($slug === 'web-cesa') {
-            $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_URL='.$engineUrl;
+            $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_DRIVER=wag_hub';
+            $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_URL=${WAG_ENGINE_URL}';
+            $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_TOKEN=${WAG_ENGINE_TOKEN}';
             $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_AUTO_START=false';
-        } else {
-            $lines[] = 'ENGINE_URL='.$engineUrl;
         }
 
         return implode("\n", $lines);

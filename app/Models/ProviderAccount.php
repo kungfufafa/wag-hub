@@ -80,6 +80,7 @@ class ProviderAccount extends Model
         $config = $this->configuration ?? [];
 
         return filled($config['owned_by_application_id'] ?? null)
+            || filled($config['engine_session_id'] ?? null)
             || filled($config['cesa_session_id'] ?? null)
             || str_contains((string) $this->slug, '-sess-');
     }

@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Domain\WhatsApp\SessionStatus;
-use App\Exceptions\CesaEngineException;
+use App\Exceptions\WhatsAppEngineException;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
@@ -12,6 +12,7 @@ use App\Models\RoutingPolicy;
 use App\Models\RoutingStep;
 use App\Support\PayloadHasher;
 use App\Support\PhoneNormalizer;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -22,37 +23,33 @@ use Throwable;
  * User-linked WhatsApp engine (QR/pairing), separate from Hub API fallback.
  *
  * A credential with engine:use can start a session for a department number
- * (HR, recruitment, …). Sends stay pinned to that session and never use the
- * developer-configured provider pool.
+ * (HR, recruitment, customer service, …). Sends stay pinned to that session
+ * and never use the developer-configured provider pool.
  */
-final readonly class CesaEngineService
+class WhatsAppEngineService
 {
     public function __construct(
-        private WhatsAppSessionManager $sessions,
-        private GatewayMessageDispatcher $dispatcher,
-        private PhoneNormalizer $phones,
-        private PayloadHasher $hasher,
+        protected WhatsAppSessionManager $sessions,
+        protected GatewayMessageDispatcher $dispatcher,
+        protected PhoneNormalizer $phones,
+        protected PayloadHasher $hasher,
     ) {}
 
     /**
      * @return array<string, mixed>
      */
-    public function health(): array
+    public function health(ClientApplication $application): array
     {
         $host = $this->hostProvider();
+        $accounts = $this->ownedSessions($application)->filter(fn (ProviderAccount $account): bool => $account->is_active);
 
         return [
-            'ok' => true,
+            'ok' => $host !== null,
             'engine' => 'wag-hub',
             'waha_ready' => $host !== null,
-            'sessions' => ProviderAccount::query()
-                ->where('driver', 'waha')
-                ->where('slug', 'like', '%-sess-%')
-                ->count(),
-            'connected' => ProviderAccount::query()
-                ->where('driver', 'waha')
-                ->where('session_status', SessionStatus::Working->value)
-                ->count(),
+            'readiness' => $host !== null ? 'configured' : 'unconfigured',
+            'sessions' => $accounts->count(),
+            'connected' => $accounts->filter(fn (ProviderAccount $account): bool => $account->sessionStatus()->isConnected())->count(),
         ];
     }
 
@@ -64,7 +61,7 @@ final readonly class CesaEngineService
         $sessionId = $this->assertSessionId($sessionId);
 
         if (! in_array($mode, ['qr', 'pairing'], true)) {
-            throw new CesaEngineException('Pilih mode QR atau pairing WhatsApp.', 422, 'invalid_mode');
+            throw new WhatsAppEngineException('Pilih mode QR atau pairing WhatsApp.', 422, 'invalid_mode');
         }
 
         $pairingPhone = null;
@@ -73,7 +70,7 @@ final readonly class CesaEngineService
             $pairingPhone = $this->normalizeOptionalPhone($phone);
 
             if ($pairingPhone === null) {
-                throw new CesaEngineException('Nomor HP pairing WhatsApp tidak valid.', 422, 'invalid_phone');
+                throw new WhatsAppEngineException('Nomor HP pairing WhatsApp tidak valid.', 422, 'invalid_phone');
             }
         }
 
@@ -92,7 +89,7 @@ final readonly class CesaEngineService
         $sessionId = $this->assertSessionId($sessionId);
         $account = $this->findSessionAccount($application, $sessionId);
 
-        if ($account === null) {
+        if ($account === null || ! $account->is_active) {
             return $this->emptySession($sessionId);
         }
 
@@ -118,17 +115,23 @@ final readonly class CesaEngineService
             ];
         }
 
-        $confirmed = true;
+        $confirmed = false;
 
         if ($logout) {
             try {
-                $this->sessions->disconnect($account);
+                $status = $this->sessions->disconnect($account);
+                $confirmed = $status === SessionStatus::Stopped
+                    && ($account->session_meta['raw'] ?? null) !== 'unreachable';
             } catch (Throwable) {
                 $confirmed = false;
             }
         }
 
-        $account->forceFill(['is_active' => false])->save();
+        $account->forceFill([
+            'is_active' => false,
+            'session_status' => SessionStatus::Stopped->value,
+            'session_meta' => null,
+        ])->save();
 
         return [
             'ok' => true,
@@ -136,7 +139,7 @@ final readonly class CesaEngineService
             'logout_confirmed' => $confirmed,
             'message' => $confirmed
                 ? 'Nomor WhatsApp berhasil diputuskan.'
-                : 'Sesi lokal sudah diputuskan, tetapi logout dari WhatsApp belum terkonfirmasi. Hapus perangkat CESA dari menu Perangkat tertaut di HP bila masih tercantum.',
+                : 'Sesi lokal sudah diputuskan, tetapi logout dari WhatsApp belum terkonfirmasi. Hapus perangkat tertaut layanan ini dari menu Perangkat tertaut di HP bila masih tercantum.',
         ];
     }
 
@@ -147,26 +150,14 @@ final readonly class CesaEngineService
     {
         $sessionId = $this->assertSessionId($sessionId);
         $key = $this->assertMessageKey($key);
-        $account = $this->findSessionAccount($application, $sessionId);
-
-        if ($account === null || ! $account->sessionStatus()->isConnected()) {
-            return [
-                'ok' => false,
-                'status' => 'failed',
-                'retryable' => true,
-                'error_code' => 'not_connected',
-                'message' => 'Nomor WhatsApp belum terhubung. Scan QR atau minta kode pairing baru.',
-            ];
-        }
-
         try {
             $recipient = $this->phones->normalize($phone);
         } catch (InvalidArgumentException) {
-            throw new CesaEngineException('Nomor tujuan WhatsApp tidak valid.', 422, 'invalid_phone');
+            throw new WhatsAppEngineException('Nomor tujuan WhatsApp tidak valid.', 422, 'invalid_phone');
         }
 
         if (trim($text) === '' || strlen($text) > 10000) {
-            throw new CesaEngineException('Isi pesan WhatsApp tidak valid.', 422, 'invalid_text');
+            throw new WhatsAppEngineException('Isi pesan WhatsApp tidak valid.', 422, 'invalid_text');
         }
 
         $idempotencyKey = $this->hubIdempotencyKey($sessionId, $key);
@@ -182,15 +173,21 @@ final readonly class CesaEngineService
             ->first();
 
         if ($existing !== null) {
-            if (! hash_equals((string) $existing->payload_hash, $payloadHash)) {
-                throw new CesaEngineException(
-                    'Kunci pengiriman sudah digunakan untuk pesan berbeda.',
-                    409,
-                    'idempotency_conflict',
-                );
-            }
+            $this->assertSamePayload($existing, $payloadHash);
 
             return $this->sendResult($existing);
+        }
+
+        $account = $this->findSessionAccount($application, $sessionId);
+
+        if ($account === null || ! $account->is_active || ! $account->sessionStatus()->isConnected()) {
+            return [
+                'ok' => false,
+                'status' => 'failed',
+                'retryable' => true,
+                'error_code' => 'not_connected',
+                'message' => 'Nomor WhatsApp belum terhubung. Scan QR atau minta kode pairing baru.',
+            ];
         }
 
         try {
@@ -225,7 +222,10 @@ final readonly class CesaEngineService
                     'origin' => 'engine',
                     'priority' => 10,
                     'status' => 'processing',
-                    'metadata' => ['cesa_session_id' => $sessionId],
+                    'metadata' => [
+                        'engine_session_id' => $sessionId,
+                        'cesa_session_id' => $sessionId,
+                    ],
                     'processing_at' => $now,
                 ]);
                 $message->save();
@@ -249,8 +249,10 @@ final readonly class CesaEngineService
                 ->first();
 
             if ($winner === null) {
-                throw new CesaEngineException('Pengiriman WhatsApp gagal disimpan.', 503, 'journal_unavailable', true);
+                throw new WhatsAppEngineException('Pengiriman WhatsApp gagal disimpan.', 503, 'journal_unavailable', true);
             }
+
+            $this->assertSamePayload($winner, $payloadHash);
 
             return $this->sendResult($winner);
         }
@@ -274,7 +276,7 @@ final readonly class CesaEngineService
             ->first();
 
         if ($message === null) {
-            throw new CesaEngineException('Pengiriman WhatsApp belum tercatat.', 404, 'message_not_found', true);
+            throw new WhatsAppEngineException('Pengiriman WhatsApp belum tercatat.', 404, 'message_not_found', true);
         }
 
         return $this->sendResult($message);
@@ -283,7 +285,7 @@ final readonly class CesaEngineService
     /**
      * @return array<string, mixed>
      */
-    private function sendResult(GatewayMessage $message): array
+    protected function sendResult(GatewayMessage $message): array
     {
         $status = (string) $message->status;
 
@@ -312,58 +314,70 @@ final readonly class CesaEngineService
         };
     }
 
-    private function provisionSession(ClientApplication $application, string $sessionId, string $mode): ProviderAccount
+    protected function provisionSession(ClientApplication $application, string $sessionId, string $mode): ProviderAccount
     {
-        $host = $this->hostProvider();
+        return DB::transaction(function () use ($application, $sessionId, $mode): ProviderAccount {
+            // Serialize provisioning for one owner. The account slug remains stable
+            // even when the app is renamed, and no caller-selected upstream is used.
+            ClientApplication::query()->whereKey($application->getKey())->lockForUpdate()->firstOrFail();
+            $account = $this->findSessionAccount($application, $sessionId);
 
-        if ($host === null) {
-            throw new CesaEngineException(
-                'Engine WAHA belum dikonfigurasi di Hub. Isi akun provider WAHA (base URL + API key), lalu coba lagi.',
-                503,
-                'engine_unavailable',
-                true,
-            );
-        }
+            if ($account === null) {
+                $host = $this->hostProvider();
 
-        $slug = $this->sessionSlug($application, $sessionId);
-        $configuration = [
-            'base_url' => $host->configuration['base_url'] ?? null,
-            'api_key' => $host->configuration['api_key'] ?? null,
-            'session' => $sessionId,
-            'owned_by_application_id' => $application->getKey(),
-            'cesa_session_id' => $sessionId,
-            'cesa_mode' => $mode,
-        ];
+                if ($host === null) {
+                    throw new WhatsAppEngineException(
+                        'Engine WAHA belum dikonfigurasi di Hub. Isi akun provider WAHA (base URL + API key), lalu coba lagi.',
+                        503,
+                        'engine_unavailable',
+                        true,
+                    );
+                }
 
-        $account = ProviderAccount::query()->where('slug', $slug)->first();
+                $uuid = (string) Str::uuid();
+                $account = new ProviderAccount;
+                $account->forceFill([
+                    'uuid' => $uuid,
+                    'name' => $application->name.' '.$sessionId,
+                    'slug' => $this->sessionSlug($application, $sessionId),
+                    'driver' => 'waha',
+                    'configuration' => [
+                        'base_url' => $host->configuration['base_url'],
+                        'api_key' => $host->configuration['api_key'] ?? null,
+                        'session' => 'wgh-'.$uuid,
+                        'engine_host_provider_id' => $host->getKey(),
+                        'owned_by_application_id' => $application->getKey(),
+                        'engine_session_id' => $sessionId,
+                        'cesa_session_id' => $sessionId,
+                        'engine_mode' => $mode,
+                        'cesa_mode' => $mode,
+                    ],
+                    'is_active' => true,
+                    'health_status' => 'unknown',
+                    'session_status' => SessionStatus::Unknown->value,
+                    'timeout_seconds' => $host->timeout_seconds ?: 15,
+                ]);
+                $account->save();
+            } else {
+                // Existing linked devices stay on their original engine and session.
+                $account->forceFill([
+                    'configuration' => array_merge($account->configuration ?? [], [
+                        'engine_session_id' => $sessionId,
+                        'cesa_session_id' => $sessionId,
+                        'engine_mode' => $mode,
+                        'cesa_mode' => $mode,
+                    ]),
+                    'is_active' => true,
+                ])->save();
+            }
 
-        if ($account === null) {
-            $account = new ProviderAccount;
-            $account->forceFill([
-                'uuid' => (string) Str::uuid(),
-                'name' => $application->name.' '.$sessionId,
-                'slug' => $slug,
-                'driver' => 'waha',
-                'configuration' => $configuration,
-                'is_active' => true,
-                'health_status' => 'unknown',
-                'session_status' => SessionStatus::Unknown->value,
-                'timeout_seconds' => $host->timeout_seconds ?: 15,
-            ]);
-            $account->save();
-        } else {
-            $account->forceFill([
-                'configuration' => array_merge($account->configuration ?? [], $configuration),
-                'is_active' => true,
-            ])->save();
-        }
+            $this->sessionRouteId($application, $sessionId, $account);
 
-        $this->sessionRouteId($application, $sessionId, $account);
-
-        return $account->fresh() ?? $account;
+            return $account->fresh() ?? $account;
+        });
     }
 
-    private function sessionRouteId(ClientApplication $application, string $sessionId, ProviderAccount $account): int
+    protected function sessionRouteId(ClientApplication $application, string $sessionId, ProviderAccount $account): int
     {
         $policy = RoutingPolicy::query()
             ->where('client_application_id', $application->getKey())
@@ -404,36 +418,94 @@ final readonly class CesaEngineService
         return (int) $policy->id;
     }
 
-    private function findSessionAccount(ClientApplication $application, string $sessionId): ?ProviderAccount
+    protected function findSessionAccount(ClientApplication $application, string $sessionId): ?ProviderAccount
     {
-        return ProviderAccount::query()
-            ->where('slug', $this->sessionSlug($application, $sessionId))
-            ->where('driver', 'waha')
-            ->first();
+        $matches = $this->ownedSessions($application)->filter(function (ProviderAccount $account) use ($sessionId): bool {
+            $config = $account->configuration ?? [];
+
+            return ($config['engine_session_id'] ?? $config['cesa_session_id'] ?? null) === $sessionId;
+        });
+
+        if ($matches->count() > 1) {
+            throw new WhatsAppEngineException('Identitas sesi WhatsApp tidak unik. Hubungi administrator Hub.', 409, 'engine_session_conflict');
+        }
+
+        $account = $matches->first();
+
+        if ($account !== null) {
+            $this->assertExclusiveUpstream($account);
+        }
+
+        return $account;
     }
 
-    private function hostProvider(): ?ProviderAccount
+    /**
+     * Configuration is encrypted, so ownership must be checked after decryption.
+     * Do not derive authorization from a mutable or truncated display slug.
+     *
+     * @return Collection<int, ProviderAccount>
+     */
+    protected function ownedSessions(ClientApplication $application): Collection
+    {
+        return ProviderAccount::query()->where('driver', 'waha')->get()
+            ->filter(fn (ProviderAccount $account): bool => (string) ($account->configuration['owned_by_application_id'] ?? '') === (string) $application->getKey());
+    }
+
+    protected function assertExclusiveUpstream(ProviderAccount $account): void
+    {
+        $config = $account->configuration ?? [];
+        $baseUrl = rtrim((string) ($config['base_url'] ?? ''), '/');
+        $session = $config['session'] ?? null;
+
+        $shared = ProviderAccount::query()->where('driver', 'waha')->whereKeyNot($account->getKey())->get()
+            ->contains(function (ProviderAccount $other) use ($baseUrl, $session): bool {
+                $otherConfig = $other->configuration ?? [];
+
+                return $session !== null
+                    && ($otherConfig['session'] ?? null) === $session
+                    && rtrim((string) ($otherConfig['base_url'] ?? ''), '/') === $baseUrl;
+            });
+
+        if ($shared) {
+            throw new WhatsAppEngineException(
+                'Sesi WhatsApp lama dipakai oleh beberapa akun. Administrator Hub harus memisahkan dan menautkan ulang perangkat.',
+                409,
+                'engine_session_conflict',
+            );
+        }
+    }
+
+    protected function assertSamePayload(GatewayMessage $message, string $payloadHash): void
+    {
+        if (! hash_equals((string) $message->payload_hash, $payloadHash)) {
+            throw new WhatsAppEngineException('Kunci pengiriman sudah digunakan untuk pesan berbeda.', 409, 'idempotency_conflict');
+        }
+    }
+
+    protected function hostProvider(): ?ProviderAccount
     {
         $slug = (string) config('gateway.engine.host_provider_slug', 'waha-primary');
 
         $account = ProviderAccount::query()
             ->where('slug', $slug)
+            ->where('is_active', true)
             ->where('driver', 'waha')
             ->first();
 
         if ($account === null) {
             $account = ProviderAccount::query()
                 ->where('driver', 'waha')
-                ->where('slug', 'not like', '%-sess-%')
+                ->where('is_active', true)
                 ->orderBy('id')
-                ->first();
+                ->get()
+                ->first(fn (ProviderAccount $provider): bool => ! $provider->isUserLinkedSession());
         }
 
         $baseUrl = is_string($account?->configuration['base_url'] ?? null)
             ? trim((string) $account->configuration['base_url'])
             : '';
 
-        if ($account === null || $baseUrl === '') {
+        if ($account === null || $account->isUserLinkedSession() || $baseUrl === '') {
             return null;
         }
 
@@ -443,10 +515,10 @@ final readonly class CesaEngineService
     /**
      * @return array<string, mixed>
      */
-    private function publicSession(ProviderAccount $account, string $sessionId, string $mode, bool $includeSecrets): array
+    protected function publicSession(ProviderAccount $account, string $sessionId, string $mode, bool $includeSecrets): array
     {
         $hubStatus = $account->sessionStatus();
-        $status = $this->cesaStatus($hubStatus, $mode);
+        $status = $this->normalizeStatus($hubStatus, $mode);
         $meta = is_array($account->session_meta) ? $account->session_meta : [];
         $phone = $this->digitsFromMeta($meta['phone'] ?? null);
         $qr = null;
@@ -476,7 +548,7 @@ final readonly class CesaEngineService
     /**
      * @return array<string, mixed>
      */
-    private function emptySession(string $sessionId): array
+    protected function emptySession(string $sessionId): array
     {
         return [
             'ok' => true,
@@ -491,7 +563,7 @@ final readonly class CesaEngineService
         ];
     }
 
-    private function cesaStatus(SessionStatus $status, string $mode): string
+    protected function normalizeStatus(SessionStatus $status, string $mode): string
     {
         return match ($status) {
             SessionStatus::Working => 'connected',
@@ -502,51 +574,57 @@ final readonly class CesaEngineService
         };
     }
 
-    private function storedMode(ProviderAccount $account): string
+    /**
+     * @deprecated Use normalizeStatus instead. Retained for backward compatibility.
+     */
+    protected function cesaStatus(SessionStatus $status, string $mode): string
     {
-        $mode = $account->configuration['cesa_mode'] ?? 'qr';
+        return $this->normalizeStatus($status, $mode);
+    }
+
+    protected function storedMode(ProviderAccount $account): string
+    {
+        $mode = $account->configuration['engine_mode'] ?? $account->configuration['cesa_mode'] ?? 'qr';
 
         return $mode === 'pairing' ? 'pairing' : 'qr';
     }
 
-    private function sessionSlug(ClientApplication $application, string $sessionId): string
+    protected function sessionSlug(ClientApplication $application, string $sessionId): string
     {
-        $slug = $application->slug.'-sess-'.$sessionId;
-
-        return strlen($slug) <= 80 ? $slug : substr($slug, 0, 80);
+        return 'app-sess-'.hash('sha256', $application->uuid."\0".$sessionId);
     }
 
-    private function hubIdempotencyKey(string $sessionId, string $key): string
+    protected function hubIdempotencyKey(string $sessionId, string $key): string
     {
         $value = 'engine:'.$sessionId.':'.$key;
 
         if (strlen($value) > 160) {
-            throw new CesaEngineException('Kunci pengiriman WhatsApp tidak valid.', 422, 'invalid_idempotency_key');
+            throw new WhatsAppEngineException('Kunci pengiriman WhatsApp tidak valid.', 422, 'invalid_idempotency_key');
         }
 
         return $value;
     }
 
-    private function assertSessionId(string $id): string
+    protected function assertSessionId(string $id): string
     {
         if (preg_match('/\A[a-z][a-z0-9-]{1,46}\z/', $id) !== 1 || str_contains($id, '--') || str_ends_with($id, '-')) {
-            throw new CesaEngineException('ID sesi WhatsApp tidak valid.', 422, 'invalid_session');
+            throw new WhatsAppEngineException('ID sesi WhatsApp tidak valid.', 422, 'invalid_session');
         }
 
         return $id;
     }
 
-    private function assertMessageKey(string $key): string
+    protected function assertMessageKey(string $key): string
     {
         if ($key === '' || strlen($key) > 120 || trim($key) !== $key || $key === '.' || $key === '..'
             || preg_match('/[\x00-\x1f\x7f]/', $key) === 1) {
-            throw new CesaEngineException('Kunci pengiriman WhatsApp tidak valid.', 422, 'invalid_idempotency_key');
+            throw new WhatsAppEngineException('Kunci pengiriman WhatsApp tidak valid.', 422, 'invalid_idempotency_key');
         }
 
         return $key;
     }
 
-    private function normalizeOptionalPhone(?string $phone): ?string
+    protected function normalizeOptionalPhone(?string $phone): ?string
     {
         if (! is_string($phone) || trim($phone) === '') {
             return null;
@@ -559,7 +637,7 @@ final readonly class CesaEngineService
         }
     }
 
-    private function digitsFromMeta(mixed $value): ?string
+    protected function digitsFromMeta(mixed $value): ?string
     {
         if (! is_string($value) || $value === '') {
             return null;

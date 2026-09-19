@@ -23,6 +23,8 @@ class PromoteEnginePathToken
             $request->headers->set('Authorization', 'Bearer '.$token);
         }
 
+        $request->route()->forgetParameter('engineToken');
+
         return $next($request);
     }
 }

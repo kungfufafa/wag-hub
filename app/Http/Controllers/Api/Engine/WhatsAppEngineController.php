@@ -2,33 +2,38 @@
 
 namespace App\Http\Controllers\Api\Engine;
 
-use App\Exceptions\CesaEngineException;
+use App\Exceptions\WhatsAppEngineException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\EngineRequest;
 use App\Models\ClientApplication;
-use App\Services\CesaEngineService;
+use App\Services\WhatsAppEngineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
 
-class CesaEngineController extends Controller
+class WhatsAppEngineController extends Controller
 {
-    public function __construct(private readonly CesaEngineService $engine) {}
+    public function __construct(protected readonly WhatsAppEngineService $engine) {}
 
-    public function health(): JsonResponse
+    public function health(Request $request): JsonResponse
     {
+        $health = $this->engine->health($this->application($request));
+
         return response()->json([
-            ...$this->engine->health(),
+            ...$health,
+            'api_version' => 'v1',
+            'capabilities' => ['sessions:qr', 'sessions:pairing', 'messages:text', 'messages:status'],
             'uptime_ms' => defined('LARAVEL_START')
                 ? (int) ((microtime(true) - (float) LARAVEL_START) * 1000)
                 : 0,
             'pid' => getmypid(),
-        ]);
+        ], $health['ok'] ? 200 : 503);
     }
 
-    public function startSession(Request $request): JsonResponse
+    public function startSession(EngineRequest $request): JsonResponse
     {
         return $this->handle(function () use ($request): array {
-            $payload = $this->jsonBody($request);
+            $payload = $request->validated();
 
             return $this->engine->startSession(
                 $this->application($request),
@@ -44,10 +49,10 @@ class CesaEngineController extends Controller
         return $this->handle(fn (): array => $this->engine->session($this->application($request), $session));
     }
 
-    public function logout(Request $request, string $session): JsonResponse
+    public function logout(EngineRequest $request, string $session): JsonResponse
     {
         return $this->handle(function () use ($request, $session): array {
-            $payload = $this->jsonBody($request);
+            $payload = $request->validated();
 
             return $this->engine->logout(
                 $this->application($request),
@@ -57,19 +62,18 @@ class CesaEngineController extends Controller
         });
     }
 
-    public function send(Request $request, string $session): JsonResponse
+    public function send(EngineRequest $request, string $session): JsonResponse
     {
         return $this->handle(function () use ($request, $session): array {
-            $payload = $this->jsonBody($request);
-            $result = $this->engine->sendText(
+            $payload = $request->validated();
+
+            return $this->engine->sendText(
                 $this->application($request),
                 $session,
                 (string) ($payload['phone'] ?? ''),
                 (string) ($payload['text'] ?? ''),
                 (string) ($payload['idempotency_key'] ?? ''),
             );
-
-            return $result;
         }, failedAsConflict: true);
     }
 
@@ -83,11 +87,11 @@ class CesaEngineController extends Controller
     /**
      * @param  callable(): array<string, mixed>  $callback
      */
-    private function handle(callable $callback, bool $failedAsConflict = false): JsonResponse
+    protected function handle(callable $callback, bool $failedAsConflict = false): JsonResponse
     {
         try {
             $payload = $callback();
-        } catch (CesaEngineException $exception) {
+        } catch (WhatsAppEngineException $exception) {
             return response()->json([
                 'ok' => false,
                 'status' => 'failed',
@@ -114,22 +118,12 @@ class CesaEngineController extends Controller
         return response()->json($payload, $status);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function jsonBody(Request $request): array
-    {
-        $payload = $request->json()->all();
-
-        return is_array($payload) ? $payload : [];
-    }
-
-    private function application(Request $request): ClientApplication
+    protected function application(Request $request): ClientApplication
     {
         $application = $request->attributes->get('client_application');
 
         if (! $application instanceof ClientApplication) {
-            throw new CesaEngineException('Unauthenticated.', 401, 'unauthenticated');
+            throw new WhatsAppEngineException('Unauthenticated.', 401, 'unauthenticated');
         }
 
         return $application;

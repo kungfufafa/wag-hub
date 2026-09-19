@@ -1,0 +1,16 @@
+{
+    "name": "wag-hub-baileys-runner",
+    "version": "1.0.0",
+    "description": "Standalone lightweight Baileys (WhatsApp Web Multi-Device) engine runner for WAG Hub",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "start": "node server.mjs",
+        "test": "node --test *.test.mjs"
+    },
+    "dependencies": {
+        "@whiskeysockets/baileys": "^6.7.21",
+        "pino": "^9.6.0",
+        "qrcode": "^1.5.4"
+    }
+}

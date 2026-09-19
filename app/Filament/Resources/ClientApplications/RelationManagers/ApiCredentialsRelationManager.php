@@ -30,7 +30,7 @@ class ApiCredentialsRelationManager extends RelationManager
     {
         return Action::make('showIssuedPack')
             ->modalHeading('Salin ke .env')
-            ->modalDescription('WAG_TOKEN = Authorization Bearer di /api/v1/messages. ENGINE_URL = /engine/t/{token} untuk WhatsAppEngineClient. Modal ditutup, plaintext hilang.')
+            ->modalDescription('WAG_TOKEN untuk API pesan. WAG_ENGINE_TOKEN untuk Authorization Bearer ke WAG_ENGINE_URL. Salin sekarang; setelah modal ditutup, plaintext hilang.')
             ->modalIcon(Heroicon::OutlinedClipboardDocumentList)
             ->modalIconColor('success')
             ->modalWidth(Width::Large)
@@ -50,7 +50,7 @@ class ApiCredentialsRelationManager extends RelationManager
                             ->alpineClickHandler(fn (mixed $state): string => static::copyToClipboardAlpine((string) ($state ?? ''))),
                     ),
                 TextInput::make('engine_token')
-                    ->label('Token /engine/t/{token}')
+                    ->label('WAG_ENGINE_TOKEN')
                     ->password()
                     ->revealable()
                     ->readOnly()
@@ -64,7 +64,7 @@ class ApiCredentialsRelationManager extends RelationManager
                             ->alpineClickHandler(fn (mixed $state): string => static::copyToClipboardAlpine((string) ($state ?? ''))),
                     ),
                 Textarea::make('env')
-                    ->label('.env (cesa-web / helpdesk / SAM)')
+                    ->label('.env aplikasi klien')
                     ->rows(8)
                     ->readOnly()
                     ->dehydrated(false)
@@ -242,7 +242,7 @@ class ApiCredentialsRelationManager extends RelationManager
             ])
             ->headerActions([
                 Action::make('issuePack')
-                    ->label('Buat WAG_TOKEN & ENGINE_URL')
+                    ->label('Buat token Hub & Engine')
                     ->icon(Heroicon::OutlinedSparkles)
                     ->color('primary')
                     ->modalHeading('Buat WAG_TOKEN dan token engine?')

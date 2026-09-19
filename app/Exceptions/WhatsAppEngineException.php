@@ -4,7 +4,7 @@ namespace App\Exceptions;
 
 use RuntimeException;
 
-class CesaEngineException extends RuntimeException
+class WhatsAppEngineException extends RuntimeException
 {
     public function __construct(
         string $message,
