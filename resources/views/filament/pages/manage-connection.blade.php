@@ -5,6 +5,7 @@
     $fallbacks = $connection->isProviderRoute()
         ? app(\App\Services\Connection\ConnectionFallbackManager::class)->listSteps($connection)
         : [];
+    $diagnostics = app(\App\Services\Connection\ConnectionDiagnosticsService::class)->summarize($connection);
 @endphp
 
 <x-filament-panels::page>
@@ -122,6 +123,42 @@
                 @endif
             </x-filament::section>
         @endif
+
+        <x-filament::section>
+            <x-slot name="heading">Diagnostik pengiriman (24 jam)</x-slot>
+            <div class="grid gap-4 text-sm sm:grid-cols-4">
+                <div><span class="text-gray-500">Total</span><p class="font-semibold">{{ $diagnostics['messages']['total'] }}</p></div>
+                <div><span class="text-gray-500">Berhasil</span><p class="font-semibold text-success-600">{{ $diagnostics['messages']['accepted'] }}</p></div>
+                <div><span class="text-gray-500">Gagal</span><p class="font-semibold text-danger-600">{{ $diagnostics['messages']['failed'] }}</p></div>
+                <div><span class="text-gray-500">Outcome unknown</span><p class="font-semibold">{{ $diagnostics['messages']['outcome_unknown'] }}</p></div>
+            </div>
+            @if (! empty($diagnostics['problems']))
+                <div class="mt-4 space-y-2">
+                    @foreach ($diagnostics['problems'] as $problem)
+                        <div class="rounded-lg border border-warning-300 bg-warning-50 px-3 py-2 text-sm">
+                            <strong>{{ $problem['code'] }}</strong> — {{ $problem['message'] }}
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+            @if (! empty($diagnostics['recent_attempts']))
+                <div class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead><tr class="text-left text-gray-500"><th>Seq</th><th>Status</th><th>Error</th><th>Latency</th></tr></thead>
+                        <tbody>
+                            @foreach ($diagnostics['recent_attempts'] as $attempt)
+                                <tr>
+                                    <td>{{ $attempt['sequence'] }}</td>
+                                    <td>{{ $attempt['status'] }}</td>
+                                    <td>{{ $attempt['error_code'] ?? '—' }}</td>
+                                    <td>{{ $attempt['latency_ms'] ?? '—' }} ms</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </x-filament::section>
 
         <x-filament::section>
             <x-slot name="heading">Kemampuan</x-slot>

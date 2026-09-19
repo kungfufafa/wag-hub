@@ -9,6 +9,7 @@ use App\Http\Requests\StoreConnectionRequest;
 use App\Http\Requests\TestConnectionRequest;
 use App\Models\ClientApplication;
 use App\Models\ProviderAccount;
+use App\Services\Connection\ConnectionDiagnosticsService;
 use App\Services\Connection\ConnectionFallbackManager;
 use App\Services\Connection\ConnectionMessageSender;
 use App\Services\Connection\ConnectionPresenter;
@@ -215,6 +216,25 @@ final class ConnectionController extends Controller
 
         return response()->json([
             'data' => $this->presenter->toArray($connection),
+            'request_id' => $this->requestId($request),
+        ]);
+    }
+
+    public function diagnostics(Request $request, string $connectionId): JsonResponse
+    {
+        /** @var ClientApplication $application */
+        $application = $request->attributes->get('client_application');
+
+        try {
+            $connection = $this->messageSender->resolveConnection($application, $connectionId);
+            $connection = $this->statusResolver->refresh($connection);
+            $summary = app(ConnectionDiagnosticsService::class)->summarize($connection);
+        } catch (ConnectionException $exception) {
+            return $this->connectionError($request, $exception);
+        }
+
+        return response()->json([
+            'data' => $summary,
             'request_id' => $this->requestId($request),
         ]);
     }

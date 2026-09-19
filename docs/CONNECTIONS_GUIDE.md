@@ -37,6 +37,15 @@ $wag->messages()->send(
 
 **Node.js** — lihat `sdk/node/README.md`
 
+**Python** — lihat `sdk/python/README.md`
+
+```python
+from wag_client import WagClient
+
+wag = WagClient.from_env()
+wag.messages().send(recipient="6281234567890", text="Halo", idempotency_key="order-123")
+```
+
 ```javascript
 import { WagClient } from '@wag-hub/client';
 
@@ -62,6 +71,7 @@ Tanpa `WAG_CONNECTION_ID`, set header `X-WAG-Use-Default-Connection: true` atau 
 | `GET /api/v1/connections/{id}/integration` | Contoh konfigurasi integrasi |
 | `GET /api/v1/connections/{id}/fallbacks` | Daftar urutan provider (lanjutan) |
 | `POST /api/v1/connections/{id}/fallbacks` | Tambah provider fallback |
+| `GET /api/v1/connections/{id}/diagnostics` | Ringkasan operasional 24 jam |
 | `POST /api/v1/messages` | Kirim pesan (`connection_id` opsional) |
 
 ## Migrasi deployment lama

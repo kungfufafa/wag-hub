@@ -2,10 +2,17 @@
 
 namespace App\Filament\Resources\WhatsAppConnections\Pages;
 
+use App\Domain\Connection\ConnectionStatus;
+use App\Exceptions\ConnectionException;
 use App\Filament\Resources\WhatsAppConnections\WhatsAppConnectionResource;
 use App\Models\ClientApplication;
+use App\Models\WhatsAppConnection;
+use App\Services\Connection\ConnectionMessageSender;
 use App\Services\Connection\ConnectionProvisioner;
-use Filament\Actions\Action;
+use App\Services\Connection\ConnectionSetupPresenter;
+use App\Services\Connection\ConnectionStatusResolver;
+use App\Services\IntegrationPack;
+use App\Support\PayloadHasher;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -14,7 +21,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Page;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Str;
 
 class ConnectWhatsApp extends Page implements HasForms
 {
@@ -35,12 +42,27 @@ class ConnectWhatsApp extends Page implements HasForms
     /** @var array<string, mixed> */
     public ?array $data = [];
 
+    public int $wizardStep = 1;
+
+    public ?int $connectionRecordId = null;
+
+    public ?string $qr = null;
+
+    public ?string $pairingCode = null;
+
+    public string $testRecipient = '';
+
+    public string $testText = 'WAG Hub test message';
+
+    public string $integrationEnv = '';
+
     public function mount(): void
     {
         $this->form->fill([
             'client_application_id' => ClientApplication::query()->orderBy('name')->value('id'),
             'connection_type' => 'managed_number',
             'name' => 'WhatsApp Utama',
+            'setup_mode' => 'qr',
         ]);
     }
 
@@ -100,12 +122,16 @@ class ConnectWhatsApp extends Page implements HasForms
 
     protected function getFormActions(): array
     {
-        return [
-            Action::make('create')
-                ->label('Buat koneksi')
-                ->icon(Heroicon::OutlinedPlus)
-                ->action('createConnection'),
-        ];
+        return [];
+    }
+
+    public function connection(): ?WhatsAppConnection
+    {
+        if ($this->connectionRecordId === null) {
+            return null;
+        }
+
+        return WhatsAppConnection::query()->find($this->connectionRecordId);
     }
 
     public function createConnection(): void
@@ -114,21 +140,27 @@ class ConnectWhatsApp extends Page implements HasForms
         $application = ClientApplication::query()->findOrFail($state['client_application_id']);
         $provisioner = app(ConnectionProvisioner::class);
 
-        $connection = match ($state['connection_type']) {
-            'managed_number' => $provisioner->createManagedNumber(
-                application: $application,
-                name: (string) $state['name'],
-                makeDefault: true,
-            ),
-            'provider_route' => $provisioner->createProviderRoute(
-                application: $application,
-                name: (string) $state['name'],
-                driver: (string) ($state['driver'] ?? 'fonnte'),
-                configuration: is_array($state['configuration'] ?? null) ? $state['configuration'] : [],
-                makeDefault: true,
-            ),
-            default => null,
-        };
+        try {
+            $connection = match ($state['connection_type']) {
+                'managed_number' => $provisioner->createManagedNumber(
+                    application: $application,
+                    name: (string) $state['name'],
+                    makeDefault: true,
+                ),
+                'provider_route' => $provisioner->createProviderRoute(
+                    application: $application,
+                    name: (string) $state['name'],
+                    driver: (string) ($state['driver'] ?? 'fonnte'),
+                    configuration: is_array($state['configuration'] ?? null) ? $state['configuration'] : [],
+                    makeDefault: true,
+                ),
+                default => null,
+            };
+        } catch (ConnectionException $exception) {
+            Notification::make()->title($exception->getMessage())->danger()->send();
+
+            return;
+        }
 
         if ($connection === null) {
             Notification::make()->title('Tipe koneksi tidak valid')->danger()->send();
@@ -136,14 +168,145 @@ class ConnectWhatsApp extends Page implements HasForms
             return;
         }
 
-        Notification::make()
-            ->title('Koneksi dibuat')
-            ->body($connection->isManagedNumber()
-                ? 'Lanjutkan dengan scan QR atau pairing dari halaman detail koneksi.'
-                : 'Validasi provider dari halaman detail koneksi, lalu kirim pesan uji.')
-            ->success()
-            ->send();
+        $this->connectionRecordId = (int) $connection->getKey();
+        $this->wizardStep = 2;
 
-        $this->redirect(ViewWhatsAppConnection::getUrl(['record' => $connection]));
+        if ($connection->isManagedNumber()) {
+            $this->startSetup((string) ($state['setup_mode'] ?? 'qr'));
+        } else {
+            $this->validateProvider();
+        }
+    }
+
+    public function startSetup(string $mode = 'qr'): void
+    {
+        $connection = $this->connection();
+
+        if ($connection === null) {
+            return;
+        }
+
+        try {
+            app(ConnectionProvisioner::class)->startManagedSetup($connection, $mode);
+        } catch (ConnectionException $exception) {
+            Notification::make()->title($exception->getMessage())->danger()->send();
+        }
+
+        $this->refreshSetupState();
+    }
+
+    public function validateProvider(): void
+    {
+        $connection = $this->connection();
+
+        if ($connection === null) {
+            return;
+        }
+
+        try {
+            app(ConnectionProvisioner::class)->validateProviderRoute($connection);
+            Notification::make()->title('Provider divalidasi')->success()->send();
+        } catch (ConnectionException $exception) {
+            Notification::make()->title($exception->getMessage())->danger()->send();
+        }
+
+        $this->refreshSetupState();
+    }
+
+    public function poll(): void
+    {
+        $this->refreshSetupState();
+
+        $connection = $this->connection();
+
+        if ($connection !== null && $connection->connectionStatus()->canSend() && $this->wizardStep === 2) {
+            $this->wizardStep = 3;
+        }
+    }
+
+    public function refreshSetupState(): void
+    {
+        $connection = $this->connection();
+
+        if ($connection === null) {
+            return;
+        }
+
+        $connection = app(ConnectionStatusResolver::class)->refresh($connection);
+        $setup = app(ConnectionSetupPresenter::class)->setupPayload($connection);
+        $this->qr = is_string($setup['qr'] ?? null) ? $setup['qr'] : null;
+        $this->pairingCode = is_string($setup['pairing_code'] ?? null) ? $setup['pairing_code'] : null;
+    }
+
+    public function sendTestMessage(): void
+    {
+        $connection = $this->connection();
+
+        if ($connection === null || trim($this->testRecipient) === '') {
+            Notification::make()->title('Isi nomor penerima uji')->warning()->send();
+
+            return;
+        }
+
+        $application = $connection->clientApplication;
+        $payload = [
+            'recipient' => ['type' => 'phone', 'value' => trim($this->testRecipient)],
+            'message' => ['type' => 'text', 'text' => $this->testText],
+            'purpose' => 'notification',
+            'mode' => 'sync',
+            'metadata' => ['test' => true, 'source' => 'connect-wizard'],
+        ];
+
+        try {
+            $message = app(ConnectionMessageSender::class)->send(
+                application: $application,
+                payload: $payload,
+                idempotencyKey: 'wizard-test:'.(string) Str::uuid(),
+                payloadHash: app(PayloadHasher::class)->hash($payload, (string) config('app.key')),
+                correlationId: (string) Str::uuid(),
+                connection: $connection,
+            );
+
+            if ((string) $message->status === 'provider_accepted') {
+                Notification::make()->title('Pesan uji terkirim')->success()->send();
+                $this->prepareIntegrationSnippet();
+                $this->wizardStep = 4;
+            } else {
+                Notification::make()->title('Pengiriman uji belum berhasil')->warning()->send();
+            }
+        } catch (ConnectionException $exception) {
+            Notification::make()->title($exception->getMessage())->danger()->send();
+        }
+
+        $this->refreshSetupState();
+    }
+
+    public function skipToIntegration(): void
+    {
+        $this->prepareIntegrationSnippet();
+        $this->wizardStep = 4;
+    }
+
+    public function shouldPoll(): bool
+    {
+        return $this->wizardStep === 2
+            && $this->connection()?->isManagedNumber() === true
+            && ! in_array($this->connection()?->status, [ConnectionStatus::Ready->value, ConnectionStatus::Degraded->value], true);
+    }
+
+    private function prepareIntegrationSnippet(): void
+    {
+        $connection = $this->connection();
+
+        if ($connection === null) {
+            return;
+        }
+
+        $pack = app(IntegrationPack::class);
+        $this->integrationEnv = implode("\n", [
+            'WAG_URL='.$pack->hubUrl(),
+            'WAG_TOKEN=<token-aplikasi-dari-tab-kredensial>',
+            'WAG_CONNECTION_ID='.(string) $connection->uuid,
+        ]);
     }
 }

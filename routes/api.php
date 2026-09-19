@@ -34,6 +34,10 @@ Route::prefix('v1')
             ->whereUuid('connectionId')
             ->middleware(['client.ability:messages:send', 'client.rate:messages']);
 
+        Route::get('/connections/{connectionId}/diagnostics', [ConnectionController::class, 'diagnostics'])
+            ->whereUuid('connectionId')
+            ->middleware(['client.ability:messages:read', 'client.rate:messages']);
+
         Route::get('/connections/{connectionId}/integration', [ConnectionController::class, 'integration'])
             ->whereUuid('connectionId')
             ->middleware(['client.ability:messages:read', 'client.rate:messages']);
