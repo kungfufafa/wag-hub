@@ -43,21 +43,21 @@ class IntegrationDocumentation extends Page
             ])
             ->components([
                 Section::make('Setup')
-                    ->description('Layar di /panel sebelum repo lain memanggil API.')
+                    ->description('Alur terpendek: aplikasi, koneksi WhatsApp, uji, salin WAG_URL dan WAG_TOKEN.')
                     ->icon(Heroicon::OutlinedQueueList)
                     ->schema([
                         Placeholder::make('step_1')
                             ->label('1. Aplikasi Klien')
-                            ->content('Satu baris per repo: web-cesa, web-helpdesk, web-sam, web-shelf, appscript-ft.'),
+                            ->content('Buat satu aplikasi per repo, lalu buka Hubungkan WhatsApp.'),
                         Placeholder::make('step_2')
-                            ->label('2. Kredensial API')
-                            ->content('Tombol Buat WAG_TOKEN & ENGINE_URL. WAG_TOKEN ke Authorization Bearer. ENGINE_URL ke /engine/t/{token}.'),
+                            ->label('2. Hubungkan WhatsApp')
+                            ->content('Pakai nomor sendiri (QR/pairing) atau provider. Routing default dibuat otomatis. Buat WAG_TOKEN dari Hubungkan aplikasi.'),
                         Placeholder::make('step_3')
-                            ->label('3. Akun Provider WAHA')
-                            ->content('Driver WAHA: base_url, session, api_key. Host masuk GATEWAY_PROVIDER_HTTP_HOSTS.'),
+                            ->label('3. Kirim pesan uji')
+                            ->content('Dari koneksi yang siap. Aplikasi klien memanggil POST /api/v1/messages tanpa route_key.'),
                         Placeholder::make('step_4')
-                            ->label('4. QR')
-                            ->content('Perangkat WhatsApp → Hubungkan, atau POST /engine/sessions dari WhatsAppEngineClient.'),
+                            ->label('4. Integrasi')
+                            ->content('Salin WAG_URL dan WAG_TOKEN. Detail engine, provider, dan fallback ada di bagian lanjutan.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',

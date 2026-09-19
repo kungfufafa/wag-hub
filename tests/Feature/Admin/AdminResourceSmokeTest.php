@@ -30,6 +30,8 @@ class AdminResourceSmokeTest extends TestCase
     public static function resourcePages(): array
     {
         return [
+            'whatsapp connections' => ['/panel/connections'],
+            'connect whatsapp' => ['/panel/hubungkan-whatsapp'],
             'whatsapp inbox' => ['/panel/inbox'],
             'whatsapp devices' => ['/panel/devices'],
             'client applications' => ['/panel/client-applications'],
@@ -66,6 +68,21 @@ class AdminResourceSmokeTest extends TestCase
             ->assertSee('POST /api/v1/messages')
             ->assertSee('Checklist')
             ->assertSee('GATEWAY_DISPATCH=async');
+    }
+
+    public function test_connect_whatsapp_page_guides_the_first_run_path(): void
+    {
+        $administrator = User::factory()->create([
+            'is_admin' => true,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($administrator)
+            ->get('/panel/hubungkan-whatsapp')
+            ->assertOk()
+            ->assertSee('Buat aplikasi → Hubungkan WhatsApp → Uji → Salin konfigurasi')
+            ->assertSee('Pilih aplikasi')
+            ->assertSee('Koneksi WhatsApp');
     }
 
     public function test_sidebar_separates_daily_work_from_engine_fallback_and_system_tools(): void

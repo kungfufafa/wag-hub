@@ -106,19 +106,19 @@ class ClientApplicationResource extends Resource
                         'lg' => 2,
                     ]),
                 Section::make('Langkah berikutnya')
-                    ->description('Urutan di panel ini.')
+                    ->description('Alur sukses pertama: aplikasi, koneksi, uji, salin konfigurasi.')
                     ->schema([
                         Placeholder::make('create_credential')
-                            ->label('1. Kredensial API')
+                            ->label('1. Hubungkan WhatsApp')
                             ->content(fn (string $operation): string => $operation === 'edit'
-                                ? 'Tab Kredensial API → Buat WAG_TOKEN & ENGINE_URL.'
-                                : 'Simpan dulu, lalu buka tab Kredensial API.'),
+                                ? 'Tombol Hubungkan WhatsApp. Pilih nomor sendiri atau provider. Routing dibuat otomatis.'
+                                : 'Simpan aplikasi, lalu Hubungkan WhatsApp.'),
                         Placeholder::make('choose_route')
-                            ->label('2. Aturan Rute')
-                            ->content('Untuk POST /api/v1/messages. Sesi /engine tidak memakai baris ini.'),
+                            ->label('2. Kirim pesan uji')
+                            ->content('Setelah koneksi siap, kirim tes dari halaman koneksi. Tidak perlu membuat aturan rute dulu.'),
                         Placeholder::make('activate_application')
-                            ->label('3. QR')
-                            ->content('CESA Rekrutmen: POST /engine/sessions. Atau Perangkat WhatsApp → Hubungkan.'),
+                            ->label('3. Salin integrasi')
+                            ->content('Tab Kredensial API → Hubungkan aplikasi untuk WAG_URL dan WAG_TOKEN. Aturan Rute tetap tersedia sebagai pengaturan lanjutan.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -149,7 +149,7 @@ class ClientApplicationResource extends Resource
                 ]),
             ])
             ->emptyStateHeading('Belum ada aplikasi klien')
-            ->emptyStateDescription('Buat aplikasi sumber, terbitkan kredensial API, lalu pasang aturan rute.')
+            ->emptyStateDescription('Buat aplikasi, hubungkan WhatsApp, kirim uji, lalu salin WAG_URL dan WAG_TOKEN.')
             ->emptyStateIcon(Heroicon::OutlinedComputerDesktop)
             ->emptyStateActions([
                 Action::make('create')
