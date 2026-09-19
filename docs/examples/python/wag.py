@@ -1,5 +1,6 @@
 import json
 import os
+import urllib.error
 import urllib.request
 
 
@@ -29,5 +30,10 @@ class Wag:
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
         request = urllib.request.Request(self.url + path, data=data, headers=headers, method=method)
-        with urllib.request.urlopen(request) as response:
-            return json.loads(response.read().decode())
+        try:
+            with urllib.request.urlopen(request) as response:
+                if response.status >= 400:
+                    raise RuntimeError(f"WAG Hub request failed: {response.status}")
+                return json.loads(response.read().decode())
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(f"WAG Hub request failed: {error.code}") from error

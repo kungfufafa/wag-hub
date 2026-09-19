@@ -35,4 +35,20 @@ class IntegrationPackTest extends TestCase
         $this->assertNull($existing->credential->fresh()->revoked_at);
         $this->assertSame(2, $application->apiCredentials()->count());
     }
+
+    public function test_copy_or_issue_reuses_an_existing_token_instead_of_minting_another(): void
+    {
+        $application = ClientApplication::query()->create([
+            'name' => 'HR', 'slug' => 'hr-web', 'is_active' => true, 'rate_limit_per_minute' => 60,
+        ]);
+        ApiCredential::issue($application, 'Existing', ['messages:send']);
+
+        $pack = app(IntegrationPack::class)->copyOrIssue($application, 'https://hub.test');
+
+        $this->assertFalse($pack['issued']);
+        $this->assertNull($pack['credential']);
+        $this->assertStringContainsString('WAG_TOKEN=wgh_', $pack['env']);
+        $this->assertStringContainsString('…', $pack['env']);
+        $this->assertSame(1, $application->apiCredentials()->count());
+    }
 }

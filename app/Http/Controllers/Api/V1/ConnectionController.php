@@ -42,15 +42,15 @@ class ConnectionController extends Controller
     public function store(StoreConnectionRequest $request): JsonResponse
     {
         try {
-            $connection = $this->provisioner->provision($this->application($request), $request->payload());
+            $provisioned = $this->provisioner->provision($this->application($request), $request->payload());
         } catch (WhatsAppConnectionException $exception) {
             return $this->failure($request, $exception);
         }
 
         return response()->json([
-            'data' => $this->presenter->toArray($connection, includePairingSecrets: true),
+            'data' => $this->presenter->toArray($provisioned->connection, includePairingSecrets: true),
             'request_id' => $this->requestId($request),
-        ], 201);
+        ], $provisioned->created ? 201 : 200);
     }
 
     public function show(Request $request, string $uuid): JsonResponse

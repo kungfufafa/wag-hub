@@ -20,8 +20,14 @@ export function createWag({ url, token }) {
       headers,
       body: body ? JSON.stringify(body) : undefined,
     });
+    const json = await response.json();
 
-    return response.json();
+    if (!response.ok) {
+      const code = json?.error?.code || response.status;
+      throw new Error(`WAG Hub request failed: ${code}`);
+    }
+
+    return json;
   }
 
   return {

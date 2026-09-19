@@ -28,6 +28,7 @@ class ConnectionStatusProjectorTest extends TestCase
         $projector = new ConnectionStatusProjector;
 
         $this->assertSame(ConnectionStatus::SetupRequired, $projector->projectRoute(null, false, false));
+        $this->assertSame(ConnectionStatus::SetupRequired, $projector->projectRoute('unknown', false, true));
         $this->assertSame(ConnectionStatus::Ready, $projector->projectRoute('healthy', false, true));
         $this->assertSame(ConnectionStatus::Degraded, $projector->projectRoute('degraded', false, true));
         $this->assertSame(ConnectionStatus::Degraded, $projector->projectRoute('healthy', true, true));
@@ -43,6 +44,8 @@ class ConnectionStatusProjectorTest extends TestCase
         $this->assertSame('Start WAG Hub runner', $projector->recommendedAction(ConnectionType::ManagedNumber, ConnectionStatus::SetupRequired, null));
         $this->assertSame('Reconnect', $projector->recommendedAction(ConnectionType::ManagedNumber, ConnectionStatus::Disconnected, SessionStatus::Stopped));
         $this->assertSame('Fix credentials', $projector->recommendedAction(ConnectionType::ProviderRoute, ConnectionStatus::Error, null));
+        $this->assertSame('Send a test message', $projector->recommendedAction(ConnectionType::ProviderRoute, ConnectionStatus::SetupRequired, null, true));
+        $this->assertSame('Fix credentials', $projector->recommendedAction(ConnectionType::ProviderRoute, ConnectionStatus::SetupRequired, null, false));
         $this->assertSame('Provider temporarily unavailable', $projector->recommendedAction(ConnectionType::ProviderRoute, ConnectionStatus::Degraded, null));
         $this->assertNull($projector->recommendedAction(ConnectionType::ManagedNumber, ConnectionStatus::Ready, SessionStatus::Working));
     }

@@ -5,6 +5,7 @@ namespace App\Domain\Connections;
 enum ApplicationErrorCode: string
 {
     case ConnectionNotReady = 'connection_not_ready';
+    case ConnectionNotFound = 'connection_not_found';
     case AuthenticationFailed = 'authentication_failed';
     case RecipientInvalid = 'recipient_invalid';
     case CapabilityNotSupported = 'capability_not_supported';

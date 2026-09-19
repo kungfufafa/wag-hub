@@ -21,7 +21,7 @@ class ConnectWhatsAppConnectionRequest extends FormRequest
     {
         return [
             'mode' => ['nullable', Rule::in(['qr', 'pairing'])],
-            'phone' => ['nullable', 'string', 'max:32'],
+            'phone' => ['required_if:mode,pairing', 'nullable', 'string', 'max:32'],
         ];
     }
 

@@ -73,6 +73,20 @@ class WhatsAppConnection extends Model
         return $this->typeEnum()->pinsSender();
     }
 
+    public function isConfigured(): bool
+    {
+        return $this->provider_account_id !== null && $this->routing_policy_id !== null;
+    }
+
+    public function canAttemptSend(): bool
+    {
+        if ($this->statusEnum()->canAttemptSend()) {
+            return true;
+        }
+
+        return $this->statusEnum() === ConnectionStatus::SetupRequired && $this->isConfigured();
+    }
+
     public function clientApplication(): BelongsTo
     {
         return $this->belongsTo(ClientApplication::class);

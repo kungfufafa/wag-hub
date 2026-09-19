@@ -73,8 +73,16 @@ final class WagClient
         ]);
 
         $body = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        return is_string($body) ? (json_decode($body, true) ?: []) : [];
+        $decoded = is_string($body) ? (json_decode($body, true) ?: []) : [];
+
+        if ($status >= 400) {
+            $code = is_array($decoded['error'] ?? null) ? ($decoded['error']['code'] ?? $status) : $status;
+            throw new RuntimeException('WAG Hub request failed: '.$code);
+        }
+
+        return $decoded;
     }
 }

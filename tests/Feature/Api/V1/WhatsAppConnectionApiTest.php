@@ -64,7 +64,7 @@ class WhatsAppConnectionApiTest extends TestCase
             'type' => ConnectionType::ManagedNumber->value,
         ]);
 
-        $retry->assertCreated()->assertJsonPath('data.id', $response->json('data.id'));
+        $retry->assertOk()->assertJsonPath('data.id', $response->json('data.id'));
         $this->assertSame(1, WhatsAppConnection::query()->count());
         $this->assertSame(1, ProviderAccount::query()->count());
     }
@@ -113,8 +113,10 @@ class WhatsAppConnectionApiTest extends TestCase
         $response
             ->assertCreated()
             ->assertJsonPath('data.type', 'provider_route')
-            ->assertJsonPath('data.status', ConnectionStatus::Ready->value)
+            ->assertJsonPath('data.status', ConnectionStatus::SetupRequired->value)
+            ->assertJsonPath('data.recommended_action', 'Send a test message')
             ->assertJsonPath('data.sender.driver', 'fonnte')
+            ->assertJsonPath('data.health.health', 'unknown')
             ->assertJsonMissingPath('data.sender.token');
 
         $json = json_encode($response->json());
@@ -281,5 +283,147 @@ class WhatsAppConnectionApiTest extends TestCase
         $this->assertSame(1, WhatsAppConnection::query()->count());
         $application = ClientApplication::query()->findOrFail($client['id']);
         $this->assertSame(1, $application->whatsappConnections()->count());
+    }
+
+    public function test_a_second_provider_connection_keeps_its_own_policy_and_does_not_become_fallback(): void
+    {
+        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+        config([
+            'gateway.provider_endpoints.https_hosts' => array_values(array_unique([
+                ...config('gateway.provider_endpoints.https_hosts', []),
+                'secondary.waha.test',
+            ])),
+        ]);
+        Http::fake([
+            'https://api.fonnte.com/*' => Http::response(['status' => true, 'id' => 'fonnte-1']),
+            'https://secondary.waha.test/*' => Http::response(['id' => 'waha-1'], 201),
+        ]);
+
+        $first = $this->withToken($client['token'])->postJson('/api/v1/connections', [
+            'name' => 'Fonnte',
+            'type' => 'provider_route',
+            'provider' => [
+                'driver' => 'fonnte',
+                'configuration' => ['token' => 'fonnte-secret'],
+            ],
+        ])->assertCreated();
+
+        $second = $this->withToken($client['token'])->postJson('/api/v1/connections', [
+            'name' => 'WAHA',
+            'type' => 'provider_route',
+            'provider' => [
+                'driver' => 'waha',
+                'configuration' => [
+                    'base_url' => 'https://secondary.waha.test',
+                    'session' => 'default',
+                    'api_key' => 'waha-key',
+                ],
+            ],
+        ])->assertCreated();
+
+        $firstConnection = WhatsAppConnection::query()->where('uuid', $first->json('data.id'))->firstOrFail();
+        $secondConnection = WhatsAppConnection::query()->where('uuid', $second->json('data.id'))->firstOrFail();
+
+        $this->assertTrue((bool) $firstConnection->is_default);
+        $this->assertFalse((bool) $secondConnection->is_default);
+        $this->assertNotSame($firstConnection->routing_policy_id, $secondConnection->routing_policy_id);
+        $this->assertSame(1, $firstConnection->routingPolicy->steps()->count());
+        $this->assertSame(1, $secondConnection->routingPolicy->steps()->count());
+        $this->assertSame('default', $firstConnection->routingPolicy->key);
+        $this->assertNotSame('default', $secondConnection->routingPolicy->key);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$client['token'],
+            'Idempotency-Key' => 'second-1',
+        ])->postJson('/api/v1/messages', [
+            'connection_id' => $secondConnection->uuid,
+            'recipient' => ['type' => 'phone', 'value' => '081234567890'],
+            'message' => ['type' => 'text', 'text' => 'Hanya WAHA'],
+        ])->assertCreated()->assertJsonPath('data.provider', $secondConnection->providerAccount?->slug);
+
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'api.fonnte.com'));
+        $this->assertSame(1, $firstConnection->routingPolicy->fresh()->steps()->count());
+    }
+
+    public function test_unknown_connection_id_is_not_found(): void
+    {
+        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$client['token'],
+            'Idempotency-Key' => 'missing-1',
+        ])->postJson('/api/v1/messages', [
+            'connection_id' => '00000000-0000-4000-8000-000000000000',
+            'recipient' => ['type' => 'phone', 'value' => '081234567890'],
+            'message' => ['type' => 'text', 'text' => 'Halo'],
+        ])
+            ->assertNotFound()
+            ->assertJsonPath('error.code', 'connection_not_found');
+    }
+
+    public function test_resume_rejects_a_type_change_for_the_same_name(): void
+    {
+        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+        Http::fake(['*' => Http::response(['ok' => true, 'status' => 'qr', 'qr' => 'data:image/png;base64,test'])]);
+
+        $this->withToken($client['token'])->postJson('/api/v1/connections', [
+            'name' => 'Support',
+            'type' => 'managed_number',
+        ])->assertCreated();
+
+        $this->withToken($client['token'])->postJson('/api/v1/connections', [
+            'name' => 'Support',
+            'type' => 'provider_route',
+            'provider' => [
+                'driver' => 'fonnte',
+                'configuration' => ['token' => 'fonnte-secret'],
+            ],
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'capability_not_supported');
+
+        $this->assertSame(1, WhatsAppConnection::query()->count());
+        $this->assertSame('managed_number', WhatsAppConnection::query()->sole()->type);
+    }
+
+    public function test_pairing_mode_requires_a_phone_number(): void
+    {
+        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+
+        $this->withToken($client['token'])->postJson('/api/v1/connections', [
+            'name' => 'Support',
+            'type' => 'managed_number',
+            'mode' => 'pairing',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'validation_failed');
+
+        $this->assertSame(0, WhatsAppConnection::query()->count());
+    }
+
+    public function test_listing_connections_does_not_write_status(): void
+    {
+        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+
+        $this->withToken($client['token'])->postJson('/api/v1/connections', [
+            'name' => 'Fonnte',
+            'type' => 'provider_route',
+            'provider' => [
+                'driver' => 'fonnte',
+                'configuration' => ['token' => 'fonnte-secret'],
+            ],
+        ])->assertCreated();
+
+        $connection = WhatsAppConnection::query()->sole();
+        $updatedAt = (string) $connection->updated_at;
+        $status = $connection->status;
+
+        $this->withToken($client['token'])->getJson('/api/v1/connections')
+            ->assertOk()
+            ->assertJsonPath('data.0.status', ConnectionStatus::SetupRequired->value);
+
+        $fresh = $connection->fresh();
+        $this->assertSame($updatedAt, (string) $fresh->updated_at);
+        $this->assertSame($status, $fresh->status);
     }
 }

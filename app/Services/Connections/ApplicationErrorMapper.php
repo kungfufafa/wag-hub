@@ -12,6 +12,7 @@ final class ApplicationErrorMapper
             'unauthenticated', 'forbidden' => ApplicationErrorCode::AuthenticationFailed,
             'rate_limited' => ApplicationErrorCode::RateLimited,
             'invalid_phone', 'recipient_invalid' => ApplicationErrorCode::RecipientInvalid,
+            'connection_not_found', 'not_found' => ApplicationErrorCode::ConnectionNotFound,
             'not_connected', 'route_unavailable', 'engine_unavailable',
             'engine_provider_unavailable', 'connection_not_ready' => ApplicationErrorCode::ConnectionNotReady,
             'attachment_format_unsupported', 'capability_not_supported',

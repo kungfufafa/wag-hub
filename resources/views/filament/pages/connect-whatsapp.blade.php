@@ -148,7 +148,9 @@
             @endif
             <div class="mt-4 flex gap-3">
                 <x-filament::button color="gray" wire:click="retrySetup">Coba lagi</x-filament::button>
-                <x-filament::button wire:click="$set('step', 4)">Kirim pesan uji</x-filament::button>
+                @if ($this->canSendTest())
+                    <x-filament::button wire:click="$set('step', 4)">Kirim pesan uji</x-filament::button>
+                @endif
             </div>
         </div>
     @endif

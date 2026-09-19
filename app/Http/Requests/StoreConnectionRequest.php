@@ -28,7 +28,7 @@ class StoreConnectionRequest extends FormRequest
             ])],
             'is_default' => ['sometimes', 'boolean'],
             'mode' => ['nullable', Rule::in(['qr', 'pairing'])],
-            'phone' => ['nullable', 'string', 'max:32'],
+            'phone' => ['required_if:mode,pairing', 'nullable', 'string', 'max:32'],
             'provider' => ['required_if:type,'.ConnectionType::ProviderRoute->value, 'array'],
             'provider.driver' => [
                 'required_if:type,'.ConnectionType::ProviderRoute->value,

@@ -58,10 +58,11 @@ key for this path.
 ### External provider
 
 Create/select App → Connect WhatsApp → Use provider → Select provider → Enter
-credentials → Validate → Ready → Send test → Copy configuration.
+credentials → Validate → Send test → Ready → Copy configuration.
 
-A single-step default delivery strategy is created. Ordered fallback, extra
-providers, and purpose-specific routes remain optional advanced configuration.
+Each connection gets its own single-step delivery policy. Ordered fallback,
+extra providers, and purpose-specific routes remain optional advanced
+configuration and are never attached automatically.
 
 ## Application-facing API
 
@@ -84,9 +85,10 @@ Capabilities (not provider names): `send_text`, `send_image`, `send_document`,
 `send_video`, `send_audio`, `number_lookup`, `inbound_messages`,
 `delivery_status`.
 
-Application errors: `connection_not_ready`, `authentication_failed`,
-`recipient_invalid`, `capability_not_supported`, `message_expired`,
-`rate_limited`, `delivery_failed`, `delivery_outcome_unknown`.
+Application errors: `connection_not_ready`, `connection_not_found`,
+`authentication_failed`, `recipient_invalid`, `capability_not_supported`,
+`message_expired`, `rate_limited`, `delivery_failed`,
+`delivery_outcome_unknown`.
 
 ## Advanced: engine runner (managed numbers)
 
