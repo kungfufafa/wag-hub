@@ -11,14 +11,16 @@
 WAG Hub menyediakan provider WhatsApp sendiri melalui runner Baileys dan juga menjadi router untuk WAHA, GOWA, Fonnte, serta WABA. CESA, DND, dan aplikasi lain memakai API yang sama. UI login QR/pairing, status, dan logout dapat ditampilkan di aplikasi klien; socket, kredensial WhatsApp, dan riwayat pengiriman dikelola di WAG Hub.
 
 Untuk memakai WhatsApp dari **CESA, DND, atau aplikasi lain**, buat Aplikasi
-Klien lalu klik **Hubungkan aplikasi**. Salin `WAG_URL` dan `WAG_TOKEN` ke
-backend aplikasi. WAG Hub mengelola login QR/pairing, logout, sesi, dan
-pengiriman lewat `/api/v1/engine`; aplikasi klien tidak perlu menjalankan engine.
-Lihat [panduan plug and play](docs/PLUG_AND_PLAY_GUIDE.md) dan
+Klien, buka **Hubungkan WhatsApp**, lalu salin `WAG_URL` dan `WAG_TOKEN`.
+Aplikasi klien hanya memahami App → Koneksi WhatsApp → Pesan. WAG Hub
+menyediakan nomor terkelola (QR/pairing) atau rute provider, tanpa mewajibkan
+`route_key` pada jalur normal.
+Lihat [panduan plug and play](docs/PLUG_AND_PLAY_GUIDE.md),
+[jaminan kompatibilitas](docs/COMPATIBILITY.md), dan
 [migrasi CESA](docs/CESA_WEB.md).
 
-Kirim melalui nomor yang dipilih di `/api/v1/engine/sessions/{id}/send`, atau
-gunakan `/api/v1/messages` untuk memilih provider melalui routing/fallback.
+Kirim melalui koneksi default di `POST /api/v1/messages`, atau tetap memakai
+`/api/v1/engine/sessions/{id}/send` dan `route_key` yang sudah ada.
 Provider **WAG Hub (bawaan)** dapat menjadi utama maupun fallback, bersama
 provider eksternal. Keduanya memakai ledger yang sama dan satu token aplikasi.
 
@@ -115,11 +117,11 @@ GATEWAY_PROVIDER_CIRCUIT_SECONDS=300
 
 ## Konfigurasi awal
 
-1. Masuk ke `/admin` memakai administrator yang dibuat lewat command.
-2. Buat **Client Application**, lalu terbitkan API credential. Salin token saat ditampilkan; plaintext tidak dapat dilihat lagi.
-3. Buat **Provider Account** WAG Hub bawaan, WAHA, Fonnte, GOWA, atau WABA. Untuk WAG Hub bawaan, jalankan runner sesuai [panduan](docs/PLUG_AND_PLAY_GUIDE.md), lalu tautkan nomor di **Perangkat WhatsApp**.
-4. Buat **Routing Policy** untuk aplikasi, `route_key`, dan `purpose`.
-5. Susun provider steps sesuai prioritas fallback.
+1. Masuk ke `/panel` memakai administrator yang dibuat lewat command.
+2. Buat **Aplikasi Klien**.
+3. Buka **Hubungkan WhatsApp**: pakai nomor sendiri atau provider. Routing default dibuat otomatis.
+4. Kirim pesan uji, lalu **Hubungkan aplikasi** untuk menyalin `WAG_URL` dan `WAG_TOKEN`.
+5. Pengiriman & fallback, akun provider, dan `route_key` tetap ada sebagai pengaturan lanjutan.
 
 ## Seeder manajemen awal
 
