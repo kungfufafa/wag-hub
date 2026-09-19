@@ -324,6 +324,24 @@ class WhatsAppEngineService
         };
     }
 
+    public function provisionOwnedSession(ClientApplication $application, string $sessionId, string $mode): ProviderAccount
+    {
+        return $this->provisionSession($application, $sessionId, $mode);
+    }
+
+    public function sessionRouteIdFor(ClientApplication $application, string $sessionId, ProviderAccount $account): int
+    {
+        return $this->sessionRouteId($application, $sessionId, $account);
+    }
+
+    /**
+     * @return Collection<int, ProviderAccount>
+     */
+    public function applicationSessions(ClientApplication $application): Collection
+    {
+        return $this->ownedSessions($application);
+    }
+
     protected function provisionSession(ClientApplication $application, string $sessionId, string $mode): ProviderAccount
     {
         return DB::transaction(function () use ($application, $sessionId, $mode): ProviderAccount {
