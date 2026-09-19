@@ -106,19 +106,22 @@ class ClientApplicationResource extends Resource
                         'lg' => 2,
                     ]),
                 Section::make('Langkah berikutnya')
-                    ->description('Urutan di panel ini.')
+                    ->description('Happy path plug-and-play.')
                     ->schema([
                         Placeholder::make('create_credential')
                             ->label('1. Kredensial API')
                             ->content(fn (string $operation): string => $operation === 'edit'
-                                ? 'Tab Kredensial API → Buat WAG_TOKEN & ENGINE_URL.'
+                                ? 'Tab Kredensial API → Hubungkan aplikasi → salin WAG_URL & WAG_TOKEN.'
                                 : 'Simpan dulu, lalu buka tab Kredensial API.'),
-                        Placeholder::make('choose_route')
-                            ->label('2. Aturan Rute')
-                            ->content('Untuk POST /api/v1/messages. Sesi /engine tidak memakai baris ini.'),
-                        Placeholder::make('activate_application')
-                            ->label('3. QR')
-                            ->content('CESA Rekrutmen: POST /engine/sessions. Atau Perangkat WhatsApp → Hubungkan.'),
+                        Placeholder::make('connect_whatsapp')
+                            ->label('2. Koneksi WhatsApp')
+                            ->content('Koneksi WhatsApp → Hubungkan WhatsApp. Provider dan rute dibuat otomatis.'),
+                        Placeholder::make('test_and_copy')
+                            ->label('3. Uji & integrasi')
+                            ->content('Kirim pesan uji dari detail koneksi, lalu salin WAG_CONNECTION_ID ke aplikasi.'),
+                        Placeholder::make('advanced_routing')
+                            ->label('Lanjutan (opsional)')
+                            ->content('Aturan Rute & Akun Provider untuk multi-provider, fallback, dan diagnostik.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -149,7 +152,7 @@ class ClientApplicationResource extends Resource
                 ]),
             ])
             ->emptyStateHeading('Belum ada aplikasi klien')
-            ->emptyStateDescription('Buat aplikasi sumber, terbitkan kredensial API, lalu pasang aturan rute.')
+            ->emptyStateDescription('Buat aplikasi, hubungkan WhatsApp, lalu salin konfigurasi integrasi.')
             ->emptyStateIcon(Heroicon::OutlinedComputerDesktop)
             ->emptyStateActions([
                 Action::make('create')

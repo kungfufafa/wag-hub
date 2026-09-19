@@ -8,6 +8,8 @@ use App\Http\Requests\SetupConnectionRequest;
 use App\Http\Requests\StoreConnectionRequest;
 use App\Http\Requests\TestConnectionRequest;
 use App\Models\ClientApplication;
+use App\Models\ProviderAccount;
+use App\Services\Connection\ConnectionFallbackManager;
 use App\Services\Connection\ConnectionMessageSender;
 use App\Services\Connection\ConnectionPresenter;
 use App\Services\Connection\ConnectionProvisioner;
@@ -168,6 +170,53 @@ final class ConnectionController extends Controller
             ],
             'request_id' => $this->requestId($request),
         ], (string) $message->status === 'provider_accepted' ? 201 : 502);
+    }
+
+    public function fallbacks(Request $request, string $connectionId): JsonResponse
+    {
+        /** @var ClientApplication $application */
+        $application = $request->attributes->get('client_application');
+
+        try {
+            $connection = $this->messageSender->resolveConnection($application, $connectionId);
+            $steps = app(ConnectionFallbackManager::class)->listSteps($connection);
+        } catch (ConnectionException $exception) {
+            return $this->connectionError($request, $exception);
+        }
+
+        return response()->json([
+            'data' => $steps,
+            'request_id' => $this->requestId($request),
+        ]);
+    }
+
+    public function addFallback(Request $request, string $connectionId): JsonResponse
+    {
+        /** @var ClientApplication $application */
+        $application = $request->attributes->get('client_application');
+
+        $providerSlug = (string) $request->validate([
+            'provider' => ['required', 'string', 'max:80'],
+        ])['provider'];
+
+        try {
+            $connection = $this->messageSender->resolveConnection($application, $connectionId);
+            $provider = ProviderAccount::query()->where('slug', $providerSlug)->where('is_active', true)->first();
+
+            if ($provider === null) {
+                throw new ConnectionException('Provider tidak ditemukan.', 404, 'connection_not_ready');
+            }
+
+            $connection = app(ConnectionFallbackManager::class)->addFallback($connection, $provider);
+            $connection = $this->statusResolver->refresh($connection);
+        } catch (ConnectionException $exception) {
+            return $this->connectionError($request, $exception);
+        }
+
+        return response()->json([
+            'data' => $this->presenter->toArray($connection),
+            'request_id' => $this->requestId($request),
+        ]);
     }
 
     public function integration(Request $request, string $connectionId): JsonResponse

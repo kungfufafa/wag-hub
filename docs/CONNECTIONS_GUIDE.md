@@ -45,7 +45,19 @@ Tanpa `WAG_CONNECTION_ID`, set header `X-WAG-Use-Default-Connection: true` atau 
 | `POST /api/v1/connections/{id}/setup` | Mulai QR/pairing atau validasi provider |
 | `POST /api/v1/connections/{id}/test` | Kirim pesan uji |
 | `GET /api/v1/connections/{id}/integration` | Contoh konfigurasi integrasi |
+| `GET /api/v1/connections/{id}/fallbacks` | Daftar urutan provider (lanjutan) |
+| `POST /api/v1/connections/{id}/fallbacks` | Tambah provider fallback |
 | `POST /api/v1/messages` | Kirim pesan (`connection_id` opsional) |
+
+## Migrasi deployment lama
+
+Jika Anda sudah punya provider account dan routing policy dari setup sebelumnya:
+
+```bash
+php artisan gateway:backfill-connections
+php artisan gateway:backfill-connections --dry-run
+php artisan gateway:backfill-connections --application=3
+```
 
 ## Backward compatibility
 

@@ -38,6 +38,14 @@ Route::prefix('v1')
             ->whereUuid('connectionId')
             ->middleware(['client.ability:messages:read', 'client.rate:messages']);
 
+        Route::get('/connections/{connectionId}/fallbacks', [ConnectionController::class, 'fallbacks'])
+            ->whereUuid('connectionId')
+            ->middleware(['client.ability:messages:read', 'client.rate:messages']);
+
+        Route::post('/connections/{connectionId}/fallbacks', [ConnectionController::class, 'addFallback'])
+            ->whereUuid('connectionId')
+            ->middleware(['client.ability:engine:use', 'client.rate:engine']);
+
         Route::post('/messages', [MessageController::class, 'store'])
             ->middleware(['client.ability:messages:send', 'client.rate:messages']);
 
