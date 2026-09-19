@@ -656,6 +656,23 @@ export function createWhatsAppEngine({
         return promise;
     }
 
+    async function checkNumber(id, phone) {
+        validateSessionId(id);
+        if (!validPhone(phone)) {
+            throw new EngineError('Nomor WhatsApp tidak valid.', 422, 'invalid_phone');
+        }
+        const record = recordFor(id);
+        if (record.status !== 'connected' || !record.sock) {
+            throw new EngineError('Nomor pengirim belum terhubung.', 409, 'not_connected', true);
+        }
+        const results = await withTimeout(record.sock.onWhatsApp(formatPhone(phone)), 10000, 'Pengecekan nomor melewati batas waktu.');
+        if (!Array.isArray(results)) {
+            return { ok: false, registered: null };
+        }
+        const result = results[0];
+        return { ok: true, registered: results.length === 0 ? false : (typeof result?.exists === 'boolean' ? result.exists : null) };
+    }
+
     function messageStatus(id, key) {
         const entry = journal.read(validateSessionId(id), validateMessageKey(key));
 
@@ -670,7 +687,10 @@ export function createWhatsAppEngine({
         fs.mkdirSync(sessionRoot, { recursive: true, mode: 0o700 });
         const entries = fs.readdirSync(sessionRoot, { withFileTypes: true });
 
-        await Promise.allSettled(entries.filter((entry) => entry.isDirectory() && /^rekrutmen-[1-9][0-9]*$/.test(entry.name))
+        await Promise.allSettled(entries.filter((entry) => {
+            if (!entry.isDirectory()) return false;
+            try { validateSessionId(entry.name); return true; } catch { return false; }
+        })
             .map(async (entry) => {
                 if (fs.existsSync(path.join(sessionDirectory(entry.name), 'creds.json'))) {
                     try {
@@ -691,6 +711,7 @@ export function createWhatsAppEngine({
         startSession,
         stopSession,
         sendText,
+        checkNumber,
         messageStatus,
         restoreSessions,
         shutdown,

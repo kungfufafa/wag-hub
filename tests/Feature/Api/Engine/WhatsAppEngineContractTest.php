@@ -18,6 +18,12 @@ class WhatsAppEngineContractTest extends TestCase
     use BuildsGatewayFixtures;
     use DatabaseMigrations;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['gateway.engine.driver' => 'waha']);
+    }
+
     private const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
     public function test_health_requires_a_valid_credential(): void

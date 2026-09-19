@@ -1,33 +1,51 @@
-# Standalone Baileys Runner untuk WAG Hub
+# Runner WhatsApp untuk WAG Hub
 
-Runner ini adalah engine Node.js mandiri berbasis **@whiskeysockets/baileys** (WhatsApp Web multi-device) yang berjalan sebagai microservice ringan di sisi `wag-hub`.
-
-Cocok digunakan untuk lingkungan pengujian (development/staging) atau deployment bare metal/VPS kecil tanpa Docker WAHA.
-
-## Cara Menjalankan
+Runner Node.js ini berjalan di server WAG Hub. Aplikasi klien mengakses API
+Laravel WAG Hub, bukan port runner secara langsung.
 
 ```bash
-cd engine/baileys-runner
+cp .env.example .env
+# Isi WAG_BAILEYS_TOKEN dengan secret acak yang juga dipasang di Laravel Hub.
 npm ci --omit=dev
 npm start
 ```
 
-Engine akan mendengarkan request HTTP di `http://127.0.0.1:3318` secara default.
+Memerlukan Node.js 22.14+ dan Git. `npm start` membaca `.env` di folder ini.
+Setiap request wajib menggunakan `Authorization: Bearer <WAG_BAILEYS_TOKEN>`;
+runner tidak dapat dinyalakan tanpa token. Token ini bukan token aplikasi.
 
-## Variabel Environment Opsional
+Konfigurasi Laravel Hub:
 
-| Variabel | Default | Keterangan |
-|---|---|---|
-| `WAG_BAILEYS_PORT` | `3318` | Port listener HTTP |
-| `WAG_BAILEYS_HOST` | `127.0.0.1` | Host listener HTTP |
-| `WAG_BAILEYS_SESSION_ROOT` | `./sessions` | Direktori penyimpanan auth/kredensial WhatsApp |
-| `WAG_BAILEYS_LOG_LEVEL` | `info` | Level log pino (`info`, `debug`, `error`) |
+```dotenv
+GATEWAY_ENGINE_DRIVER=wag_hub
+WAG_BAILEYS_URL=http://127.0.0.1:3318
+WAG_BAILEYS_TOKEN=secret-yang-sama
+```
 
-## Kontrak Endpoint
+Jalankan `php artisan config:clear`. Endpoint `/api/v1/engine` di Hub kini
+mengelola akun provider bawaan dengan ID sesi yang terpisah per aplikasi.
+Akun provider **WAG Hub (bawaan)** juga tersedia pada routing `/api/v1/messages`,
+bersama WAHA, GOWA, Fonnte, dan WABA. Keduanya menggunakan jurnal runner dan
+ledger pengiriman Hub yang sama.
 
-- `GET /health`: Cek kesiapan engine
-- `POST /sessions`: Memulai sesi baru (`{ id: string, mode: "qr"|"pairing", phone?: string }`)
-- `GET /sessions/:id`: Status polling sesi (mengembalikan QR data URI atau pairing code)
-- `DELETE /sessions/:id`: Logout dan nonaktifkan sesi
-- `POST /sessions/:id/send`: Kirim pesan teks dengan idempotency key
-- `GET /sessions/:id/messages/:key`: Cek status pengiriman pesan
+| Variabel runner | Default |
+| --- | --- |
+| `WAG_BAILEYS_HOST` | `127.0.0.1` |
+| `WAG_BAILEYS_PORT` | `3318` |
+| `WAG_BAILEYS_TOKEN` | wajib diisi |
+| `WAG_BAILEYS_SESSION_ROOT` | `./sessions` |
+| `WAG_BAILEYS_JOURNAL_ROOT` | `./whatsapp-messages` |
+| `WAG_BAILEYS_LOG_LEVEL` | `info` |
+
+Jalankan satu proses runner per direktori data, sebagai service dengan restart
+otomatis. Pertahankan direktori sesi dan jurnal antar-deploy. Jangan menjalankan
+beberapa replica di direktori yang sama. Simpan port runner di jaringan privat.
+
+Tes socket, jurnal idempotensi, logout, pemulihan, HTTP, dan autentikasi memakai
+fake socket tanpa menghubungi WhatsApp:
+
+```bash
+npm test
+```
+
+Lihat [panduan aplikasi klien](../../docs/PLUG_AND_PLAY_GUIDE.md).

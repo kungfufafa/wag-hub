@@ -22,7 +22,7 @@ class ProviderAccountStats extends StatsOverviewWidget
 
         return [
             Stat::make('Akun provider', $total)
-                ->description('WAHA, Fonnte, GOWA, WABA')
+                ->description('WAG Hub, WAHA, Fonnte, GOWA, WABA')
                 ->color('gray'),
             Stat::make('Sehat', $healthy)
                 ->description('Siap dipakai pengiriman')

@@ -33,3 +33,8 @@ Thumbs.db
 **/caddy
 frankenphp
 frankenphp-worker.php
+
+/engine/baileys-runner/node_modules
+/engine/baileys-runner/sessions
+/engine/baileys-runner/whatsapp-messages
+/engine/baileys-runner/.env

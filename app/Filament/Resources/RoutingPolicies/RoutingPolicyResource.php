@@ -413,6 +413,7 @@ class RoutingPolicyResource extends Resource
             ->get()
             ->mapWithKeys(function (ProviderAccount $account): array {
                 $label = $account->name.' · '.match ($account->driver) {
+                    'wag_hub' => 'WAG Hub',
                     'waha' => 'WAHA',
                     'gowa' => 'GOWA',
                     'fonnte' => 'Fonnte',

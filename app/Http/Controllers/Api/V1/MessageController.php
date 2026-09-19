@@ -114,7 +114,7 @@ class MessageController extends Controller
         }
 
         return response()->json([
-            'data' => $this->messageData($message),
+            'data' => $this->messageData(app(GatewayMessageDispatcher::class)->reconcile($message)),
             'request_id' => $this->requestId($request),
         ]);
     }

@@ -3,25 +3,31 @@
 namespace App\Services;
 
 use App\Domain\WhatsApp\SessionStatus;
+use App\Exceptions\WhatsAppEngineException;
+use App\Infrastructure\WhatsApp\BaileysClient;
 use App\Infrastructure\WhatsApp\InboxPayload;
 use App\Infrastructure\WhatsApp\WahaSessionClient;
 use App\Models\ProviderAccount;
 use InvalidArgumentException;
 
 /**
- * Owns the pairing lifecycle for self-hosted WhatsApp engines (WAHA/Baileys
- * NOWEB): connect, disconnect, restart, refresh status, and fetch the QR. It
+ * Owns the pairing lifecycle for WAG Hub native and WAHA engines: connect, disconnect, restart, refresh status, and fetch the QR. It
  * also reconciles state pushed by the engine through the inbound webhook.
  */
 final readonly class WhatsAppSessionManager
 {
     public function __construct(
         private WahaSessionClient $client,
+        private BaileysClient $native,
     ) {}
 
     public function connect(ProviderAccount $account, ?string $pairingPhone = null): SessionStatus
     {
         $this->assertSupported($account);
+
+        if ($account->driver === 'wag_hub') {
+            return $this->persistNative($account, $this->native->start($account, $pairingPhone));
+        }
 
         $status = $this->persist($account, $this->client->start($account));
 
@@ -51,6 +57,10 @@ final readonly class WhatsAppSessionManager
             return $stored;
         }
 
+        if ($account->driver === 'wag_hub') {
+            return null;
+        }
+
         $phone = is_string($meta['pairing_phone'] ?? null) ? trim((string) $meta['pairing_phone']) : '';
 
         if ($phone === '') {
@@ -73,12 +83,22 @@ final readonly class WhatsAppSessionManager
     {
         $this->assertSupported($account);
 
+        if ($account->driver === 'wag_hub') {
+            return $this->persistNative($account, $this->native->logout($account));
+        }
+
         return $this->persist($account, $this->client->logout($account));
     }
 
     public function restart(ProviderAccount $account): SessionStatus
     {
         $this->assertSupported($account);
+
+        if ($account->driver === 'wag_hub') {
+            $this->native->logout($account, false);
+
+            return $this->persistNative($account, $this->native->start($account));
+        }
 
         return $this->persist($account, $this->client->restart($account));
     }
@@ -87,6 +107,14 @@ final readonly class WhatsAppSessionManager
     {
         $this->assertSupported($account);
 
+        if ($account->driver === 'wag_hub') {
+            try {
+                return $this->persistNative($account, $this->native->status($account));
+            } catch (WhatsAppEngineException) {
+                return $this->persist($account, null);
+            }
+        }
+
         return $this->persist($account, $this->client->status($account));
     }
 
@@ -94,7 +122,39 @@ final readonly class WhatsAppSessionManager
     {
         $this->assertSupported($account);
 
+        if ($account->driver === 'wag_hub') {
+            try {
+                $snapshot = $this->native->status($account);
+
+                return ($snapshot['status'] ?? null) === 'qr' ? ($snapshot['qr'] ?? null) : null;
+            } catch (WhatsAppEngineException) {
+                return null;
+            }
+        }
+
         return $this->client->qrDataUri($account);
+    }
+
+    private function persistNative(ProviderAccount $account, array $snapshot): SessionStatus
+    {
+        $raw = $snapshot['status'] ?? 'unknown';
+        $status = match ($raw) {
+            'connected' => SessionStatus::Working,
+            'qr', 'pairing' => SessionStatus::ScanQr,
+            'connecting' => SessionStatus::Starting,
+            'disconnected' => SessionStatus::Stopped,
+            default => SessionStatus::Unknown,
+        };
+        $meta = array_filter([
+            'raw' => $raw,
+            'engine' => 'wag_hub',
+            'phone' => $snapshot['phone'] ?? null,
+            'pairing_code' => $raw === 'pairing' ? ($snapshot['pairing_code'] ?? null) : null,
+            'logout_confirmed' => $snapshot['logout_confirmed'] ?? null,
+        ], fn (mixed $value): bool => $value !== null);
+        $this->write($account, $status, $meta);
+
+        return $status;
     }
 
     /**

@@ -30,12 +30,12 @@ class ApiCredentialsRelationManager extends RelationManager
     {
         return Action::make('showIssuedPack')
             ->modalHeading('Salin ke .env')
-            ->modalDescription('WAG_TOKEN untuk API pesan. WAG_ENGINE_TOKEN untuk Authorization Bearer ke WAG_ENGINE_URL. Salin sekarang; setelah modal ditutup, plaintext hilang.')
+            ->modalDescription('Salin konfigurasi ini ke aplikasi Anda. Token hanya ditampilkan sekali.')
             ->modalIcon(Heroicon::OutlinedClipboardDocumentList)
             ->modalIconColor('success')
             ->modalWidth(Width::Large)
             ->schema([
-                TextInput::make('hub_token')
+                TextInput::make('token')
                     ->label('WAG_TOKEN')
                     ->password()
                     ->revealable()
@@ -43,21 +43,7 @@ class ApiCredentialsRelationManager extends RelationManager
                     ->dehydrated(false)
                     ->extraInputAttributes(['class' => 'font-mono'])
                     ->suffixAction(
-                        Action::make('copyHubToken')
-                            ->label('Salin')
-                            ->icon(Heroicon::ClipboardDocumentList)
-                            ->color('gray')
-                            ->alpineClickHandler(fn (mixed $state): string => static::copyToClipboardAlpine((string) ($state ?? ''))),
-                    ),
-                TextInput::make('engine_token')
-                    ->label('WAG_ENGINE_TOKEN')
-                    ->password()
-                    ->revealable()
-                    ->readOnly()
-                    ->dehydrated(false)
-                    ->extraInputAttributes(['class' => 'font-mono'])
-                    ->suffixAction(
-                        Action::make('copyEngineToken')
+                        Action::make('copyIntegrationToken')
                             ->label('Salin')
                             ->icon(Heroicon::ClipboardDocumentList)
                             ->color('gray')
@@ -65,7 +51,7 @@ class ApiCredentialsRelationManager extends RelationManager
                     ),
                 Textarea::make('env')
                     ->label('.env aplikasi klien')
-                    ->rows(8)
+                    ->rows(3)
                     ->readOnly()
                     ->dehydrated(false)
                     ->extraInputAttributes(['class' => 'font-mono text-xs'])
@@ -78,8 +64,7 @@ class ApiCredentialsRelationManager extends RelationManager
                     ),
             ])
             ->fillForm(fn (array $arguments): array => [
-                'hub_token' => $arguments['hub_token'] ?? '',
-                'engine_token' => $arguments['engine_token'] ?? '',
+                'token' => $arguments['token'] ?? '',
                 'env' => $arguments['env'] ?? '',
             ])
             ->modalSubmitAction(false)
@@ -242,11 +227,11 @@ class ApiCredentialsRelationManager extends RelationManager
             ])
             ->headerActions([
                 Action::make('issuePack')
-                    ->label('Buat token Hub & Engine')
+                    ->label('Hubungkan aplikasi')
                     ->icon(Heroicon::OutlinedSparkles)
                     ->color('primary')
-                    ->modalHeading('Buat WAG_TOKEN dan token engine?')
-                    ->modalDescription('Dua baris di api_credentials: messages:send/read (plus numbers:check untuk web-cesa), dan engine:use.')
+                    ->modalHeading('Hubungkan aplikasi ke WhatsApp')
+                    ->modalDescription('Buat token untuk mengelola nomor WhatsApp, mengirim pesan, dan mengecek nomor dari aplikasi ini.')
                     ->modalSubmitActionLabel('Buat token')
                     ->action(function (): void {
                         /** @var ClientApplication $application */
@@ -254,8 +239,7 @@ class ApiCredentialsRelationManager extends RelationManager
                         $pack = app(IntegrationPack::class)->issue($application);
 
                         $this->replaceMountedAction('showIssuedPack', [
-                            'hub_token' => $pack['hub']->plainTextToken,
-                            'engine_token' => $pack['engine']->plainTextToken,
+                            'token' => $pack['credential']->plainTextToken,
                             'env' => $pack['env'],
                         ]);
                     }),

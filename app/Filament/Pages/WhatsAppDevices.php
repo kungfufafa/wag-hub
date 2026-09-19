@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Domain\WhatsApp\SessionStatus;
+use App\Exceptions\WhatsAppEngineException;
 use App\Filament\Support\PanelNavigation;
 use App\Models\ProviderAccount;
 use App\Services\WhatsAppSessionManager;
@@ -20,7 +21,7 @@ use UnitEnum;
 
 /**
  * "Perangkat WhatsApp" — WhatsApp-Web-style linked-devices screen for our own
- * self-hosted engine (WAHA/Baileys NOWEB): scan a QR to pair a number, watch
+ * native WAG Hub and WAHA engines: scan a QR to pair a number, watch
  * live status, then chat through the shared Inbox.
  */
 class WhatsAppDevices extends Page
@@ -59,7 +60,7 @@ class WhatsAppDevices extends Page
     public function devices(): Collection
     {
         return ProviderAccount::query()
-            ->where('driver', 'waha')
+            ->whereIn('driver', ['wag_hub', 'waha'])
             ->orderByDesc('is_active')
             ->orderBy('name')
             ->get();
@@ -186,7 +187,7 @@ class WhatsAppDevices extends Page
         try {
             $callback($account, app(WhatsAppSessionManager::class));
             Notification::make()->title($successMessage)->success()->send();
-        } catch (InvalidArgumentException $exception) {
+        } catch (InvalidArgumentException|WhatsAppEngineException $exception) {
             Notification::make()->title('Gagal')->body($exception->getMessage())->danger()->send();
         }
     }
@@ -200,7 +201,7 @@ class WhatsAppDevices extends Page
 
     public function getSubheading(): ?string
     {
-        return 'Sesi WAHA yang tercatat di Akun Provider driver WAHA.';
+        return 'Nomor WhatsApp milik WAG Hub dan perangkat WAHA.';
     }
 
     protected function getHeaderActions(): array

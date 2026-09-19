@@ -5,14 +5,22 @@
 <h1 align="center">WhatsApp Gateway Hub</h1>
 
 <p align="center">
-  Gateway Laravel terpusat untuk pemilihan provider WhatsApp, routing, dan fallback pesan.
+  Service WhatsApp mandiri dengan UI integrasi, provider bawaan, routing, dan fallback.
 </p>
 
-Gateway Laravel terpusat untuk `appscript-ft`, `web-cesa`, `web-shelf`, `web-sam`, dan `web-helpdesk`. Aplikasi sumber cukup mengirim satu request ke Hub; pemilihan WAHA, Fonnte, GOWA, atau WABA, urutan fallback, credential provider, serta riwayat percobaan dikelola di satu tempat.
+WAG Hub menyediakan provider WhatsApp sendiri melalui runner Baileys dan juga menjadi router untuk WAHA, GOWA, Fonnte, serta WABA. CESA, DND, dan aplikasi lain memakai API yang sama. UI login QR/pairing, status, dan logout dapat ditampilkan di aplikasi klien; socket, kredensial WhatsApp, dan riwayat pengiriman dikelola di WAG Hub.
 
-Dua jalur terpisah: **Hub API** (`WAG_URL` + `WAG_TOKEN`, routing/fallback) dan
-**Engine** (token `engine:use`, user menautkan nomor sendiri lewat QR). Rekrutmen
-CESA memakai jalur engine, bukan token fallback. Lihat [docs/CESA_WEB.md](docs/CESA_WEB.md).
+Untuk memakai WhatsApp dari **CESA, DND, atau aplikasi lain**, buat Aplikasi
+Klien lalu klik **Hubungkan aplikasi**. Salin `WAG_URL` dan `WAG_TOKEN` ke
+backend aplikasi. WAG Hub mengelola login QR/pairing, logout, sesi, dan
+pengiriman lewat `/api/v1/engine`; aplikasi klien tidak perlu menjalankan engine.
+Lihat [panduan plug and play](docs/PLUG_AND_PLAY_GUIDE.md) dan
+[migrasi CESA](docs/CESA_WEB.md).
+
+Kirim melalui nomor yang dipilih di `/api/v1/engine/sessions/{id}/send`, atau
+gunakan `/api/v1/messages` untuk memilih provider melalui routing/fallback.
+Provider **WAG Hub (bawaan)** dapat menjadi utama maupun fallback, bersama
+provider eksternal. Keduanya memakai ledger yang sama dan satu token aplikasi.
 
 Panduan deploy production dari `git clone`: [docs/DEPLOYMENT_ID.md](docs/DEPLOYMENT_ID.md).
 Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md).
@@ -23,7 +31,9 @@ Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md
 - Idempotency key wajib agar request yang diulang tidak terkirim dua kali.
 - Mode `sync` untuk OTP/transaksi yang harus menunggu provider menerima pesan.
 - Mode `async` untuk notifikasi yang diproses worker.
-- Banyak akun WAHA, Fonnte, GOWA, dan WABA dengan routing dan fallback berurutan.
+- Banyak akun WAG Hub bawaan, WAHA, Fonnte, GOWA, dan WABA dengan routing dan fallback berurutan.
+- Login QR/pairing, logout, pemulihan sesi, kirim teks, dan cek nomor melalui engine bawaan.
+- Engine bawaan saat ini belum mendukung lampiran maupun webhook pesan masuk; gunakan provider eksternal yang mendukungnya untuk fitur tersebut.
 - Ledger pesan, attempt provider, latency, event, dan error yang sudah disanitasi.
 - Status aman `outcome_unknown` untuk timeout/respons ambigu; Hub tidak melakukan fallback buta.
 - Panel Filament untuk aplikasi, credential, provider, route, monitoring, dan retry yang aman.
@@ -31,12 +41,15 @@ Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md
 
 ```mermaid
 flowchart LR
-    A["Aplikasi sumber"] -->|"Bearer + Idempotency-Key"| H["Gateway Hub"]
-    H --> L["Message / Attempt / Event ledger"]
-    H --> R["Routing policy"]
-    R --> W["Provider primary"]
-    W -->|"gagal definitif"| F["Provider fallback"]
-    W -->|"hasil ambigu"| U["outcome_unknown; berhenti"]
+    A["UI CESA / DND / aplikasi lain"] --> H["API WAG Hub"]
+    H --> S["Kelola sesi / kirim dari nomor pilihan"]
+    H --> R["Routing dan fallback"]
+    S --> N["Provider WAG Hub bawaan"]
+    R --> N
+    R --> E["WAHA / GOWA / Fonnte / WABA"]
+    N --> W["WhatsApp"]
+    E --> W
+    H --> L["Ledger pesan dan percobaan bersama"]
 ```
 
 ## Menjalankan secara lokal
@@ -104,7 +117,7 @@ GATEWAY_PROVIDER_CIRCUIT_SECONDS=300
 
 1. Masuk ke `/admin` memakai administrator yang dibuat lewat command.
 2. Buat **Client Application**, lalu terbitkan API credential. Salin token saat ditampilkan; plaintext tidak dapat dilihat lagi.
-3. Buat satu atau beberapa **Provider Account** WAHA, Fonnte, GOWA, atau WABA.
+3. Buat **Provider Account** WAG Hub bawaan, WAHA, Fonnte, GOWA, atau WABA. Untuk WAG Hub bawaan, jalankan runner sesuai [panduan](docs/PLUG_AND_PLAY_GUIDE.md), lalu tautkan nomor di **Perangkat WhatsApp**.
 4. Buat **Routing Policy** untuk aplikasi, `route_key`, dan `purpose`.
 5. Susun provider steps sesuai prioritas fallback.
 
@@ -129,7 +142,7 @@ Jangan menyalin credential lama dari source code. Credential provider yang perna
 
 - GOWA memakai `POST /send/message`, Basic Auth, dan `X-Device-Id` opsional untuk server multi-device.
 - WABA memakai Meta Cloud API resmi dengan Phone Number ID dan System User Access Token.
-- Lookup registrasi nomor tersedia untuk WAHA, Fonnte, dan GOWA. Meta WABA tidak menyediakan lookup penerima tanpa mengirim pesan, sehingga hasil WABA adalah `unsupported`.
+- Lookup registrasi nomor tersedia untuk WAG Hub bawaan, WAHA, Fonnte, dan GOWA. Meta WABA tidak menyediakan lookup penerima tanpa mengirim pesan, sehingga hasil WABA adalah `unsupported`.
 - Driver WABA saat ini mengirim pesan teks bebas. Meta hanya mengizinkannya dalam customer-service window yang berlaku; pesan di luar window harus memakai template, yang belum menjadi bagian kontrak message Hub saat ini.
 - `GATEWAY_SEED_WABA_API_VERSION` dapat dinaikkan tanpa perubahan kode ketika versi Graph API berubah.
 

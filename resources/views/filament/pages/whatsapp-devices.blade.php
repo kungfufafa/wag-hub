@@ -13,14 +13,13 @@
     @if ($devices->isEmpty())
         <div class="wa-devices-empty">
             <x-filament::icon icon="heroicon-o-device-phone-mobile" class="wa-devices-empty-icon" />
-            <h3 class="wa-devices-empty-title">Tidak ada akun WAHA</h3>
+            <h3 class="wa-devices-empty-title">Belum ada nomor WhatsApp</h3>
             <p class="wa-devices-empty-text">
-                Buka <strong>Akun Provider</strong>, pilih driver <strong>WAHA</strong>,
-                isi base URL dan API key.
+                Buka <strong>Akun Provider</strong>, pilih <strong>WAG Hub (bawaan)</strong>, lalu hubungkan nomor.
             </p>
             <x-filament::button tag="a" icon="heroicon-o-plus"
                 :href="\App\Filament\Resources\ProviderAccounts\ProviderAccountResource::getUrl('create')">
-                Tambah akun provider WAHA
+                Tambah nomor WhatsApp
             </x-filament::button>
         </div>
     @else
@@ -28,17 +27,17 @@
             <aside class="wa-devices-col wa-devices-list">
                 <div class="wa-devices-head">
                     <h2 class="wa-devices-heading">Perangkat</h2>
-                    <p class="wa-devices-sub">Akun driver WAHA di provider_accounts.</p>
+                    <p class="wa-devices-sub">Kelola nomor dan perangkat tertaut.</p>
                 </div>
                 <div class="wa-devices-scroll">
                     @if ($hosts->isNotEmpty())
-                        <p class="wa-devices-group">Host WAHA</p>
+                        <p class="wa-devices-group">Nomor gateway</p>
                         @foreach ($hosts as $device)
                             @include('filament.pages.partials.whatsapp-device-item', ['device' => $device, 'selected' => $selected])
                         @endforeach
                     @endif
                     @if ($linked->isNotEmpty())
-                        <p class="wa-devices-group">Sesi /engine</p>
+                        <p class="wa-devices-group">Nomor aplikasi</p>
                         @foreach ($linked as $device)
                             @include('filament.pages.partials.whatsapp-device-item', ['device' => $device, 'selected' => $selected])
                         @endforeach
@@ -127,11 +126,11 @@
                                     Session
                                     <code>{{ $selected->configuration['session'] ?? $selected->slug }}</code>.
                                 </p>
-                                @unless ($selectedLinked)
+                                @if (! $selectedLinked && $selected->driver === 'waha')
                                     <p class="wa-devices-meta">
                                         base_url {{ $selected->configuration['base_url'] ?? '—' }}
                                     </p>
-                                @endunless
+                                @endif
                             </div>
                         @endif
                     </div>

@@ -287,7 +287,7 @@ class AdminResourceBehaviorTest extends TestCase
         $this->assertSame(hash('sha256', $token), $raw->token_hash);
     }
 
-    public function test_integration_pack_issues_separate_hub_and_engine_tokens_and_shows_env(): void
+    public function test_integration_pack_issues_one_token_and_shows_env(): void
     {
         $application = $this->createClient('pack-action');
         $application->forceFill(['slug' => 'web-cesa'])->save();
@@ -301,24 +301,15 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertActionMounted('showIssuedPack');
 
         $arguments = data_get($component->get('mountedActions'), '0.arguments');
-        $hubToken = (string) ($arguments['hub_token'] ?? '');
-        $engineToken = (string) ($arguments['engine_token'] ?? '');
+        $token = (string) ($arguments['token'] ?? '');
         $env = (string) ($arguments['env'] ?? '');
 
-        $this->assertMatchesRegularExpression('/^wgh_[A-Za-z0-9]{64}$/', $hubToken);
-        $this->assertMatchesRegularExpression('/^wgh_[A-Za-z0-9]{64}$/', $engineToken);
-        $this->assertNotSame($hubToken, $engineToken);
-        $this->assertStringContainsString('REKRUTMEN_WHATSAPP_ENGINE_URL=', $env);
-        $this->assertStringContainsString($engineToken, $env);
-        $this->assertStringContainsString('WAG_TOKEN='.$hubToken, $env);
-        $this->assertStringContainsString('AUTO_START=false', $env);
-
-        $hub = ApiCredential::query()->where('name', 'like', 'WAG_TOKEN%')->sole();
-        $engine = ApiCredential::query()->where('name', 'like', 'ENGINE_URL%')->sole();
-        $this->assertSame(['messages:send', 'messages:read', 'numbers:check'], $hub->abilities);
-        $this->assertSame(['engine:use'], $engine->abilities);
-        $this->assertSame(hash('sha256', $hubToken), $hub->getRawOriginal('token_hash'));
-        $this->assertSame(hash('sha256', $engineToken), $engine->getRawOriginal('token_hash'));
+        $this->assertMatchesRegularExpression('/^wgh_[A-Za-z0-9]{64}$/', $token);
+        $this->assertStringContainsString('WAG_TOKEN='.$token, $env);
+        $this->assertStringNotContainsString('WAG_ENGINE_', $env);
+        $credential = $application->apiCredentials()->sole();
+        $this->assertSame(['messages:send', 'messages:read', 'numbers:check', 'engine:use'], $credential->abilities);
+        $this->assertSame(hash('sha256', $token), $credential->getRawOriginal('token_hash'));
     }
 
     public function test_credential_issue_action_rejects_duplicate_names_for_the_same_application(): void

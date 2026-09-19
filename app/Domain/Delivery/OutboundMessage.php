@@ -13,6 +13,7 @@ readonly class OutboundMessage
         public string $body,
         public ?OutboundAttachment $attachment = null,
         public ?string $chatId = null,
+        public ?string $idempotencyKey = null,
     ) {}
 
     public function hasAttachment(): bool

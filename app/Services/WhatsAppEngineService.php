@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Domain\WhatsApp\SessionStatus;
 use App\Exceptions\WhatsAppEngineException;
+use App\Infrastructure\WhatsApp\BaileysClient;
 use App\Models\ClientApplication;
 use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
@@ -30,6 +31,7 @@ class WhatsAppEngineService
 {
     public function __construct(
         protected WhatsAppSessionManager $sessions,
+        protected BaileysClient $native,
         protected GatewayMessageDispatcher $dispatcher,
         protected PhoneNormalizer $phones,
         protected PayloadHasher $hasher,
@@ -40,14 +42,18 @@ class WhatsAppEngineService
      */
     public function health(ClientApplication $application): array
     {
-        $host = $this->hostProvider();
         $accounts = $this->ownedSessions($application)->filter(fn (ProviderAccount $account): bool => $account->is_active);
+        $native = $this->usesNativeEngine();
+        // Probe backends used by this application as well as the default for new sessions.
+        $nativeReady = ($native || $accounts->contains('driver', 'wag_hub')) && $this->native->health();
+        $wahaReady = (! $native && $this->hostProvider() !== null) || $accounts->contains('driver', 'waha');
 
         return [
-            'ok' => $host !== null,
+            'ok' => $nativeReady || $wahaReady,
             'engine' => 'wag-hub',
-            'waha_ready' => $host !== null,
-            'readiness' => $host !== null ? 'configured' : 'unconfigured',
+            'driver' => $native ? 'wag_hub' : 'waha',
+            'waha_ready' => $wahaReady,
+            'readiness' => $nativeReady ? 'ready' : ($wahaReady ? 'configured' : 'unavailable'),
             'sessions' => $accounts->count(),
             'connected' => $accounts->filter(fn (ProviderAccount $account): bool => $account->sessionStatus()->isConnected())->count(),
         ];
@@ -121,10 +127,14 @@ class WhatsAppEngineService
             try {
                 $status = $this->sessions->disconnect($account);
                 $confirmed = $status === SessionStatus::Stopped
-                    && ($account->session_meta['raw'] ?? null) !== 'unreachable';
+                    && ($account->session_meta['raw'] ?? null) !== 'unreachable'
+                    && ($account->driver !== 'wag_hub' || ($account->session_meta['logout_confirmed'] ?? false) === true);
             } catch (Throwable) {
                 $confirmed = false;
             }
+        } elseif ($account->driver === 'wag_hub') {
+            // Stop the local socket while retaining credentials for a later reconnect.
+            $this->native->logout($account, false);
         }
 
         $account->forceFill([
@@ -279,7 +289,7 @@ class WhatsAppEngineService
             throw new WhatsAppEngineException('Pengiriman WhatsApp belum tercatat.', 404, 'message_not_found', true);
         }
 
-        return $this->sendResult($message);
+        return $this->sendResult($this->dispatcher->reconcile($message));
     }
 
     /**
@@ -323,15 +333,11 @@ class WhatsAppEngineService
             $account = $this->findSessionAccount($application, $sessionId);
 
             if ($account === null) {
-                $host = $this->hostProvider();
+                $native = $this->usesNativeEngine();
+                $host = $native ? null : $this->hostProvider();
 
-                if ($host === null) {
-                    throw new WhatsAppEngineException(
-                        'Engine WAHA belum dikonfigurasi di Hub. Isi akun provider WAHA (base URL + API key), lalu coba lagi.',
-                        503,
-                        'engine_unavailable',
-                        true,
-                    );
+                if (($native && ! $this->native->isConfigured()) || (! $native && $host === null)) {
+                    throw new WhatsAppEngineException('Engine WhatsApp belum dikonfigurasi di WAG Hub.', 503, 'engine_unavailable', true);
                 }
 
                 $uuid = (string) Str::uuid();
@@ -340,12 +346,12 @@ class WhatsAppEngineService
                     'uuid' => $uuid,
                     'name' => $application->name.' '.$sessionId,
                     'slug' => $this->sessionSlug($application, $sessionId),
-                    'driver' => 'waha',
+                    'driver' => $native ? 'wag_hub' : 'waha',
                     'configuration' => [
-                        'base_url' => $host->configuration['base_url'],
-                        'api_key' => $host->configuration['api_key'] ?? null,
+                        'base_url' => $host?->configuration['base_url'] ?? null,
+                        'api_key' => $host?->configuration['api_key'] ?? null,
                         'session' => 'wgh-'.$uuid,
-                        'engine_host_provider_id' => $host->getKey(),
+                        'engine_host_provider_id' => $host?->getKey(),
                         'owned_by_application_id' => $application->getKey(),
                         'engine_session_id' => $sessionId,
                         'cesa_session_id' => $sessionId,
@@ -355,7 +361,7 @@ class WhatsAppEngineService
                     'is_active' => true,
                     'health_status' => 'unknown',
                     'session_status' => SessionStatus::Unknown->value,
-                    'timeout_seconds' => $host->timeout_seconds ?: 15,
+                    'timeout_seconds' => $host?->timeout_seconds ?: 20,
                 ]);
                 $account->save();
             } else {
@@ -447,12 +453,16 @@ class WhatsAppEngineService
      */
     protected function ownedSessions(ClientApplication $application): Collection
     {
-        return ProviderAccount::query()->where('driver', 'waha')->get()
+        return ProviderAccount::query()->whereIn('driver', ['wag_hub', 'waha'])->get()
             ->filter(fn (ProviderAccount $account): bool => (string) ($account->configuration['owned_by_application_id'] ?? '') === (string) $application->getKey());
     }
 
     protected function assertExclusiveUpstream(ProviderAccount $account): void
     {
+        if ($account->driver === 'wag_hub') {
+            return;
+        }
+
         $config = $account->configuration ?? [];
         $baseUrl = rtrim((string) ($config['base_url'] ?? ''), '/');
         $session = $config['session'] ?? null;
@@ -480,6 +490,11 @@ class WhatsAppEngineService
         if (! hash_equals((string) $message->payload_hash, $payloadHash)) {
             throw new WhatsAppEngineException('Kunci pengiriman sudah digunakan untuk pesan berbeda.', 409, 'idempotency_conflict');
         }
+    }
+
+    protected function usesNativeEngine(): bool
+    {
+        return in_array(config('gateway.engine.driver', 'wag_hub'), ['wag_hub', 'baileys'], true);
     }
 
     protected function hostProvider(): ?ProviderAccount

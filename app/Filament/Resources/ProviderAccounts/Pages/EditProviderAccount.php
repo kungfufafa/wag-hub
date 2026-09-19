@@ -51,6 +51,7 @@ class EditProviderAccount extends EditRecord
     {
         $driver = $data['driver'];
         $allowedKeys = match ($driver) {
+            'wag_hub' => [],
             'waha' => ['base_url', 'session', 'api_key', 'webhook_secret'],
             'fonnte' => ['endpoint', 'validate_endpoint', 'token', 'attachment_max_bytes', 'webhook_secret'],
             'gowa' => ['base_url', 'username', 'password', 'device_id', 'version', 'webhook_secret'],
@@ -73,10 +74,17 @@ class EditProviderAccount extends EditRecord
             default => null,
         };
 
-        if ($secretKey === null || blank($configuration[$secretKey] ?? null)) {
+        if ($driver !== 'wag_hub' && ($secretKey === null || blank($configuration[$secretKey] ?? null))) {
             throw ValidationException::withMessages([
                 'data.driver' => 'Driver provider tidak didukung atau secret belum diisi.',
             ]);
+        }
+
+        if ($this->record->isUserLinkedSession()) {
+            if ($driver !== $this->record->driver) {
+                throw ValidationException::withMessages(['data.driver' => 'Provider sesi aplikasi tidak dapat diganti. Tautkan sesi baru.']);
+            }
+            $configuration = array_replace($this->record->configuration ?? [], $configuration);
         }
 
         $data['configuration'] = $configuration;

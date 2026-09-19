@@ -170,6 +170,7 @@ class GatewayMessage extends Model
             body: (string) $this->body,
             attachment: $attachment,
             chatId: $this->inbox_chat_id,
+            idempotencyKey: (string) $this->uuid,
         );
     }
 

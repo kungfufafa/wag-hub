@@ -84,14 +84,14 @@ class ProviderAccountResource extends Resource
                         ->schema([
                             TextInput::make('name')
                                 ->label('Nama')
-                                ->placeholder('Contoh: WAHA Utama')
+                                ->placeholder('Contoh: WhatsApp Utama')
                                 ->required()
                                 ->maxLength(120)
                                 ->live(onBlur: true)
                                 ->afterStateUpdated(SyncsSlugFromName::afterStateUpdated()),
                             TextInput::make('slug')
                                 ->label('ID provider')
-                                ->placeholder('waha-utama')
+                                ->placeholder('whatsapp-utama')
                                 ->helperText('Diisi otomatis dari nama. Boleh diubah sebelum disimpan.')
                                 ->alphaDash()
                                 ->maxLength(80)
@@ -104,14 +104,16 @@ class ProviderAccountResource extends Resource
                                     'alpha_dash' => 'Gunakan huruf kecil, angka, dan tanda hubung.',
                                 ]),
                             Select::make('driver')
-                                ->label('Driver')
+                                ->label('Provider')
                                 ->helperText('Form koneksi di bawah menyesuaikan pilihan ini.')
                                 ->options([
+                                    'wag_hub' => 'WAG Hub (bawaan)',
                                     'waha' => 'WAHA',
                                     'fonnte' => 'Fonnte',
                                     'gowa' => 'GOWA',
                                     'waba' => 'WABA (Meta Cloud API)',
                                 ])
+                                ->default('wag_hub')
                                 ->required()
                                 ->native(false)
                                 ->live(),
@@ -130,6 +132,10 @@ class ProviderAccountResource extends Resource
                                 ->required(),
                         ])
                         ->columns(['md' => 2]),
+                    Section::make('WhatsApp bawaan WAG Hub')
+                        ->description('Simpan akun, lalu buka Perangkat WhatsApp untuk menautkan nomor dengan QR. Akun ini dapat digunakan sebagai provider utama atau fallback pada Aturan Rute.')
+                        ->schema([])
+                        ->visible(fn (Get $get): bool => $get('driver') === 'wag_hub'),
                     Section::make('Koneksi WAHA')
                         ->schema([
                             TextInput::make('configuration.base_url')
@@ -312,8 +318,9 @@ class ProviderAccountResource extends Resource
             ->searchPlaceholder('Cari nama atau ID provider')
             ->filters([
                 SelectFilter::make('driver')
-                    ->label('Driver')
+                    ->label('Provider')
                     ->options([
+                        'wag_hub' => 'WAG Hub (bawaan)',
                         'waha' => 'WAHA',
                         'fonnte' => 'Fonnte',
                         'gowa' => 'GOWA',
@@ -364,7 +371,7 @@ class ProviderAccountResource extends Resource
                 ->sortable()
                 ->description(fn (ProviderAccount $record): string => $record->slug),
             TextColumn::make('driver')
-                ->label('Driver')
+                ->label('Provider')
                 ->badge()
                 ->formatStateUsing(fn (string $state): string => strtoupper($state)),
             TextColumn::make('health_status')

@@ -64,12 +64,11 @@ class ProviderAccount extends Model
 
     /**
      * Whether this account runs on a self-hostable engine that the Hub can
-     * pair in-panel (QR/session lifecycle). Only the WAHA driver (which powers
-     * our own Baileys/NOWEB engine) exposes a session API today.
+     * pair in-panel (QR/session lifecycle): the native WAG Hub engine or WAHA.
      */
     public function supportsSessions(): bool
     {
-        return $this->driver === 'waha';
+        return in_array($this->driver, ['wag_hub', 'waha'], true);
     }
 
     /**

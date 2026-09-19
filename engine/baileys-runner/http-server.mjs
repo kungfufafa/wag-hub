@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { EngineError, validateSessionId } from './send-journal.mjs';
 
 async function readJson(request) {
@@ -40,9 +41,15 @@ function send(response, status, payload) {
     response.end(body);
 }
 
-export function createRequestHandler(engine, { logger = { error() {} }, startedAt = Date.now() } = {}) {
+export function createRequestHandler(engine, { logger = { error() {} }, startedAt = Date.now(), token = '' } = {}) {
     return async (request, response) => {
         try {
+            const expected = Buffer.from(`Bearer ${token}`);
+            const supplied = Buffer.from(request.headers.authorization || '');
+            if (!token || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+                send(response, 401, { ok: false, status: 'failed', error_code: 'unauthenticated', retryable: false });
+                return;
+            }
             const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname.replace(/\/+$/, '') || '/';
 
             if (request.method === 'GET' && pathname === '/health') {
@@ -63,7 +70,7 @@ export function createRequestHandler(engine, { logger = { error() {} }, startedA
                 return;
             }
 
-            const route = pathname.match(/^\/sessions\/([^/]+)(?:\/(send|messages)(?:\/([^/]+))?)?$/);
+            const route = pathname.match(/^\/sessions\/([^/]+)(?:\/(send|messages|numbers)(?:\/([^/]+))?)?$/);
 
             if (!route) {
                 throw new EngineError('Not found', 404, 'not_found');
@@ -89,6 +96,9 @@ export function createRequestHandler(engine, { logger = { error() {} }, startedA
             } else if (route[2] === 'send' && !key && request.method === 'POST') {
                 const result = await engine.sendText(id, await readJson(request));
                 send(response, result.status === 'failed' ? 409 : 200, result);
+            } else if (route[2] === 'numbers' && key === 'check' && request.method === 'POST') {
+                const payload = await readJson(request);
+                send(response, 200, await engine.checkNumber(id, payload.phone));
             } else if (route[2] === 'messages' && key && request.method === 'GET') {
                 send(response, 200, engine.messageStatus(id, key));
             } else {

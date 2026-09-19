@@ -13,6 +13,7 @@ final readonly class ProviderDriverManager
 {
     public function __construct(
         private WahaDriver $waha,
+        private WagHubDriver $wagHub,
         private FonnteDriver $fonnte,
         private GowaDriver $gowa,
         private WabaDriver $waba,
@@ -35,6 +36,7 @@ final readonly class ProviderDriverManager
     public function resolve(string $driver): ?ProviderDriver
     {
         return match (strtolower(trim($driver))) {
+            'wag_hub' => $this->wagHub,
             'waha' => $this->waha,
             'fonnte' => $this->fonnte,
             'gowa' => $this->gowa,

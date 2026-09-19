@@ -5,95 +5,36 @@ namespace App\Services;
 use App\Models\ApiCredential;
 use App\Models\ClientApplication;
 use App\Models\IssuedApiCredential;
+use Illuminate\Support\Str;
 
-/**
- * One-click Hub + Engine credentials and a copy-paste env block so IT
- * does not assemble tokens or mix the fallback lane with user-linked numbers.
- */
 final readonly class IntegrationPack
 {
-    /**
-     * @return array{hub: IssuedApiCredential, engine: IssuedApiCredential, env: string}
-     */
+    /** @return array{credential: IssuedApiCredential, env: string} */
     public function issue(ClientApplication $application, ?string $baseUrl = null): array
     {
-        $hub = ApiCredential::issue(
+        $credential = ApiCredential::issue(
             $application,
-            $this->uniqueName($application, 'WAG_TOKEN'),
-            $this->hubAbilities($application),
-        );
-        $engine = ApiCredential::issue(
-            $application,
-            $this->uniqueName($application, 'WAG_ENGINE_TOKEN'),
-            ['engine:use'],
+            'WAG_TOKEN '.(string) Str::uuid(),
+            ['messages:send', 'messages:read', 'numbers:check', 'engine:use'],
         );
 
         return [
-            'hub' => $hub,
-            'engine' => $engine,
-            'env' => $this->envSnippet(
-                $application,
-                $baseUrl ?? $this->hubUrl(),
-                $hub->plainTextToken,
-                $engine->plainTextToken,
-            ),
+            'credential' => $credential,
+            'env' => $this->envSnippet($application, $baseUrl ?? $this->hubUrl(), $credential->plainTextToken),
         ];
     }
 
-    public function envSnippet(
-        ClientApplication $application,
-        string $baseUrl,
-        string $hubToken,
-        string $engineToken,
-    ): string {
-        $baseUrl = rtrim($baseUrl, '/');
-        $engineUrl = $baseUrl.'/api/v1/engine';
-        $slug = (string) $application->slug;
-
-        $lines = [
-            '# '.$slug,
-            'WAG_URL='.$baseUrl,
-            'WAG_TOKEN='.$hubToken,
-            'WAG_ENGINE_URL='.$engineUrl,
-            'WAG_ENGINE_TOKEN='.$engineToken,
-        ];
-
-        if ($slug === 'web-cesa') {
-            $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_DRIVER=wag_hub';
-            $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_URL=${WAG_ENGINE_URL}';
-            $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_TOKEN=${WAG_ENGINE_TOKEN}';
-            $lines[] = 'REKRUTMEN_WHATSAPP_ENGINE_AUTO_START=false';
-        }
-
-        return implode("\n", $lines);
+    public function envSnippet(ClientApplication $application, string $baseUrl, string $token): string
+    {
+        return implode("\n", [
+            '# '.$application->slug,
+            'WAG_URL='.rtrim($baseUrl, '/'),
+            'WAG_TOKEN='.$token,
+        ]);
     }
 
     public function hubUrl(): string
     {
         return rtrim((string) config('app.url', 'http://localhost'), '/');
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function hubAbilities(ClientApplication $application): array
-    {
-        $abilities = ['messages:send', 'messages:read'];
-
-        if ((string) $application->slug === 'web-cesa') {
-            $abilities[] = 'numbers:check';
-        }
-
-        return $abilities;
-    }
-
-    private function uniqueName(ClientApplication $application, string $base): string
-    {
-        $exists = ApiCredential::query()
-            ->where('client_application_id', $application->getKey())
-            ->where('name', $base)
-            ->exists();
-
-        return $exists ? $base.' '.now()->format('Ymd-His') : $base;
     }
 }

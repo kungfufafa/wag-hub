@@ -3,6 +3,8 @@
 namespace Tests\Feature\Admin;
 
 use App\Filament\Pages\WhatsAppDevices;
+use App\Filament\Resources\ProviderAccounts\Pages\CreateProviderAccount;
+use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
 use App\Models\ProviderAccount;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -26,7 +28,7 @@ class WhatsAppDevicesPageTest extends TestCase
         ]));
 
         Http::fake([
-            '*' => Http::response(['name' => 'default', 'status' => 'STOPPED'], 200),
+            'waha-engine.test/*' => Http::response(['name' => 'default', 'status' => 'STOPPED'], 200),
         ]);
     }
 
@@ -46,11 +48,11 @@ class WhatsAppDevicesPageTest extends TestCase
         ]);
 
         $page = Livewire::test(WhatsAppDevices::class)
-            ->assertSee('Host WAHA')
-            ->assertSee('Sesi /engine')
+            ->assertSee('Nomor gateway')
+            ->assertSee('Nomor aplikasi')
             ->assertSee($host->name)
             ->assertSee($linked->name)
-            ->assertSee('Sesi WAHA');
+            ->assertSee('perangkat WAHA');
 
         $this->assertSame([$host->id], $page->instance()->hostDevices()->pluck('id')->all());
         $this->assertSame([$linked->id], $page->instance()->linkedDevices()->pluck('id')->all());
@@ -70,6 +72,31 @@ class WhatsAppDevicesPageTest extends TestCase
             ->assertSee('cs-1')
             ->assertSee('Hubungkan')
             ->assertDontSee('https://waha-engine.test');
+    }
+
+    public function test_admin_can_create_a_native_provider_without_external_credentials_and_connect_it(): void
+    {
+        config(['gateway.engine.baileys_url' => 'http://runner.test', 'gateway.engine.baileys_token' => 'secret']);
+        Http::fake(['runner.test/*' => Http::response(['ok' => true, 'status' => 'qr', 'qr' => 'data:image/png;base64,qr'])]);
+        Livewire::test(CreateProviderAccount::class)
+            ->fillForm(['name' => 'WhatsApp Utama', 'driver' => 'wag_hub', 'is_active' => true, 'timeout_seconds' => 20])
+            ->call('create')->assertHasNoFormErrors();
+        $provider = ProviderAccount::query()->sole();
+        $this->assertSame('wag_hub', $provider->driver);
+        $page = Livewire::test(WhatsAppDevices::class)->call('selectDevice', $provider->id)->call('connect');
+        $page->assertSet('qr', 'data:image/png;base64,qr');
+        $this->assertSame('scan_qr', $provider->fresh()->session_status);
+    }
+
+    public function test_editing_an_application_native_provider_preserves_session_ownership(): void
+    {
+        $client = $this->createClientApplication();
+        $configuration = ['owned_by_application_id' => $client['id'], 'client_session_id' => 'support-1'];
+        $fixture = $this->createProviderAccount('wag_hub', 'app-native', $configuration);
+        $provider = ProviderAccount::findOrFail($fixture['id']);
+        Livewire::test(EditProviderAccount::class, ['record' => $provider->getRouteKey()])
+            ->fillForm(['name' => 'Nomor Support'])->call('save')->assertHasNoFormErrors();
+        $this->assertSame($configuration, $provider->fresh()->configuration);
     }
 
     /**

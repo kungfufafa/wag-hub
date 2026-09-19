@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Api\Engine;
 
-use App\Models\ProviderAccount;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -13,6 +12,12 @@ class StandaloneEngineApiTest extends TestCase
 {
     use BuildsGatewayFixtures;
     use DatabaseMigrations;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['gateway.engine.driver' => 'waha']);
+    }
 
     public function test_versioned_api_requires_an_engine_credential_and_reports_configuration_readiness(): void
     {

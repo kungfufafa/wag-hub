@@ -8,6 +8,7 @@ use App\Domain\Delivery\RetryDisposition;
 use App\Domain\Inbox\InboxEvent;
 use App\Infrastructure\WhatsApp\InboxPayload;
 use App\Infrastructure\WhatsApp\ProviderDriverManager;
+use App\Infrastructure\WhatsApp\WagHubDriver;
 use App\Models\GatewayMessage;
 use App\Models\MessageAttempt;
 use App\Models\ProviderAccount;
@@ -162,6 +163,36 @@ final readonly class GatewayMessageDispatcher
             errorCode: $lastResult?->errorCode ?? 'providers_failed',
             errorMessage: $lastResult?->errorMessage ?? 'Semua provider gagal menerima pesan.',
         );
+    }
+
+    public function reconcile(GatewayMessage $message): GatewayMessage
+    {
+        if ($message->status !== 'outcome_unknown') {
+            return $message;
+        }
+        $attempt = $message->attempts()->reorder()->orderByDesc('sequence')->first();
+        $provider = $attempt ? ProviderAccount::find($attempt->provider_account_id) : null;
+        if ($provider?->driver !== 'wag_hub') {
+            return $message;
+        }
+        $driver = $this->drivers->resolve('wag_hub');
+        if (! $driver instanceof WagHubDriver) {
+            return $message;
+        }
+        $result = $driver->messageStatus($provider, (string) $message->uuid);
+        if ($result->outcome !== ProviderOutcome::Accepted) {
+            return $message;
+        }
+
+        return DB::transaction(function () use ($message, $provider, $result, $attempt): GatewayMessage {
+            $locked = GatewayMessage::query()->lockForUpdate()->findOrFail($message->getKey());
+            if ($locked->status !== 'outcome_unknown') {
+                return $locked;
+            }
+            $this->finishAttempt($attempt->getKey(), $result, (int) $attempt->latency_ms);
+
+            return $this->markAccepted($locked, $provider, $result);
+        });
     }
 
     private function dispatchAdminTest(GatewayMessage $message): GatewayMessage
@@ -516,7 +547,7 @@ final readonly class GatewayMessageDispatcher
 
         $chatId = match ((string) $provider->driver) {
             'waha' => ((string) $message->recipient).'@c.us',
-            'gowa' => ((string) $message->recipient).'@s.whatsapp.net',
+            'gowa', 'wag_hub' => ((string) $message->recipient).'@s.whatsapp.net',
             default => (string) $message->recipient,
         };
         $providerMessageId = $result->providerMessageId ?: 'gateway-'.$message->uuid;

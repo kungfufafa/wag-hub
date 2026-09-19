@@ -13,6 +13,11 @@ import makeWASocket, {
 import { createWhatsAppEngine } from './engine.mjs';
 import { createRequestHandler } from './http-server.mjs';
 
+const token = (process.env.WAG_BAILEYS_TOKEN || '').trim();
+if (!token) {
+    throw new Error('Set WAG_BAILEYS_TOKEN before starting the runner.');
+}
+
 const port = Number(process.env.WAG_BAILEYS_PORT || process.env.REKRUTMEN_WA_ENGINE_PORT || 3318);
 const host = process.env.WAG_BAILEYS_HOST || process.env.REKRUTMEN_WA_ENGINE_HOST || '127.0.0.1';
 const sessionRoot = process.env.WAG_BAILEYS_SESSION_ROOT
@@ -37,7 +42,7 @@ const engine = createWhatsAppEngine({
     disconnectReasons: DisconnectReason,
     logger,
 });
-const server = http.createServer(createRequestHandler(engine, { logger }));
+const server = http.createServer(createRequestHandler(engine, { logger, token }));
 let shutdownPromise;
 
 async function shutdown(signal) {
