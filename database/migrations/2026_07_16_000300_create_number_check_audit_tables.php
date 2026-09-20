@@ -64,7 +64,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['number_check_request_id', 'sequence']);
-            $table->index(['provider_account_id', 'status', 'created_at']);
+            $table->index(['provider_account_id', 'status', 'created_at'], 'number_check_attempts_provider_status_created_index');
         });
     }
 

@@ -308,7 +308,10 @@ class AdminResourceBehaviorTest extends TestCase
         $this->assertStringContainsString('WAG_TOKEN='.$token, $env);
         $this->assertStringNotContainsString('WAG_ENGINE_', $env);
         $credential = $application->apiCredentials()->sole();
-        $this->assertSame(['messages:send', 'messages:read', 'numbers:check', 'engine:use'], $credential->abilities);
+        $this->assertEqualsCanonicalizing([
+            'integration:read', 'sessions:read', 'sessions:manage', 'messages:read', 'messages:send',
+            'media:read', 'media:write', 'webhooks:manage', 'capacity:manage', 'numbers:check', 'engine:use',
+        ], $credential->abilities);
         $this->assertSame(hash('sha256', $token), $credential->getRawOriginal('token_hash'));
     }
 

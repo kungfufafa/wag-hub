@@ -4,6 +4,7 @@ namespace App\Filament\Resources\ProviderAccounts;
 
 use App\Domain\Delivery\AttachmentKind;
 use App\Domain\Delivery\OutboundAttachment;
+use App\Exceptions\WhatsAppEngineException;
 use App\Filament\Pages\WhatsAppInbox;
 use App\Filament\Resources\ProviderAccounts\Pages\CreateProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
@@ -15,6 +16,7 @@ use App\Http\Requests\StoreMessageRequest;
 use App\Models\ProviderAccount;
 use App\Services\AttachmentService;
 use App\Services\ProviderAccountTester;
+use App\Services\WhatsAppSessionManager;
 use App\Support\PhoneNormalizer;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -714,6 +716,7 @@ class ProviderAccountResource extends Resource
     public static function deleteAction(): DeleteAction
     {
         return DeleteAction::make()
+            ->using(fn (ProviderAccount $record): bool => static::deleteProvider($record))
             ->label('Hapus')
             ->modalHeading('Hapus akun provider?')
             ->modalDescription(function (ProviderAccount $record): string {
@@ -735,11 +738,29 @@ class ProviderAccountResource extends Resource
     public static function deleteBulkAction(): DeleteBulkAction
     {
         return DeleteBulkAction::make()
+            ->using(function (DeleteBulkAction $action, $records): void {
+                foreach ($records as $record) {
+                    if (! static::deleteProvider($record)) {
+                        $action->reportBulkProcessingFailure();
+                    }
+                }
+            })
             ->label('Hapus yang dipilih')
             ->modalHeading('Hapus akun provider yang dipilih?')
             ->modalDescription('Akun yang dipilih akan dinonaktifkan dan dilewati saat pengiriman. Riwayat pesan tetap tersimpan.')
             ->modalSubmitActionLabel('Hapus')
             ->successNotificationTitle('Akun provider dihapus');
+    }
+
+    private static function deleteProvider(ProviderAccount $record): bool
+    {
+        try {
+            return app(WhatsAppSessionManager::class)->deleteProvider($record);
+        } catch (WhatsAppEngineException $exception) {
+            Notification::make()->title('Akun belum dihapus')->body($exception->getMessage())->warning()->send();
+
+            return false;
+        }
     }
 
     public static function getPages(): array

@@ -11,6 +11,8 @@ use App\Models\MessageEvent;
 use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
 use App\Models\RoutingStep;
+use App\Services\Engine\LegacyEngineAdapter;
+use App\Services\Engine\SessionService;
 use App\Support\PayloadHasher;
 use App\Support\PhoneNormalizer;
 use Illuminate\Database\Eloquent\Collection;
@@ -80,6 +82,11 @@ class WhatsAppEngineService
             }
         }
 
+        $adapter = app(LegacyEngineAdapter::class);
+        if ($mapped = $adapter->mapped($application, $sessionId)) {
+            return $adapter->action($mapped, 'start', ['mode' => $mode, 'phone' => $pairingPhone]);
+        }
+
         $account = $this->provisionSession($application, $sessionId, $mode);
         $this->sessions->connect($account, $pairingPhone);
         $account->refresh();
@@ -93,6 +100,10 @@ class WhatsAppEngineService
     public function session(ClientApplication $application, string $sessionId): array
     {
         $sessionId = $this->assertSessionId($sessionId);
+        $adapter = app(LegacyEngineAdapter::class);
+        if ($mapped = $adapter->mapped($application, $sessionId)) {
+            return $adapter->snapshot($mapped->trashed() ? $mapped : app(SessionService::class)->refresh($mapped));
+        }
         $account = $this->findSessionAccount($application, $sessionId);
 
         if ($account === null || ! $account->is_active) {
@@ -111,6 +122,10 @@ class WhatsAppEngineService
     public function logout(ClientApplication $application, string $sessionId, bool $logout = true): array
     {
         $sessionId = $this->assertSessionId($sessionId);
+        $adapter = app(LegacyEngineAdapter::class);
+        if ($mapped = $adapter->mapped($application, $sessionId)) {
+            return $adapter->action($mapped, $logout ? 'logout' : 'stop');
+        }
         $account = $this->findSessionAccount($application, $sessionId);
 
         if ($account === null) {
@@ -186,6 +201,11 @@ class WhatsAppEngineService
             $this->assertSamePayload($existing, $payloadHash);
 
             return $this->sendResult($existing);
+        }
+
+        $adapter = app(LegacyEngineAdapter::class);
+        if ($mapped = $adapter->mapped($application, $sessionId)) {
+            return $adapter->send($application, $mapped, $recipient, $text, $key);
         }
 
         $account = $this->findSessionAccount($application, $sessionId);
@@ -286,6 +306,10 @@ class WhatsAppEngineService
             ->first();
 
         if ($message === null) {
+            $adapter = app(LegacyEngineAdapter::class);
+            if ($mapped = $adapter->mapped($application, $sessionId)) {
+                return $adapter->message($application, $mapped, $key);
+            }
             throw new WhatsAppEngineException('Pengiriman WhatsApp belum tercatat.', 404, 'message_not_found', true);
         }
 

@@ -15,3 +15,7 @@ Schedule::command('gateway:recover-stale --minutes=10 --limit=100')
 Schedule::command('gateway:cleanup-attachments')
     ->daily()
     ->withoutOverlapping();
+
+Schedule::command('engine:control-tick')->everyFifteenSeconds()->withoutOverlapping();
+Schedule::command('engine:transport-tick')->everyFiveSeconds()->withoutOverlapping();
+Schedule::command('engine:transport-tick --cleanup')->daily()->withoutOverlapping();

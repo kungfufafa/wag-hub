@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { createWhatsAppEngine } from './engine.mjs';
 import { createRequestHandler } from './http-server.mjs';
 import { createSendJournal, messageFingerprint } from './send-journal.mjs';
+import { createEventSpool } from './durable-store.mjs';
 
 const reasons = { loggedOut: 401, badSession: 500, multideviceMismatch: 411, forbidden: 403, connectionReplaced: 440, restartRequired: 515 };
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
@@ -300,35 +301,42 @@ test('version lookup is shared and times out to default options without an undef
     assert.equal(Object.hasOwn(f.socketOptions[0], 'version'), false);
 });
 
-test('restoration skips unregistered credentials and restores registered QR credentials', async (t) => {
+test('restoration requires explicit persisted RUNNING intent and pause survives restart', async (t) => {
     const f = fixture(t);
-    f.auth.state.creds = { registered: false, me: { id: '6281234567890:3@s.whatsapp.net' }, account: { details: 'paired' } };
+    f.auth.state.creds.registered = true;
     const credsFile = path.join(f.options.sessionRoot, 'rekrutmen-1', 'creds.json');
     fs.mkdirSync(path.dirname(credsFile), { recursive: true });
     fs.writeFileSync(credsFile, '{}');
     await f.engine.restoreSessions();
-    assert.equal(f.sockets.length, 1);
-    assert.equal(f.engine.session('rekrutmen-1').status, 'connecting');
-    f.auth.state.creds = { registered: false };
-    await f.engine.stopSession('rekrutmen-1', false);
-    await f.engine.restoreSessions();
-    assert.equal(f.sockets.length, 1);
-    assert.equal(f.engine.session('rekrutmen-1').status, 'disconnected');
+    assert.equal(f.sockets.length, 0, 'legacy credentials alone are not running intent');
+    await connect(f);
+    await f.engine.shutdown();
+    const recovered = createWhatsAppEngine(f.options);
+    await recovered.restoreSessions();
+    assert.equal(f.sockets.length, 2);
+    await recovered.stopSession('rekrutmen-1', false);
+    await recovered.shutdown();
+    const paused = createWhatsAppEngine(f.options);
+    await paused.restoreSessions();
+    assert.equal(f.sockets.length, 2);
+    assert.equal(paused.session('rekrutmen-1').desired_state, 'STOPPED');
+    assert.equal((await paused.sendText('rekrutmen-1', payload)).status, 'failed');
+    assert.equal(f.sockets.length, 2, 'send must never resurrect a paused account');
+    await paused.shutdown();
 });
 
-test('restoration supports Hub-assigned IDs for any application and ignores invalid directories', async (t) => {
+test('restoration supports UUID session IDs with durable intent', async (t) => {
     const f = fixture(t);
     f.auth.state.creds.registered = true;
-    const id = 'wgh-11223344-5566-7788-9900-aabbccddeeff';
-    for (const directory of [id, 'support-1', 'INVALID']) {
-        const root = path.join(f.options.sessionRoot, directory);
-        fs.mkdirSync(root, { recursive: true });
-        fs.writeFileSync(path.join(root, 'creds.json'), '{}');
-    }
-    await f.engine.restoreSessions();
+    const id = '11223344-5566-7788-9900-aabbccddeeff';
+    await f.engine.startSession(id, { mode: 'qr', generation: 5 });
+    await f.engine.shutdown();
+    const recovered = createWhatsAppEngine(f.options);
+    await recovered.restoreSessions();
     assert.equal(f.sockets.length, 2);
-    assert.equal(f.engine.session(id).status, 'connecting');
-    assert.equal(f.engine.session('support-1').status, 'connecting');
+    assert.equal(recovered.session(id).generation, 5);
+    assert.equal(recovered.session(id).canonical_status, 'STARTING');
+    await recovered.shutdown();
 });
 
 test('number lookup uses the selected socket and distinguishes negative from unknown results', async (t) => {
@@ -565,4 +573,311 @@ test('HTTP contract validates inputs and exposes sent, failed, conflict, unknown
     assert.equal(unknown.code, 200);
     assert.equal(unknown.body.status, 'unknown');
     assert.equal(unknown.body.retryable, false);
+});
+
+test('explicit generations fence old commands, callbacks, and queued sends', async (t) => {
+    const f = fixture(t);
+    await f.engine.startSession('support-1', { mode: 'qr', generation: 3 });
+    const sock = f.sockets[0];
+    sock.ev.emit('connection.update', { connection: 'open' });
+    const stale = await f.engine.sendText('support-1', { ...payload, generation: 2 });
+    assert.equal(stale.error_code, 'stale_generation');
+    assert.equal(f.sent.length, 0);
+    await f.engine.stopSession('support-1', false, { generation: 4 });
+    assert.throws(() => f.engine.startSession('support-1', { mode: 'qr', generation: 3 }), { errorCode: 'stale_generation' });
+    sock.ev.emit('connection.update', { connection: 'open' });
+    assert.equal(f.engine.session('support-1').canonical_status, 'STOPPED');
+    const recovered = createWhatsAppEngine(f.options);
+    assert.throws(() => recovered.startSession('support-1', { mode: 'qr', generation: 3 }), { errorCode: 'stale_generation' });
+    await recovered.shutdown();
+});
+
+test('authentication challenges expire and events never contain challenge secrets', async (t) => {
+    const f = fixture(t, { qrTtlMs: 500 });
+    await f.engine.startSession('support-1', { mode: 'qr' });
+    f.sockets[0].ev.emit('connection.update', { qr: 'private-qr-secret' });
+    await nextTurn();
+    const snapshot = f.engine.session('support-1');
+    assert.ok(snapshot.challenge_id);
+    assert.ok(snapshot.expires_at);
+    await pause(550);
+    assert.equal(f.engine.session('support-1').qr, null);
+    assert.equal(f.engine.session('support-1').challenge_id, null);
+    assert.equal(JSON.stringify(await f.engine.events()).includes('private-qr-secret'), false);
+});
+
+test('terminal connection failure remains distinct from intentional stop', async (t) => {
+    const f = fixture(t, { maxReconnect: 0 });
+    await connect(f);
+    f.sockets[0].ev.emit('connection.update', { connection: 'close', lastDisconnect: { error: { statusCode: 408 } } });
+    assert.equal(f.engine.session('rekrutmen-1').canonical_status, 'FAILED');
+    await f.engine.stopSession('rekrutmen-1', false);
+    assert.equal(f.engine.session('rekrutmen-1').canonical_status, 'STOPPED');
+});
+
+test('unconfirmed local teardown fails without reporting stopped', async (t) => {
+    const f = fixture(t);
+    const sock = await connect(f);
+    sock.end = () => { throw new Error('end failed'); };
+    sock.ws.close = () => { throw new Error('close failed'); };
+    await assert.rejects(f.engine.stopSession('rekrutmen-1', false), { errorCode: 'teardown_unconfirmed' });
+    assert.equal(f.engine.session('rekrutmen-1').canonical_status, 'WORKING');
+    assert.equal(f.engine.session('rekrutmen-1').desired_state, 'STOPPED');
+    assert.equal((await f.engine.sendText('rekrutmen-1', payload)).status, 'failed');
+});
+
+test('private media dispatch is idempotent and rejects URL or oversized payloads', async (t) => {
+    const f = fixture(t);
+    await connect(f);
+    for (const type of ['image', 'document', 'voice']) {
+        const media = { type, phone: payload.phone, idempotency_key: `media-${type}`, media_base64: Buffer.from('media').toString('base64'),
+            mimetype: type === 'image' ? 'image/png' : type === 'voice' ? 'audio/ogg' : 'application/pdf', filename: 'hello.pdf' };
+        const result = await f.engine.sendMessage('rekrutmen-1', media);
+        assert.equal(result.status, 'sent');
+        assert.deepEqual(await f.engine.sendMessage('rekrutmen-1', media), result);
+        await assert.rejects(f.engine.sendMessage('rekrutmen-1', { ...media, media_base64: Buffer.from('other').toString('base64') }), { errorCode: 'idempotency_conflict' });
+    }
+    assert.equal(f.sent.length, 3);
+    assert.equal(f.sent[2].content.ptt, true);
+    assert.throws(() => f.engine.sendMessage('rekrutmen-1', { ...payload, type: 'image', media_url: 'http://localhost/private' }), { errorCode: 'invalid_media' });
+});
+
+test('incoming messages and ACKs survive restart until hub acknowledges them', async (t) => {
+    const f = fixture(t, { downloadMedia: async () => Buffer.from('image-bytes') });
+    const sock = await connect(f);
+    sock.ev.emit('messages.upsert', { type: 'notify', messages: [
+        { key: { id: 'incoming-text', remoteJid: '6281234567890@s.whatsapp.net' }, message: { conversation: 'Hello' } },
+        { key: { id: 'incoming-image', remoteJid: '6281234567890@s.whatsapp.net' }, message: { imageMessage: { mimetype: 'image/png', caption: 'Photo' } } },
+        { key: { id: 'group-message', remoteJid: '123@g.us' }, message: { conversation: 'Excluded' } },
+    ] });
+    sock.sendMessage = async () => { throw new Error('Unknown dispatch'); };
+    const sent = await f.engine.sendText('rekrutmen-1', payload);
+    assert.equal(sent.status, 'unknown');
+    sock.ev.emit('messages.update', [{ key: { id: sent.id, fromMe: true, remoteJid: '6281234567890@s.whatsapp.net' }, update: { status: 4 } }]);
+    assert.equal(f.engine.messageStatus('rekrutmen-1', payload.idempotency_key).status, 'sent');
+    await f.engine.shutdown();
+    const recovered = createWhatsAppEngine(f.options);
+    const events = (await recovered.events()).events;
+    const inbound = events.filter((event) => event.event === 'message');
+    assert.equal(inbound.length, 2);
+    assert.equal(inbound[0].data.text, 'Hello');
+    assert.equal(inbound[1].data.media_base64, Buffer.from('image-bytes').toString('base64'));
+    assert.equal(inbound[1].data.raw_message, undefined);
+    const ack = events.find((event) => event.event === 'message.ack');
+    assert.equal(ack.data.ack, 'read');
+    for (const event of events) recovered.acknowledgeEvent(event.id);
+    assert.equal((await recovered.events()).events.length, 0);
+    await recovered.shutdown();
+});
+
+test('offline append messages and repeated ACK stages are deduplicated through reconnect and acknowledged restart', async (t) => {
+    const f = fixture(t);
+    const sock = await connect(f);
+    const key = { id: 'offline-message', remoteJid: '6281234567890@s.whatsapp.net', fromMe: false };
+    const message = { key, message: { ephemeralMessage: { message: { conversation: 'Arrived while offline' } } } };
+    sock.ev.emit('messages.upsert', { type: 'append', messages: [message,
+        { ...message, key: { ...key, id: 'own-message', fromMe: true } },
+        { ...message, key: { ...key, id: 'group-message', remoteJid: '123@g.us' } },
+        { key: { ...key, id: 'protocol-message' }, message: { protocolMessage: { type: 5 } } },
+    ] });
+    sock.ev.emit('messages.upsert', { type: 'notify', messages: [message] });
+    sock.ev.emit('messaging-history.set', { messages: [{ ...message, key: { ...key, id: 'old-history' } }] });
+    const ackKey = { ...key, id: 'outbound-message', fromMe: true };
+    sock.ev.emit('messages.update', [{ key: ackKey, update: { status: 3 } }]);
+    sock.ev.emit('message-receipt.update', [{ key: ackKey, receipt: { receiptTimestamp: 123 } }]);
+    sock.ev.emit('messages.update', [{ key: ackKey, update: { status: 4 } }]);
+    let events = (await f.engine.events()).events;
+    assert.deepEqual(events.filter((event) => event.event === 'message').map((event) => event.data.text), ['Arrived while offline']);
+    assert.deepEqual(events.filter((event) => event.event === 'message.ack').map((event) => event.data.ack), ['delivered', 'read']);
+
+    await f.engine.stopSession('rekrutmen-1', false);
+    const reconnected = await connect(f);
+    reconnected.ev.emit('messages.upsert', { type: 'append', messages: [message] });
+    assert.equal((await f.engine.events()).events.filter((event) => event.event === 'message').length, 1);
+    events = (await f.engine.events()).events;
+    for (const event of events) f.engine.acknowledgeEvent(event.id);
+    await f.engine.shutdown();
+    const recovered = createWhatsAppEngine(f.options);
+    await recovered.startSession('rekrutmen-1', { mode: 'qr' });
+    const resumed = f.sockets.at(-1);
+    resumed.ev.emit('connection.update', { connection: 'open' });
+    resumed.ev.emit('messages.upsert', { type: 'append', messages: [message] });
+    resumed.ev.emit('messages.update', [{ key: ackKey, update: { status: 3 } }, { key: ackKey, update: { status: 4 } }]);
+    assert.equal((await recovered.events()).events.filter((event) => event.event !== 'session.status').length, 0);
+    await recovered.shutdown();
+});
+
+test('pending media preserves its envelope and cursor while another session continues, then retries after restart', async (t) => {
+    let attempts = 0;
+    const f = fixture(t, { mediaRetryDelay: () => 60000, downloadMedia: async () => {
+        if (++attempts === 1) throw new Error('Temporary download outage');
+        return Buffer.from('recovered-image');
+    } });
+    const first = await connect(f, 'account-1');
+    for (const event of (await f.engine.events()).events) f.engine.acknowledgeEvent(event.id);
+    first.ev.emit('messages.upsert', { type: 'append', messages: [{
+        key: { id: 'pending-image', remoteJid: '6281234567890@s.whatsapp.net' },
+        message: { imageMessage: { mimetype: 'image/png', mediaKey: Buffer.from('secret') } },
+    }] });
+    const second = await connect(f, 'account-2');
+    second.ev.emit('messages.upsert', { type: 'notify', messages: [{
+        key: { id: 'later-text', remoteJid: '6281234567890@s.whatsapp.net' }, message: { conversation: 'Continue' },
+    }] });
+    second.ev.emit('messages.update', [{ key: { id: 'later-ack', fromMe: true }, update: { status: 3 } }]);
+    const page = await f.engine.events();
+    assert.deepEqual(new Set(page.events.map((event) => event.event)), new Set(['message', 'message.ack', 'session.status']));
+    assert.equal(page.events.every((event) => event.session_id === 'account-2'), true);
+    assert.equal(page.next_cursor, '0', 'cursor must not skip the pending media');
+    assert.equal(attempts, 1);
+    const spool = createEventSpool(path.join(f.root, 'runner-events'));
+    const pending = spool.list().find((event) => event.data.message_id === 'pending-image');
+    assert.ok(pending.data.raw_message);
+    assert.equal(pending.media_attempts, 1);
+    assert.throws(() => f.engine.acknowledgeEvent(pending.id), { errorCode: 'media_pending' });
+    for (const event of page.events) f.engine.acknowledgeEvent(event.id);
+    await f.engine.shutdown();
+
+    const recovered = createWhatsAppEngine(f.options);
+    assert.equal((await recovered.events(page.next_cursor)).events.length, 0);
+    assert.equal(attempts, 1, 'durable backoff survives restart');
+    pending.media_retry_at = new Date(Date.now() - 1).toISOString();
+    spool.update(pending);
+    const retried = await recovered.events(page.next_cursor);
+    assert.equal(attempts, 2);
+    assert.equal(retried.events.length, 1);
+    assert.equal(retried.events[0].id, pending.id);
+    assert.equal(retried.events[0].data.media_base64, Buffer.from('recovered-image').toString('base64'));
+    assert.equal(retried.events[0].data.raw_message, undefined);
+    recovered.acknowledgeEvent(pending.id);
+    assert.equal((await recovered.events()).events.length, 0);
+    await recovered.shutdown();
+});
+
+test('more than one page of pending media cannot hide a later ready message', async (t) => {
+    let attempts = 0;
+    const f = fixture(t, { downloadMedia: async () => { attempts++; throw new Error('Download outage'); } });
+    const sock = await connect(f);
+    for (const event of (await f.engine.events()).events) f.engine.acknowledgeEvent(event.id);
+    sock.ev.emit('messages.upsert', { type: 'append', messages: Array.from({ length: 101 }, (_, index) => ({
+        key: { id: `image-${index}`, remoteJid: '6281234567890@s.whatsapp.net' }, message: { imageMessage: { mimetype: 'image/png' } },
+    })) });
+    sock.ev.emit('messages.upsert', { type: 'notify', messages: [{
+        key: { id: 'later-text', remoteJid: '6281234567890@s.whatsapp.net' }, message: { conversation: 'Still received' },
+    }] });
+    const page = await f.engine.events();
+    assert.equal(page.events.length, 1);
+    assert.equal(page.events[0].data.text, 'Still received');
+    assert.equal(page.next_cursor, '0');
+    assert.equal(attempts, 1, 'each poll performs at most one media retrieval');
+    assert.equal(createEventSpool(path.join(f.root, 'runner-events')).list('0', 200).filter((event) => event.data.media_pending).length, 101);
+});
+
+test('a hung media download is bounded and concurrent polls still deliver unrelated events', async (t) => {
+    const entered = deferred();
+    let aborted = false;
+    const f = fixture(t, { mediaDownloadTimeoutMs: 25, downloadMedia: async (_message, _sock, { signal }) => {
+        signal.addEventListener('abort', () => { aborted = true; });
+        entered.resolve();
+        return new Promise(() => {});
+    } });
+    const sock = await connect(f);
+    for (const event of (await f.engine.events()).events) f.engine.acknowledgeEvent(event.id);
+    sock.ev.emit('messages.upsert', { type: 'append', messages: [
+        { key: { id: 'hung-image', remoteJid: '6281234567890@s.whatsapp.net' }, message: { imageMessage: { mimetype: 'image/png' } } },
+        { key: { id: 'ready-text', remoteJid: '6281234567890@s.whatsapp.net' }, message: { conversation: 'Ready' } },
+    ] });
+    const first = f.engine.events();
+    await entered.promise;
+    const concurrent = await f.engine.events();
+    assert.equal(concurrent.events.length, 1);
+    assert.equal(concurrent.events[0].data.text, 'Ready');
+    f.engine.acknowledgeEvent(concurrent.events[0].id);
+    assert.equal((await first).events.length, 0);
+    assert.equal(aborted, true);
+    const pending = createEventSpool(path.join(f.root, 'runner-events')).list()[0];
+    assert.equal(pending.data.media_pending, true);
+    assert.equal(pending.media_attempts, 1);
+});
+
+test('HTTP lifecycle endpoints preserve paused authentication and no-store challenge responses', async (t) => {
+    const f = fixture(t);
+    const id = '11223344-5566-7788-9900-aabbccddeeff';
+    const started = await request(f.engine, 'POST', `/sessions/${id}/start`, { generation: 1 });
+    assert.equal(started.body.canonical_status, 'STARTING');
+    const stopped = await request(f.engine, 'POST', `/sessions/${id}/stop`, { generation: 2 });
+    assert.equal(stopped.body.desired_state, 'STOPPED');
+    assert.equal((await request(f.engine, 'POST', `/sessions/${id}/start`, { generation: 1 })).code, 409);
+    const events = await request(f.engine, 'GET', '/events');
+    assert.ok(events.body.events.length);
+    assert.equal((await request(f.engine, 'DELETE', `/events/${events.body.events[0].id}`)).code, 200);
+});
+
+test('control-plane startup grants override stale local RUNNING intent before any socket is restored', async (t) => {
+    const f = fixture(t);
+    await f.engine.startSession('support-1', { mode: 'qr', generation: 8 });
+    await f.engine.startSession('support-2', { mode: 'qr', generation: 2 });
+    await f.engine.shutdown();
+    const recovered = createWhatsAppEngine(f.options);
+    await recovered.reconcileStartup([{ id: 'support-1', desired_state: 'STOPPED', generation: 9 }]);
+    assert.equal(f.sockets.length, 2, 'neither stopped nor unlisted sockets were restored');
+    assert.equal(recovered.session('support-1').desired_state, 'STOPPED');
+    assert.equal(recovered.session('support-1').generation, 9);
+    assert.equal(recovered.session('support-2').desired_state, 'STOPPED');
+    await recovered.shutdown();
+});
+
+test('a newer direct command arriving during startup reconciliation wins over old restore grants', async (t) => {
+    const f = fixture(t);
+    await f.engine.startSession('support-1', { mode: 'pairing', phone: '081234567890', generation: 10 });
+    await f.engine.reconcileStartup([{ id: 'support-1', desired_state: 'STOPPED', generation: 9 }]);
+    assert.equal(f.engine.session('support-1').desired_state, 'RUNNING');
+    assert.equal(f.engine.session('support-1').mode, 'pairing');
+    assert.equal(f.sockets.length, 1);
+});
+
+test('an ACK received during an unresolved send wins over the later send timeout', async (t) => {
+    const f = fixture(t, { sendTimeoutMs: 30 });
+    const sock = await connect(f);
+    sock.sendMessage = async (_jid, _content, options) => {
+        sock.ev.emit('messages.update', [{ key: { id: options.messageId, fromMe: true }, update: { status: 3 } }]);
+        return new Promise(() => {});
+    };
+    const result = await f.engine.sendText('rekrutmen-1', payload);
+    assert.equal(result.status, 'sent');
+    assert.equal(f.engine.messageStatus('rekrutmen-1', payload.idempotency_key).status, 'sent');
+    const ack = (await f.engine.events()).events.find((event) => event.event === 'message.ack');
+    assert.equal(ack.data.idempotency_key, payload.idempotency_key);
+});
+
+test('a replacement authentication mode cancels an older start still loading credentials', async (t) => {
+    const auth = deferred();
+    const entered = deferred();
+    let loads = 0;
+    const f = fixture(t, { useAuthState: () => { loads += 1; entered.resolve(); return loads === 1 ? auth.promise : Promise.resolve(f.auth); } });
+    const old = f.engine.startSession('support-1', { mode: 'qr', generation: 1 });
+    const cancelled = assert.rejects(old, { errorCode: 'session_cancelled' });
+    await entered.promise;
+    const replacement = f.engine.startSession('support-1', { mode: 'pairing', phone: '081234567890', generation: 2 });
+    auth.resolve(f.auth);
+    await Promise.all([cancelled, replacement]);
+    assert.equal(f.sockets.length, 1);
+    assert.equal(f.engine.session('support-1').mode, 'pairing');
+    assert.equal(f.engine.session('support-1').generation, 2);
+});
+
+test('startup grants do not consume pending logout, delete, or pairing operation generations', async (t) => {
+    const f = fixture(t);
+    await f.engine.reconcileStartup([
+        { id: 'logout-1', desired_state: 'STOPPED', generation: 2 },
+        { id: 'delete-1', desired_state: 'STOPPED', generation: 3 },
+        { id: 'pairing-1', desired_state: 'RUNNING', generation: 4 },
+    ]);
+    const logout = await f.engine.stopSession('logout-1', true, { generation: 2 });
+    assert.equal(logout.canonical_status, 'STOPPED');
+    const deleted = await f.engine.stopSession('delete-1', true, { generation: 3, deleting: true });
+    assert.equal(deleted.canonical_status, 'STOPPED');
+    const pairing = await f.engine.startSession('pairing-1', { mode: 'pairing', phone: '081234567890', generation: 4 });
+    assert.equal(pairing.mode, 'pairing');
+    assert.throws(() => f.engine.stopSession('pairing-1', true, { generation: 4 }), { errorCode: 'stale_generation' });
+    assert.throws(() => f.engine.startSession('logout-1', { mode: 'qr', generation: 2 }), { errorCode: 'stale_generation' });
 });

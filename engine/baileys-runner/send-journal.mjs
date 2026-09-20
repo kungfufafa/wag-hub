@@ -12,7 +12,7 @@ export class EngineError extends Error {
 }
 
 export function validateSessionId(id) {
-    if (typeof id !== 'string' || !/^[a-z][a-z0-9-]{1,46}$/.test(id) || id.includes('--') || id.endsWith('-')) {
+    if (typeof id !== 'string' || !(/^[a-z][a-z0-9-]{1,46}$/.test(id) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) || id.includes('--') || id.endsWith('-')) {
         throw new EngineError('ID sesi WhatsApp tidak valid.', 422, 'invalid_session');
     }
 
@@ -40,7 +40,28 @@ export function createSendJournal(root) {
         return path.join(root, id, `${createHash('sha256').update(key).digest('hex')}.json`);
     }
 
-    return {
+    const journal = {
+        findByMessageId(id, messageId) {
+            const directory = path.join(root, validateSessionId(id));
+            if (!fs.existsSync(directory)) return null;
+            for (const file of fs.readdirSync(directory).filter((name) => name.endsWith('.json'))) {
+                let entry;
+                try { entry = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8')); }
+                catch { continue; } // A different damaged record cannot suppress this ACK.
+                if (entry.sessionId === id && entry.messageId === messageId && typeof entry.key === 'string') return entry;
+            }
+            return null;
+        },
+        confirm(id, messageId) {
+            const entry = journal.findByMessageId(id, messageId);
+            if (!entry || entry.status === 'sent') return entry;
+            entry.status = 'sent';
+            entry.updatedAt = new Date().toISOString();
+            delete entry.error_code;
+            delete entry.message;
+            journal.write(entry);
+            return entry;
+        },
         read(id, key) {
             const file = filename(id, key);
             let content;
@@ -100,4 +121,5 @@ export function createSendJournal(root) {
             }
         },
     };
+    return journal;
 }

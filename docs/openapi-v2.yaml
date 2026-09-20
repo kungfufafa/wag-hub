@@ -1,0 +1,1266 @@
+"openapi": "3.0.3"
+"info":
+  "title": "wag-hub Lean Engine API"
+  "version": "2.0.0"
+  "description": "Installation-scoped backend API. wag-hub owns session state and transport; the consumer owns UX and user permissions. The private runner and startup-grant endpoint are intentionally excluded from this public contract."
+"servers":
+  -
+    "url": "https://wag-hub.example.com"
+"security":
+  -
+    "installationToken": []
+"paths":
+  "/api/v2/integration":
+    "get":
+      "summary": "Discover grants, capacity and capabilities"
+      "operationId": "get_api_v2_integration"
+      "x-required-scope": "integration:read"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Integration"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+    "patch":
+      "summary": "Change account operating limit"
+      "operationId": "patch_api_v2_integration"
+      "x-required-scope": "capacity:manage"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Integration"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "configured_limit":
+                  "type": "integer"
+                  "minimum": 0
+              "required":
+                - "configured_limit"
+  "/api/v2/integration/webhook":
+    "put":
+      "summary": "Register the installation webhook"
+      "operationId": "put_api_v2_integration_webhook"
+      "x-required-scope": "webhooks:manage"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "type": "object"
+                    "properties":
+                      "enabled":
+                        "type": "boolean"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Secret is stored encrypted and never returned. HTTPS is required for public destinations; private host exceptions are operator-configured."
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "url":
+                  "type": "string"
+                  "format": "uri"
+                  "maxLength": 2048
+                "secret":
+                  "type": "string"
+                  "minLength": 32
+                  "maxLength": 256
+              "required":
+                - "url"
+                - "secret"
+  "/api/v2/sessions":
+    "get":
+      "summary": "List the authoritative account pool"
+      "operationId": "get_api_v2_sessions"
+      "x-required-scope": "sessions:read"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "type": "array"
+                    "items":
+                      "$ref": "#/components/schemas/Session"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+    "post":
+      "summary": "Create an account and optionally start authentication"
+      "operationId": "post_api_v2_sessions"
+      "x-required-scope": "sessions:manage"
+      "responses":
+        "201":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Lifecycle"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Use {start:true} for one-step QR connection. No phone number is needed for QR. All non-deleted sessions reserve capacity, including stopped sessions."
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "name":
+                  "type": "string"
+                  "minLength": 1
+                  "maxLength": 120
+                "start":
+                  "type": "boolean"
+                  "default": false
+                "external_reference":
+                  "type": "string"
+                  "minLength": 1
+                  "maxLength": 160
+                "auth_method":
+                  "type": "string"
+                  "enum":
+                    - "qr"
+                    - "pairing"
+                  "default": "qr"
+                "phone":
+                  "type": "string"
+                  "description": "Required only for pairing; international number."
+                  "pattern": "^\\+?[1-9][0-9]{6,14}$"
+      "parameters":
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": true
+          "schema":
+            "type": "string"
+            "minLength": 1
+            "maxLength": 160
+          "description": "Installation-scoped key retained for retries. Same payload returns the original record; changed payload returns 409."
+  "/api/v2/sessions/{session}":
+    "get":
+      "summary": "Read a refreshed session observation"
+      "operationId": "get_api_v2_sessions_session"
+      "x-required-scope": "sessions:read"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Session"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+    "patch":
+      "summary": "Rename an account"
+      "operationId": "patch_api_v2_sessions_session"
+      "x-required-scope": "sessions:manage"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Session"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "name":
+                  "type": "string"
+                  "minLength": 1
+                  "maxLength": 120
+              "required":
+                - "name"
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+    "delete":
+      "summary": "Remove an account after confirmed local teardown"
+      "operationId": "delete_api_v2_sessions_session"
+      "x-required-scope": "sessions:manage"
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Lifecycle"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Deletion releases capacity only on operation completion. The hub keeps a minimal tombstone and message history."
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/sessions/{session}/start":
+    "post":
+      "summary": "Start or resume an account"
+      "operationId": "post_api_v2_sessions_session_start"
+      "x-required-scope": "sessions:manage"
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Lifecycle"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Uses saved authentication when valid; otherwise presents a QR challenge."
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/sessions/{session}/stop":
+    "post":
+      "summary": "Pause an account"
+      "operationId": "post_api_v2_sessions_session_stop"
+      "x-required-scope": "sessions:manage"
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Lifecycle"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Blocks new sends immediately and preserves authentication. STOPPED is observed only after local teardown completes."
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/sessions/{session}/logout":
+    "post":
+      "summary": "Unlink WhatsApp"
+      "operationId": "post_api_v2_sessions_session_logout"
+      "x-required-scope": "sessions:manage"
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Lifecycle"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Clears local authentication. Remote unlink confirmation is exposed separately in operation.result.remote_logout_confirmed."
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/sessions/{session}/auth/qr":
+    "get":
+      "summary": "Read the current QR or pairing challenge"
+      "operationId": "get_api_v2_sessions_session_auth_qr"
+      "x-required-scope": "sessions:manage"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Challenge"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Cache-Control: no-store. Re-fetch during connection; null values mean the challenge is pending, expired, or no longer required."
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/sessions/{session}/auth/pairing-code":
+    "post":
+      "summary": "Request pairing instead of QR"
+      "operationId": "post_api_v2_sessions_session_auth_pairing_code"
+      "x-required-scope": "sessions:manage"
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Lifecycle"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Poll the challenge endpoint after the asynchronous operation. Never derive the final authenticated identity from the supplied phone."
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "phone":
+                  "type": "string"
+                  "pattern": "^\\+?[1-9][0-9]{6,14}$"
+              "required":
+                - "phone"
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/operations/{operation}":
+    "get":
+      "summary": "Observe lifecycle operation completion"
+      "operationId": "get_api_v2_operations_operation"
+      "x-required-scope": "sessions:read"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Operation"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "parameters":
+        -
+          "name": "operation"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/sessions/{session}/messages":
+    "post":
+      "summary": "Persist an idempotent text or media send"
+      "operationId": "post_api_v2_sessions_session_messages"
+      "x-required-scope": "messages:send"
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Message"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "For text, media_id is prohibited. For other types, media_id is required and must belong to this installation and match the type. The session must be fresh and WORKING. outcome_unknown is queried/reconciled, never automatically resent."
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "oneOf":
+                -
+                  "type": "object"
+                  "properties":
+                    "to":
+                      "type": "string"
+                      "pattern": "^\\+?[1-9][0-9]{7,14}$"
+                    "type":
+                      "type": "string"
+                      "enum":
+                        - "text"
+                      "default": "text"
+                    "text":
+                      "type": "string"
+                      "minLength": 1
+                      "maxLength": 10000
+                    "expires_at":
+                      "type": "string"
+                      "format": "date-time"
+                  "required":
+                    - "to"
+                    - "text"
+                -
+                  "type": "object"
+                  "properties":
+                    "to":
+                      "type": "string"
+                      "pattern": "^\\+?[1-9][0-9]{7,14}$"
+                    "type":
+                      "type": "string"
+                      "enum":
+                        - "image"
+                        - "document"
+                        - "voice"
+                    "text":
+                      "type": "string"
+                      "maxLength": 10000
+                    "media_id":
+                      "type": "string"
+                      "format": "uuid"
+                    "expires_at":
+                      "type": "string"
+                      "format": "date-time"
+                  "required":
+                    - "to"
+                    - "type"
+                    - "media_id"
+      "parameters":
+        -
+          "name": "session"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": true
+          "schema":
+            "type": "string"
+            "minLength": 1
+            "maxLength": 160
+          "description": "Installation-scoped key retained for retries. Same payload returns the original record; changed payload returns 409."
+  "/api/v2/messages/{message}":
+    "get":
+      "summary": "Read transport and recipient acknowledgement separately"
+      "operationId": "get_api_v2_messages_message"
+      "x-required-scope": "messages:read"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Message"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "parameters":
+        -
+          "name": "message"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/media":
+    "post":
+      "summary": "Upload private media"
+      "operationId": "post_api_v2_media"
+      "x-required-scope": "media:write"
+      "responses":
+        "201":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Media"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Maximum 16 MiB. JPEG/PNG images; documents; voice converted to OGG/Opus (maximum five minutes). Media expires after seven days."
+      "requestBody":
+        "required": true
+        "content":
+          "multipart/form-data":
+            "schema":
+              "type": "object"
+              "properties":
+                "type":
+                  "type": "string"
+                  "enum":
+                    - "image"
+                    - "document"
+                    - "voice"
+                "file":
+                  "type": "string"
+                  "format": "binary"
+              "required":
+                - "type"
+                - "file"
+  "/api/v2/media/{media}":
+    "get":
+      "summary": "Download installation-owned private media"
+      "operationId": "get_api_v2_media_media"
+      "x-required-scope": "media:read"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/octet-stream":
+              "schema":
+                "type": "string"
+                "format": "binary"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "parameters":
+        -
+          "name": "media"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/events":
+    "get":
+      "summary": "Replay retained events"
+      "operationId": "get_api_v2_events"
+      "x-required-scope": "messages:read"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/EventPage"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "description": "Seven-day retention. HTTP 410 event_cursor_expired means refresh authoritative sessions and restart replay from 0 with deduplication."
+      "parameters":
+        -
+          "in": "query"
+          "name": "after"
+          "schema":
+            "type": "integer"
+            "minimum": 0
+          "description": "Use next_cursor from the previous page; 0 starts at the oldest retained event."
+        -
+          "in": "query"
+          "name": "limit"
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 100
+  "/health/live":
+    "get":
+      "summary": "Process liveness"
+      "operationId": "get_health_live"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "ok":
+                    "type": "boolean"
+                  "checks":
+                    "type": "object"
+                    "additionalProperties":
+                      "type": "boolean"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "security": []
+  "/health/ready":
+    "get":
+      "summary": "Dependency and worker readiness"
+      "operationId": "get_health_ready"
+      "x-required-scope": "integration:read"
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "ok":
+                    "type": "boolean"
+                  "checks":
+                    "type": "object"
+                    "additionalProperties":
+                      "type": "boolean"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. See ENGINE_V2.md for recovery guidance."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/EngineError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+        "503":
+          "description": "One or more readiness dependencies are unavailable."
+"components":
+  "securitySchemes":
+    "installationToken":
+      "type": "http"
+      "scheme": "bearer"
+      "description": "Server-side installation token issued through the hub integration pack. Required capability is listed in x-required-scope."
+  "schemas":
+    "Operation":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "action":
+          "type": "string"
+          "enum":
+            - "start"
+            - "stop"
+            - "logout"
+            - "delete"
+            - "pairing-code"
+        "status":
+          "type": "string"
+          "enum":
+            - "pending"
+            - "processing"
+            - "completed"
+            - "failed"
+            - "superseded"
+        "last_error":
+          "type": "string"
+          "nullable": true
+        "result":
+          "type": "object"
+          "properties":
+            "remote_logout_confirmed":
+              "type": "boolean"
+              "nullable": true
+          "nullable": true
+        "completed_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+      "required":
+        - "id"
+        - "action"
+        - "status"
+    "Session":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "name":
+          "type": "string"
+        "external_reference":
+          "type": "string"
+          "nullable": true
+        "status":
+          "type": "string"
+          "enum":
+            - "STOPPED"
+            - "STARTING"
+            - "SCAN_QR_CODE"
+            - "WORKING"
+            - "FAILED"
+        "desired_state":
+          "type": "string"
+          "enum":
+            - "RUNNING"
+            - "STOPPED"
+        "phone_number":
+          "type": "string"
+          "nullable": true
+        "auth_method":
+          "type": "string"
+          "enum":
+            - "qr"
+            - "pairing"
+          "nullable": true
+        "revision":
+          "type": "integer"
+          "minimum": 0
+        "observed_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+        "stale":
+          "type": "boolean"
+        "engine_available":
+          "type": "boolean"
+        "pending_operation":
+          "allOf":
+            -
+              "$ref": "#/components/schemas/Operation"
+          "nullable": true
+        "last_error":
+          "type": "string"
+          "nullable": true
+        "deleted":
+          "type": "boolean"
+      "required":
+        - "id"
+        - "name"
+        - "status"
+        - "desired_state"
+        - "revision"
+        - "stale"
+        - "engine_available"
+    "Integration":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "name":
+          "type": "string"
+        "scopes":
+          "type": "array"
+          "items":
+            "type": "string"
+        "capabilities":
+          "type": "object"
+          "properties":
+            "api_version":
+              "type": "integer"
+              "enum":
+                - 2
+            "auth_methods":
+              "type": "array"
+              "items":
+                "type": "string"
+                "enum":
+                  - "qr"
+                  - "pairing"
+            "message_types":
+              "type": "array"
+              "items":
+                "type": "string"
+                "enum":
+                  - "text"
+                  - "image"
+                  - "document"
+                  - "voice"
+            "media_max_bytes":
+              "type": "integer"
+              "minimum": 0
+            "image_mime_types":
+              "type": "array"
+              "items":
+                "type": "string"
+            "voice_mime_types":
+              "type": "array"
+              "items":
+                "type": "string"
+            "events":
+              "type": "array"
+              "items":
+                "type": "string"
+        "capacity":
+          "type": "object"
+          "properties":
+            "used":
+              "type": "integer"
+              "minimum": 0
+            "configured_limit":
+              "type": "integer"
+              "minimum": 0
+            "maximum_allowed":
+              "type": "integer"
+              "minimum": 0
+        "webhook":
+          "type": "object"
+          "properties":
+            "enabled":
+              "type": "boolean"
+            "url":
+              "type": "string"
+              "nullable": true
+            "last_success_at":
+              "type": "string"
+              "format": "date-time"
+              "nullable": true
+            "last_error":
+              "type": "string"
+              "nullable": true
+      "required":
+        - "id"
+        - "scopes"
+        - "capabilities"
+        - "capacity"
+        - "webhook"
+    "Lifecycle":
+      "type": "object"
+      "properties":
+        "session":
+          "$ref": "#/components/schemas/Session"
+        "operation":
+          "allOf":
+            -
+              "$ref": "#/components/schemas/Operation"
+          "nullable": true
+      "required":
+        - "session"
+        - "operation"
+    "Challenge":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "nullable": true
+        "qr":
+          "type": "string"
+          "nullable": true
+          "description": "PNG data URL; no-store. Null while generating or after expiry."
+        "pairing_code":
+          "type": "string"
+          "nullable": true
+        "auth_method":
+          "type": "string"
+          "nullable": true
+        "expires_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+    "Message":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "session_id":
+          "type": "string"
+          "format": "uuid"
+        "type":
+          "type": "string"
+          "enum":
+            - "text"
+            - "image"
+            - "document"
+            - "voice"
+        "transport_status":
+          "type": "string"
+          "enum":
+            - "queued"
+            - "processing"
+            - "accepted"
+            - "failed"
+            - "expired"
+            - "outcome_unknown"
+        "receipt_status":
+          "type": "string"
+          "enum":
+            - "delivered"
+            - "read"
+            - "played"
+          "nullable": true
+        "provider_message_id":
+          "type": "string"
+          "nullable": true
+        "error_code":
+          "type": "string"
+          "nullable": true
+        "expires_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+        "created_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+        "updated_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+      "required":
+        - "id"
+        - "session_id"
+        - "transport_status"
+    "Media":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "type":
+          "type": "string"
+          "enum":
+            - "image"
+            - "document"
+            - "voice"
+        "filename":
+          "type": "string"
+        "mimetype":
+          "type": "string"
+        "size":
+          "type": "integer"
+          "minimum": 0
+        "expires_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+      "required":
+        - "id"
+        - "type"
+        - "filename"
+        - "mimetype"
+        - "size"
+        - "expires_at"
+    "Event":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "schema_version":
+          "type": "string"
+          "enum":
+            - "2.0"
+        "event":
+          "type": "string"
+          "enum":
+            - "message"
+            - "message.ack"
+            - "session.status"
+        "installation_id":
+          "type": "string"
+          "format": "uuid"
+        "session_id":
+          "type": "string"
+          "format": "uuid"
+        "revision":
+          "type": "integer"
+          "minimum": 0
+        "occurred_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+        "data":
+          "type": "object"
+          "description": "For session.status: Session snapshot. For message: normalized message_id/chat_id/from/type/text plus optional private media_id/media metadata. For message.ack: hub message_id when correlated, provider_message_id, ack, transport_status, receipt_status."
+      "required":
+        - "id"
+        - "schema_version"
+        - "event"
+        - "installation_id"
+        - "session_id"
+        - "revision"
+        - "occurred_at"
+        - "data"
+    "EventPage":
+      "type": "object"
+      "properties":
+        "events":
+          "type": "array"
+          "items":
+            "$ref": "#/components/schemas/Event"
+        "next_cursor":
+          "type": "string"
+          "pattern": "^[0-9]+$"
+        "has_more":
+          "type": "boolean"
+      "required":
+        - "events"
+        - "next_cursor"
+        - "has_more"
+    "EngineError":
+      "type": "object"
+      "properties":
+        "error":
+          "type": "object"
+          "properties":
+            "code":
+              "type": "string"
+            "message":
+              "type": "string"
+            "retryable":
+              "type": "boolean"
+          "required":
+            - "code"
+            - "message"
+    "ValidationError":
+      "type": "object"
+      "properties":
+        "message":
+          "type": "string"
+        "errors":
+          "type": "object"
+          "additionalProperties":
+            "type": "array"
+            "items":
+              "type": "string"

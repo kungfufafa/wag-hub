@@ -54,6 +54,9 @@ flowchart LR
 
 ## Menjalankan secara lokal
 
+Gunakan PHP **8.4.1 atau lebih baru** untuk aplikasi, Composer, worker, dan PHP-FPM.
+Panduan engine v2 dan deployment terpisah tersedia di [docs/ENGINE_V2.md](docs/ENGINE_V2.md).
+
 ```bash
 cp .env.example .env
 composer install

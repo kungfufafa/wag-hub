@@ -1,0 +1,14 @@
+.git
+**/node_modules
+vendor
+.env
+.env.*
+**/.env
+**/.env.*
+storage
+bootstrap/cache/*.php
+database/*.sqlite
+engine/baileys-runner/sessions
+engine/baileys-runner/runner-state
+engine/baileys-runner/runner-events
+engine/baileys-runner/whatsapp-messages

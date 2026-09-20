@@ -23,6 +23,10 @@ class EnforceClientRateLimit
         }
 
         $maximumAttempts = max(1, min(6000, (int) $application->rate_limit_per_minute));
+        if ($request->is('api/v2/*') && $request->isMethod('GET')) {
+            $bucket = 'engine-read';
+            $maximumAttempts *= 4;
+        }
         $bucket = preg_replace('/[^a-z0-9_-]+/', '-', strtolower($bucket)) ?: 'general';
         $key = "gateway-api:application:{$application->getKey()}:{$bucket}";
 

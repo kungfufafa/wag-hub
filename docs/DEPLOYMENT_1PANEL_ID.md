@@ -5,9 +5,9 @@ Panduan ini memakai fitur **Website**, **PHP Runtime**, **Database**, **Cron Job
 ## 1. Buat PHP Runtime
 
 1. Masuk 1Panel → **Website** → **Runtime** → **Create Runtime Environment**.
-2. Pilih PHP 8.3 atau versi yang sesuai `composer.lock` proyek.
+2. Pilih PHP **8.4.1 atau lebih baru**, sesuai persyaratan `composer.json` dan `composer.lock`. Gunakan versi yang sama untuk website, CLI, dan worker.
 3. Aktifkan ekstensi `mbstring`, `xml`, `curl`, `zip`, `pdo_mysql`, dan `bcmath`.
-4. Simpan runtime, misalnya bernama `php83-gateway`.
+4. Simpan runtime, misalnya bernama `php84-gateway`.
 
 ## 2. Buat database
 
@@ -19,7 +19,7 @@ Panduan ini memakai fitur **Website**, **PHP Runtime**, **Database**, **Cron Job
 ## 3. Buat website dan pasang kode
 
 1. Buka **Website** → **Create Website**.
-2. Pilih tipe **Runtime** lalu pilih runtime `php83-gateway`.
+2. Pilih tipe **Runtime** lalu pilih runtime `php84-gateway`.
 3. Hubungkan domain `gateway.example.com`.
 4. Catat direktori website yang dibuat 1Panel, selanjutnya disebut `<DIREKTORI_APP>`.
 5. Dari terminal 1Panel atau SSH, ambil kode ke direktori tersebut:

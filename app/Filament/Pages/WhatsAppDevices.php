@@ -188,6 +188,11 @@ class WhatsAppDevices extends Page
             $callback($account, app(WhatsAppSessionManager::class));
             Notification::make()->title($successMessage)->success()->send();
         } catch (InvalidArgumentException|WhatsAppEngineException $exception) {
+            if ($exception instanceof WhatsAppEngineException && $exception->errorCode === 'operation_pending') {
+                Notification::make()->title('Operasi masih diproses')->body($exception->getMessage())->warning()->send();
+
+                return;
+            }
             Notification::make()->title('Gagal')->body($exception->getMessage())->danger()->send();
         }
     }

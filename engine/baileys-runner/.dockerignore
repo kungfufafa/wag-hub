@@ -1,0 +1,8 @@
+node_modules
+.env
+.env.*
+sessions
+runner-state
+runner-events
+whatsapp-messages
+*.test.mjs

@@ -1,0 +1,124 @@
+# From repository root: docker compose --env-file engine/.env.v2 -f engine/docker-compose.v2.yml ...
+# This stack is independent from the legacy WAHA compose file. Do not activate both for one account.
+name: wag-hub-v2
+
+x-app: &app
+  image: wag-hub-v2:${WAG_RELEASE:-local}
+  build:
+    context: ..
+    dockerfile: engine/Dockerfile.v2
+  restart: unless-stopped
+  environment: &app-env
+    APP_NAME: wag-hub
+    APP_ENV: production
+    APP_DEBUG: "false"
+    APP_KEY: ${APP_KEY:?set APP_KEY}
+    APP_URL: ${WAG_PUBLIC_URL:?set WAG_PUBLIC_URL}
+    LOG_CHANNEL: stderr
+    DB_CONNECTION: mysql
+    DB_HOST: database
+    DB_PORT: 3306
+    DB_DATABASE: ${WAG_DB_DATABASE:-wag_hub}
+    DB_USERNAME: ${WAG_DB_USERNAME:-wag_hub}
+    DB_PASSWORD: ${WAG_DB_PASSWORD:?set WAG_DB_PASSWORD}
+    CACHE_STORE: database
+    SESSION_DRIVER: database
+    QUEUE_CONNECTION: database
+    WAG_ENGINE_QUEUE_CONNECTION: database
+    DB_QUEUE_RETRY_AFTER: 420
+    GATEWAY_ENGINE_DRIVER: wag_hub
+    WAG_BAILEYS_URL: http://runner:3318
+    WAG_BAILEYS_TOKEN: ${WAG_BAILEYS_TOKEN:?set WAG_BAILEYS_TOKEN}
+    WAG_DEFAULT_SESSION_LIMIT: ${WAG_DEFAULT_SESSION_LIMIT:-5}
+    WAG_DEFAULT_SESSION_CEILING: ${WAG_DEFAULT_SESSION_CEILING:-10}
+    WAG_WEBHOOK_PRIVATE_HOSTS: ${WAG_WEBHOOK_PRIVATE_HOSTS:-}
+  volumes:
+    - hub_storage:/var/www/html/storage
+  depends_on:
+    database:
+      condition: service_healthy
+  stop_grace_period: 110s
+
+services:
+  database:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${WAG_DB_DATABASE:-wag_hub}
+      MYSQL_USER: ${WAG_DB_USERNAME:-wag_hub}
+      MYSQL_PASSWORD: ${WAG_DB_PASSWORD:?set WAG_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${WAG_DB_ROOT_PASSWORD:?set WAG_DB_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  app:
+    <<: *app
+    ports:
+      - "${WAG_BIND_ADDRESS:-127.0.0.1}:${WAG_HTTP_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/health/live') === false ? 1 : 0);"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  control-worker:
+    <<: *app
+    user: www-data
+    command: ["php", "artisan", "queue:work", "database", "--queue=engine-control", "--sleep=1", "--tries=1", "--timeout=60", "--max-time=3600"]
+
+  transport-worker:
+    <<: *app
+    user: www-data
+    command: ["php", "artisan", "queue:work", "database", "--queue=engine", "--sleep=1", "--tries=1", "--timeout=95", "--max-time=3600"]
+
+  # Keep consuming v1/default work throughout the verified migration window.
+  legacy-worker:
+    <<: *app
+    user: www-data
+    command: ["php", "artisan", "queue:work", "database", "--queue=default", "--sleep=1", "--tries=1", "--timeout=360", "--max-time=3600"]
+    stop_grace_period: 390s
+
+  scheduler:
+    <<: *app
+    user: www-data
+    command: ["php", "artisan", "schedule:work"]
+
+  runner:
+    image: wag-hub-runner:${WAG_RELEASE:-local}
+    build: ./baileys-runner
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      WAG_BAILEYS_TOKEN: ${WAG_BAILEYS_TOKEN:?set WAG_BAILEYS_TOKEN}
+      WAG_BAILEYS_AUTH_MODE: sql
+      WAG_BAILEYS_AUTH_KEY: ${WAG_BAILEYS_AUTH_KEY:?set WAG_BAILEYS_AUTH_KEY}
+      WAG_BAILEYS_DB_HOST: database
+      WAG_BAILEYS_DB_PORT: 3306
+      WAG_BAILEYS_DB_DATABASE: ${WAG_DB_DATABASE:-wag_hub}
+      WAG_BAILEYS_DB_USERNAME: ${WAG_DB_USERNAME:-wag_hub}
+      WAG_BAILEYS_DB_PASSWORD: ${WAG_DB_PASSWORD:?set WAG_DB_PASSWORD}
+      WAG_HUB_CONTROL_URL: http://app
+    volumes:
+      - runner_data:/data
+    depends_on:
+      database:
+        condition: service_healthy
+      app:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "--input-type=module", "-e", "const r=await fetch('http://127.0.0.1:3318/health',{headers:{Authorization:'Bearer '+process.env.WAG_BAILEYS_TOKEN}});process.exit(r.ok?0:1)"]
+      interval: 15s
+      timeout: 8s
+      retries: 4
+    stop_grace_period: 20s
+
+volumes:
+  mysql_data:
+  hub_storage:
+  runner_data:

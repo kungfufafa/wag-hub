@@ -7,7 +7,9 @@ use App\Exceptions\WhatsAppEngineException;
 use App\Infrastructure\WhatsApp\BaileysClient;
 use App\Infrastructure\WhatsApp\InboxPayload;
 use App\Infrastructure\WhatsApp\WahaSessionClient;
+use App\Models\EngineSession;
 use App\Models\ProviderAccount;
+use App\Services\Engine\SessionService;
 use InvalidArgumentException;
 
 /**
@@ -19,11 +21,18 @@ final readonly class WhatsAppSessionManager
     public function __construct(
         private WahaSessionClient $client,
         private BaileysClient $native,
+        private SessionService $engine,
     ) {}
 
     public function connect(ProviderAccount $account, ?string $pairingPhone = null): SessionStatus
     {
         $this->assertSupported($account);
+
+        if ($session = $this->mappedSession($account)) {
+            return $this->mappedAction($account, $session, 'start', [
+                'mode' => $pairingPhone ? 'pairing' : 'qr', 'phone' => $pairingPhone,
+            ]);
+        }
 
         if ($account->driver === 'wag_hub') {
             return $this->persistNative($account, $this->native->start($account, $pairingPhone));
@@ -49,6 +58,10 @@ final readonly class WhatsAppSessionManager
     public function pairingCode(ProviderAccount $account): ?string
     {
         $this->assertSupported($account);
+
+        if ($session = $this->mappedSession($account)) {
+            return $this->mappedChallenge($session)['pairing_code'] ?? null;
+        }
 
         $meta = is_array($account->session_meta) ? $account->session_meta : [];
         $stored = is_string($meta['pairing_code'] ?? null) ? trim((string) $meta['pairing_code']) : '';
@@ -83,6 +96,10 @@ final readonly class WhatsAppSessionManager
     {
         $this->assertSupported($account);
 
+        if ($session = $this->mappedSession($account)) {
+            return $this->mappedAction($account, $session, 'logout');
+        }
+
         if ($account->driver === 'wag_hub') {
             return $this->persistNative($account, $this->native->logout($account));
         }
@@ -93,6 +110,13 @@ final readonly class WhatsAppSessionManager
     public function restart(ProviderAccount $account): SessionStatus
     {
         $this->assertSupported($account);
+
+        if ($session = $this->mappedSession($account)) {
+            // Do not resume if teardown is still pending or failed.
+            $this->mappedAction($account, $session, 'stop');
+
+            return $this->mappedAction($account, $session->fresh(), 'start', ['mode' => 'qr']);
+        }
 
         if ($account->driver === 'wag_hub') {
             $this->native->logout($account, false);
@@ -106,6 +130,10 @@ final readonly class WhatsAppSessionManager
     public function refresh(ProviderAccount $account): SessionStatus
     {
         $this->assertSupported($account);
+
+        if ($session = $this->mappedSession($account)) {
+            return $this->persistMapped($account, $session->trashed() ? $session : $this->engine->refresh($session));
+        }
 
         if ($account->driver === 'wag_hub') {
             try {
@@ -122,6 +150,10 @@ final readonly class WhatsAppSessionManager
     {
         $this->assertSupported($account);
 
+        if ($session = $this->mappedSession($account)) {
+            return $this->mappedChallenge($session)['qr'] ?? null;
+        }
+
         if ($account->driver === 'wag_hub') {
             try {
                 $snapshot = $this->native->status($account);
@@ -133,6 +165,88 @@ final readonly class WhatsAppSessionManager
         }
 
         return $this->client->qrDataUri($account);
+    }
+
+    /** Remove the legacy record only after its authoritative session is torn down. */
+    public function deleteProvider(ProviderAccount $account): bool
+    {
+        if (($session = $this->mappedSession($account)) && ! $session->trashed()) {
+            $this->mappedAction($account, $session, 'delete');
+        }
+
+        return (bool) $account->delete();
+    }
+
+    private function mappedSession(ProviderAccount $account): ?EngineSession
+    {
+        if ($account->driver !== 'wag_hub') {
+            return null;
+        }
+
+        // The immutable runner identity survives edited legacy configuration and tombstones.
+        return EngineSession::withTrashed()->where('runner_id', $this->native->sessionId($account))->first();
+    }
+
+    private function mappedAction(ProviderAccount $account, EngineSession $session, string $action, array $payload = []): SessionStatus
+    {
+        if ($session->trashed()) {
+            throw new WhatsAppEngineException('Sesi ini sudah dihapus. Tautkan akun baru.', 410, 'session_removed');
+        }
+
+        $operation = $this->engine->command($session, $action, $payload);
+        $this->engine->execute($operation);
+        $operation->refresh();
+        $status = $this->persistMapped($account, $session->fresh());
+
+        if ($operation->status !== 'completed') {
+            throw new WhatsAppEngineException(
+                $operation->status === 'failed'
+                    ? 'Operasi sesi gagal. Segarkan status sebelum mencoba lagi.'
+                    : 'Operasi tersimpan dan masih menunggu konfirmasi engine. Status akan diperbarui otomatis.',
+                503,
+                $operation->status === 'failed' ? ($operation->last_error ?? 'operation_failed') : 'operation_pending',
+                $operation->status !== 'failed',
+            );
+        }
+
+        return $status;
+    }
+
+    private function persistMapped(ProviderAccount $account, EngineSession $session): SessionStatus
+    {
+        $snapshot = $this->engine->snapshot($session);
+        $status = $snapshot['stale'] || $snapshot['pending_operation']
+            ? SessionStatus::Unknown
+            : SessionStatus::fromWaha($snapshot['status']);
+        $this->write($account, $status, [
+            'engine' => 'wag_hub', 'hub_session_id' => $session->uuid,
+            'raw' => $snapshot['status'], 'phone' => $snapshot['phone_number'],
+            'stale' => $snapshot['stale'], 'engine_available' => $snapshot['engine_available'],
+            'pending_operation' => $snapshot['pending_operation'], 'deleted' => $snapshot['deleted'],
+        ]);
+
+        return $status;
+    }
+
+    private function mappedChallenge(EngineSession $session): array
+    {
+        if ($session->trashed() || $session->desired_state !== 'RUNNING' || $session->pending_operation_id) {
+            return [];
+        }
+
+        try {
+            $challenge = $this->engine->challenge($session);
+            $current = $session->fresh();
+            if ($current->trashed() || $current->desired_state !== 'RUNNING' || $current->pending_operation_id
+                || $current->generation !== $session->generation
+                || (int) ($challenge['generation'] ?? -1) !== $current->generation) {
+                return [];
+            }
+
+            return $challenge;
+        } catch (WhatsAppEngineException) {
+            return [];
+        }
     }
 
     private function persistNative(ProviderAccount $account, array $snapshot): SessionStatus
@@ -174,6 +288,13 @@ final readonly class WhatsAppSessionManager
 
         if ($event !== 'session.status' && $event !== 'session.upsert' && $event !== 'state.change') {
             return false;
+        }
+
+        if ($session = $this->mappedSession($account)) {
+            // Legacy callbacks lack the generation fence; only project the hub's accepted observation.
+            $this->persistMapped($account, $session);
+
+            return true;
         }
 
         $inner = is_array($payload['payload'] ?? null) ? $payload['payload'] : $payload;

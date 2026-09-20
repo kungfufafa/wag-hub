@@ -4,7 +4,7 @@ Panduan ini memakai Linux, Nginx, PHP-FPM, MySQL/MariaDB, dan Supervisor. Ganti 
 
 ## 1. Siapkan server
 
-Pasang Git, PHP beserta ekstensi Laravel (`mbstring`, `xml`, `curl`, `zip`, `pdo_mysql`, `bcmath`), Composer, Node.js LTS, Nginx, MySQL/MariaDB, dan Supervisor.
+Pasang Git, PHP **8.4.1 atau lebih baru** beserta ekstensi Laravel (`mbstring`, `xml`, `curl`, `zip`, `pdo_mysql`, `bcmath`), Composer, Node.js LTS, Nginx, MySQL/MariaDB, dan Supervisor. Gunakan versi PHP yang sama untuk CLI, worker, dan PHP-FPM.
 
 Buat database dan user khusus Hub:
 
@@ -108,7 +108,7 @@ server {
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
         fastcgi_param DOCUMENT_ROOT $realpath_root;
-        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_pass unix:/run/php/php8.4-fpm.sock;
     }
 
     location ~ /\. {

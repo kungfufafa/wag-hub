@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\WhatsAppEngineException;
 use App\Http\Middleware\AuthenticateApiCredential;
 use App\Http\Middleware\EnforceClientRateLimit;
 use App\Http\Middleware\PromoteEnginePathToken;
@@ -7,6 +8,7 @@ use App\Http\Middleware\RequireApiAbility;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -19,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         then: function (): void {
             Route::middleware('api')->group(base_path('routes/webhooks.php'));
             Route::middleware('api')->group(base_path('routes/engine.php'));
+            Route::middleware('api')->group(base_path('routes/v2.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -30,5 +33,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (WhatsAppEngineException $error, Request $request) {
+            if ($request->is('api/v2/*')) {
+                return response()->json(['message' => $error->getMessage(), 'error' => ['code' => $error->errorCode, 'retryable' => $error->retryable]], $error->statusCode);
+            }
+        });
     })->create();

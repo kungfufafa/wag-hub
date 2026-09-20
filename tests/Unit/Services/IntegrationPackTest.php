@@ -30,7 +30,10 @@ class IntegrationPackTest extends TestCase
         $pack = app(IntegrationPack::class)->issue($application, 'https://hub.test');
 
         $this->assertSame($application->getKey(), $pack['credential']->credential->client_application_id);
-        $this->assertSame(['messages:send', 'messages:read', 'numbers:check', 'engine:use'], $pack['credential']->credential->abilities);
+        $this->assertEqualsCanonicalizing([
+            'integration:read', 'sessions:read', 'sessions:manage', 'messages:read', 'messages:send',
+            'media:read', 'media:write', 'webhooks:manage', 'capacity:manage', 'numbers:check', 'engine:use',
+        ], $pack['credential']->credential->abilities);
         $this->assertStringContainsString('WAG_TOKEN='.$pack['credential']->plainTextToken, $pack['env']);
         $this->assertNull($existing->credential->fresh()->revoked_at);
         $this->assertSame(2, $application->apiCredentials()->count());

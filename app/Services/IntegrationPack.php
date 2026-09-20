@@ -15,7 +15,7 @@ final readonly class IntegrationPack
         $credential = ApiCredential::issue(
             $application,
             'WAG_TOKEN '.(string) Str::uuid(),
-            ['messages:send', 'messages:read', 'numbers:check', 'engine:use'],
+            array_values(array_unique(array_merge(config('engine_v2.scopes', []), ['messages:send', 'messages:read', 'numbers:check', 'engine:use']))),
         );
 
         return [

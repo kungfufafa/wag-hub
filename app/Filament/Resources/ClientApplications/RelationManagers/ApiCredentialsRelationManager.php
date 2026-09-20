@@ -271,6 +271,13 @@ class ApiCredentialsRelationManager extends RelationManager
                                 'messages:read' => 'Baca status pesan',
                                 'numbers:check' => 'Cek nomor WhatsApp',
                                 'engine:use' => 'engine:use',
+                                'integration:read' => 'Baca integrasi dan kapasitas',
+                                'sessions:read' => 'Baca akun WhatsApp',
+                                'sessions:manage' => 'Kelola akun, QR dan pairing',
+                                'media:read' => 'Unduh media privat',
+                                'media:write' => 'Unggah media privat',
+                                'webhooks:manage' => 'Kelola webhook integrasi',
+                                'capacity:manage' => 'Kelola kapasitas dalam batas izin',
                             ])
                             ->default(['messages:send', 'messages:read'])
                             ->required()

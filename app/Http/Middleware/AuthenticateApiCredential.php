@@ -49,7 +49,7 @@ class AuthenticateApiCredential
         $request->attributes->set('api_credential', $credential);
         $request->attributes->set('client_application', $application);
 
-        return $next($request);
+        return app(TrackLegacyEngineTraffic::class)->handle($request, $next);
     }
 
     private function isUnavailable(ApiCredential $credential): bool

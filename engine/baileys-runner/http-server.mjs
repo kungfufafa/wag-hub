@@ -8,7 +8,7 @@ async function readJson(request) {
     for await (const chunk of request) {
         size += chunk.length;
 
-        if (size > 1000000) {
+        if (size > 24 * 1024 * 1024) {
             throw new EngineError('Payload terlalu besar.', 413, 'payload_too_large');
         }
 
@@ -36,6 +36,7 @@ function send(response, status, payload) {
     const body = JSON.stringify(payload);
     response.writeHead(status, {
         'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
         'Content-Length': Buffer.byteLength(body),
     });
     response.end(body);
@@ -50,7 +51,8 @@ export function createRequestHandler(engine, { logger = { error() {} }, startedA
                 send(response, 401, { ok: false, status: 'failed', error_code: 'unauthenticated', retryable: false });
                 return;
             }
-            const pathname = new URL(request.url || '/', 'http://127.0.0.1').pathname.replace(/\/+$/, '') || '/';
+            const url = new URL(request.url || '/', 'http://127.0.0.1');
+            const pathname = url.pathname.replace(/\/+$/, '') || '/';
 
             if (request.method === 'GET' && pathname === '/health') {
                 send(response, 200, { ...engine.health(), uptime_ms: Date.now() - startedAt, pid: process.pid });
@@ -70,7 +72,16 @@ export function createRequestHandler(engine, { logger = { error() {} }, startedA
                 return;
             }
 
-            const route = pathname.match(/^\/sessions\/([^/]+)(?:\/(send|messages|numbers)(?:\/([^/]+))?)?$/);
+            if (request.method === 'GET' && pathname === '/events') {
+                send(response, 200, await engine.events(url.searchParams.get('after') || '0'));
+                return;
+            }
+            const eventRoute = pathname.match(/^\/events\/([a-f0-9-]{36})$/);
+            if (request.method === 'DELETE' && eventRoute) {
+                send(response, 200, engine.acknowledgeEvent(eventRoute[1]));
+                return;
+            }
+            const route = pathname.match(/^\/sessions\/([^/]+)(?:\/(send|messages|numbers|start|stop|logout|auth)(?:\/([^/]+))?)?$/);
 
             if (!route) {
                 throw new EngineError('Not found', 404, 'not_found');
@@ -92,8 +103,22 @@ export function createRequestHandler(engine, { logger = { error() {} }, startedA
                 send(response, 200, engine.session(id));
             } else if (!route[2] && request.method === 'DELETE') {
                 const payload = await readJson(request);
-                send(response, 200, await engine.stopSession(id, payload.logout !== false));
-            } else if (route[2] === 'send' && !key && request.method === 'POST') {
+                send(response, 200, await engine.stopSession(id, payload.logout !== false, { generation: payload.generation, deleting: true }));
+            } else if (route[2] === 'start' && request.method === 'POST') {
+                const payload = await readJson(request);
+                send(response, 200, await engine.startSession(id, { ...payload, mode: payload.mode || 'qr' }));
+            } else if (['stop', 'logout'].includes(route[2]) && request.method === 'POST') {
+                const payload = await readJson(request);
+                send(response, 200, await engine.stopSession(id, route[2] === 'logout', { generation: payload.generation }));
+            } else if (route[2] === 'auth' && key === 'qr' && request.method === 'GET') {
+                send(response, 200, engine.session(id));
+            } else if (route[2] === 'auth' && key === 'pairing-code' && request.method === 'POST') {
+                const payload = await readJson(request);
+                send(response, 200, await engine.startSession(id, { ...payload, mode: 'pairing' }));
+            } else if (route[2] === 'messages' && !key && request.method === 'POST') {
+                const result = await engine.sendMessage(id, await readJson(request));
+                send(response, result.status === 'failed' ? 409 : 200, result);
+            } else if (route[2] === 'send'  && !key && request.method === 'POST') {
                 const result = await engine.sendText(id, await readJson(request));
                 send(response, result.status === 'failed' ? 409 : 200, result);
             } else if (route[2] === 'numbers' && key === 'check' && request.method === 'POST') {

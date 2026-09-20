@@ -6,10 +6,12 @@
     "type": "module",
     "scripts": {
         "start": "node --env-file-if-exists=.env server.mjs",
-        "test": "node --test *.test.mjs"
+        "test": "node --test *.test.mjs",
+        "import-file-auth": "node --env-file-if-exists=.env import-file-auth.mjs"
     },
     "dependencies": {
         "@whiskeysockets/baileys": "^6.7.21",
+        "mysql2": "^3.24.4",
         "pino": "^9.6.0",
         "qrcode": "^1.5.4"
     },
