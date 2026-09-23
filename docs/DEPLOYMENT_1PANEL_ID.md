@@ -68,8 +68,6 @@ GATEWAY_ATTACHMENT_MAX_BYTES=16777216
 GATEWAY_ATTACHMENT_RETENTION_DAYS=90
 GATEWAY_ATTACHMENT_ORPHAN_HOURS=24
 
-GATEWAY_PROVIDER_HTTPS_HOSTS=wa.example.com,api.fonnte.com
-GATEWAY_PROVIDER_HTTP_HOSTS=
 GATEWAY_PROVIDER_FAILURE_THRESHOLD=3
 GATEWAY_PROVIDER_CIRCUIT_SECONDS=300
 
@@ -168,7 +166,6 @@ php artisan gateway:recover-stale --minutes=10 --limit=100 --dry-run
 - Website HTTPS dapat dibuka.
 - Supervisor worker berstatus Running.
 - Cron Job berjalan setiap menit.
-- Provider hostname sudah masuk allowlist `GATEWAY_PROVIDER_HTTPS_HOSTS`.
 - Satu pesan uji dari masing-masing aplikasi sumber menghasilkan status **Diterima provider** di menu **Pesan**.
 - Backup database dan file `.env` sudah aktif.
 

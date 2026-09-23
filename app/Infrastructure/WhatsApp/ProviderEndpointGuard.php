@@ -38,16 +38,6 @@ final class ProviderEndpointGuard
         if ($this->isBlockedHost($host) || $this->isBlockedIp($ipCandidate)) {
             throw $this->notAllowed();
         }
-
-        $httpsHosts = $this->configuredHosts('gateway.provider_endpoints.https_hosts');
-        $httpHosts = $this->configuredHosts('gateway.provider_endpoints.http_hosts');
-        $allowedHosts = $scheme === 'https'
-            ? array_values(array_unique([...$httpsHosts, ...$httpHosts]))
-            : $httpHosts;
-
-        if (! in_array($host, $allowedHosts, true)) {
-            throw $this->notAllowed();
-        }
     }
 
     private function isBlockedHost(string $host): bool
@@ -67,23 +57,6 @@ final class ProviderEndpointGuard
             FILTER_VALIDATE_IP,
             FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
         ) === false;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function configuredHosts(string $key): array
-    {
-        $hosts = config($key, []);
-
-        if (! is_array($hosts)) {
-            return [];
-        }
-
-        return array_values(array_unique(array_filter(array_map(
-            static fn (mixed $host): string => strtolower(trim((string) $host)),
-            $hosts,
-        ))));
     }
 
     private function notAllowed(): InvalidArgumentException

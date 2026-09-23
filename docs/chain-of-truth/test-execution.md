@@ -18,7 +18,7 @@ Executed at: 2026-09-14
 
 ## Residual risk and release decision
 
-Kode berstatus **ready for controlled pilot configuration**, bukan production go-live. Pilot masih memerlukan HTTPS/domain, database dan backup, process manager, queue worker, scheduler, endpoint allowlist, credential baru, deployment adapter Shelf, serta satu smoke test nyata untuk setiap provider.
+Kode berstatus **ready for controlled pilot configuration**, bukan production go-live. Pilot masih memerlukan HTTPS/domain, database dan backup, process manager, queue worker, scheduler, credential baru, deployment adapter Shelf, serta satu smoke test nyata untuk setiap provider.
 
 Risiko yang sengaja belum ditutup dalam outbound MVP:
 

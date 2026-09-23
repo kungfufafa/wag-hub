@@ -100,21 +100,18 @@ php artisan schedule:work
 
 Pada server pilot/production, kelola web process dan queue worker dengan process manager. Scheduler Laravel wajib dijalankan setiap menit, misalnya melalui cron `php artisan schedule:run`; scheduler ini merekonsiliasi proses stale dan mengantrekan ulang handoff queue yang sempat gagal.
 
-## Allowlist endpoint provider
+## Endpoint provider
 
-Hub hanya boleh menghubungi hostname provider yang didaftarkan secara eksplisit:
+URL provider diambil dari akun provider. Tidak perlu mendaftarkan hostname di environment.
 
 ```dotenv
-GATEWAY_PROVIDER_HTTPS_HOSTS=api.fonnte.com,graph.facebook.com,waha.internal.example,gowa.internal.example
-GATEWAY_PROVIDER_HTTP_HOSTS=
 GATEWAY_PROVIDER_FAILURE_THRESHOLD=3
 GATEWAY_PROVIDER_CIRCUIT_SECONDS=300
 ```
 
-- Tambahkan hostname WAHA/GOWA yang benar ke allowlist HTTPS. Jangan menyalin hostname contoh apa adanya.
-- HTTP biasa ditolak kecuali hostname dimasukkan ke `GATEWAY_PROVIDER_HTTP_HOSTS` secara eksplisit.
-- `localhost`, literal private/loopback IP, metadata host, userinfo URL, subdomain yang tidak persis cocok, dan redirect tidak diikuti.
-- Setelah mengubah konfigurasi: jalankan `php artisan config:cache`, lalu `php artisan queue:restart` agar worker memakai allowlist terbaru.
+- HTTP dan HTTPS ke hostname publik diterima.
+- `localhost`, literal private/loopback IP, metadata host, userinfo URL, dan redirect tidak diikuti.
+- Setelah mengubah konfigurasi: jalankan `php artisan config:cache`, lalu `php artisan queue:restart` agar worker memakai konfigurasi terbaru.
 
 ## Konfigurasi awal
 
@@ -332,7 +329,7 @@ Token Shelf cukup diberi ability `messages:send` (`messages:read` hanya bila She
 
 - Hub memakai `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL` HTTPS, `APP_KEY` persisten dan dibackup.
 - Database production, backup, web process, queue worker, dan scheduler aktif.
-- Semua host provider terpilih sudah masuk allowlist dan worker telah direstart.
+- Worker telah direstart setelah perubahan konfigurasi.
 - Credential lama yang pernah tertanam di aplikasi/Apps Script sudah dirotasi.
 - Satu smoke test nyata untuk setiap provider aktif diverifikasi dari ledger sebelum trafik aplikasi dialihkan.
 - Adapter Shelf sudah masuk branch deployment (`staging`/`main`) dan environment Shelf telah direcache.

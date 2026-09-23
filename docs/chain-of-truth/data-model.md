@@ -60,7 +60,7 @@ Used by: UC-001, UC-002, UC-003, UC-004
 | timeout_seconds | unsigned int | yes | 1–60, default 15 | Internal |
 | timestamps/deleted_at | datetime | yes/no | soft delete | Internal |
 
-Endpoint harus melewati validation/allowlist deployment; arbitrary private/metadata address ditolak untuk mengurangi SSRF.
+Hostname publik http/https diterima dari akun provider. Alamat private, loopback, dan metadata ditolak untuk mengurangi SSRF.
 
 ### ENT-004 — RoutingPolicy
 

@@ -97,7 +97,7 @@ Gateway Hub menjadi satu batas transport WhatsApp. Aplikasi sumber tetap memilik
 
 | ID | Quality | Measurable requirement | Verification |
 |---|---|---|---|
-| NFR-001 | Security | Provider credential, message body, metadata, dan error sensitif tersimpan terenkripsi; API token hanya tersimpan sebagai SHA-256 hash; endpoint provider wajib exact-host allowlist; admin nonaktif/non-admin ditolak. | Model cast review, endpoint guard tests, TC-001–TC-003, TC-038 |
+| NFR-001 | Security | Provider credential, message body, metadata, dan error sensitif tersimpan terenkripsi; API token hanya tersimpan sebagai SHA-256 hash; endpoint provider menolak alamat private, loopback, dan metadata; admin nonaktif/non-admin ditolak. | Model cast review, endpoint guard tests, TC-001–TC-003, TC-038 |
 | NFR-002 | Reliability | Idempotency harus tetap benar pada request berulang dan unique constraint menjadi guard terakhir. | TC-007–TC-009 |
 | NFR-003 | Performance | Validasi/queue response lokal p95 target <300 ms di luar waktu provider; latency provider dicatat per attempt. | Benchmark pasca-deploy dan TC-031 |
 | NFR-004 | Privacy | List admin selalu mem-mask recipient; raw body tidak muncul di application log; OTP content direkomendasikan retensi maksimal 24 jam. | UI/code review |

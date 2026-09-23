@@ -11,7 +11,6 @@
 #   2. docker compose -f engine/docker-compose.yml up -d
 #   3. In the Hub, add a Provider Account (driver: WAHA):
 #        base_url = http://<host>:3000   session = default   api_key = <WAHA_API_KEY>
-#      and add that host to GATEWAY_PROVIDER_HTTP_HOSTS / _HTTPS_HOSTS.
 #   4. Open "Perangkat WhatsApp" and scan the QR.
 #
 # NOTE: Baileys/WA-Web is unofficial. Use it for conversational/business chat,

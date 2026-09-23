@@ -23,10 +23,7 @@ Lalu di Hub:
    - Base URL: `http://<host>:3000`
    - Session: `default`
    - API key: nilai `WAHA_API_KEY`
-2. Tambahkan host engine ke allowlist di `.env` Hub:
-   `GATEWAY_PROVIDER_HTTP_HOSTS=<host>` (atau `GATEWAY_PROVIDER_HTTPS_HOSTS` jika HTTPS),
-   lalu `php artisan config:cache`.
-3. Buka **Perangkat WhatsApp**, klik **Hubungkan**, dan pindai QR dengan
+2. Buka **Perangkat WhatsApp**, klik **Hubungkan**, dan pindai QR dengan
    WhatsApp (Setelan → Perangkat tertaut → Tautkan perangkat).
 
 Webhook pesan masuk dikonfigurasi otomatis oleh Hub saat sesi dimulai

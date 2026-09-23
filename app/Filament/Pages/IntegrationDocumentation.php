@@ -54,7 +54,7 @@ class IntegrationDocumentation extends Page
                             ->content('Tombol Buat WAG_TOKEN & ENGINE_URL. WAG_TOKEN ke Authorization Bearer. ENGINE_URL ke /engine/t/{token}.'),
                         Placeholder::make('step_3')
                             ->label('3. Akun Provider WAHA')
-                            ->content('Driver WAHA: base_url, session, api_key. Host masuk GATEWAY_PROVIDER_HTTP_HOSTS.'),
+                            ->content('Driver WAHA: base_url, session, api_key. Hostname publik dipakai langsung dari akun provider.'),
                         Placeholder::make('step_4')
                             ->label('4. QR')
                             ->content('Perangkat WhatsApp → Hubungkan, atau POST /engine/sessions dari WhatsAppEngineClient.'),

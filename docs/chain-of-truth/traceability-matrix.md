@@ -25,7 +25,7 @@ Baseline/version: 0.1.0
 
 | Requirement | Control/design | Verification | Evidence/result |
 |---|---|---|---|
-| NFR-001 | hashed client token, encrypted casts, admin gate, endpoint allowlist | TC-001–003, 032, 038–040, 051 | Pass; dependency audits clean |
+| NFR-001 | hashed client token, encrypted casts, admin gate, private/metadata endpoint block | TC-001–003, 032, 038–040, 051 | Pass; dependency audits clean |
 | NFR-002 | unique app+key + keyed payload fingerprint | TC-007–009 | Pass |
 | NFR-003 | local response target and attempt latency | TC-015, TC-031, deployment benchmark | Functional pass; production p95 pending |
 | NFR-004 | masking + retention rules | TC-032, TC-042, AttachmentUploadTest, code review | Masking/encryption and automated attachment cleanup pass |

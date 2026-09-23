@@ -88,8 +88,8 @@ kecil/angka/hyphen, tanpa dua hyphen berturut-turut atau hyphen di akhir.
 
 1. Di **Akun Provider**, pilih **WAG Hub (bawaan)** dan simpan akun. Tidak perlu
    URL atau token provider tambahan. Tautkan nomor di **Perangkat WhatsApp**.
-2. Tambahkan akun WAHA, GOWA, Fonnte, atau WABA jika diperlukan. Daftarkan
-   hostname eksternalnya pada allowlist provider sesuai README.
+2. Tambahkan akun WAHA, GOWA, Fonnte, atau WABA jika diperlukan. Isi URL
+   provider di akun itu; hostname publik tidak perlu didaftarkan di environment.
 3. Buat **Aturan Rute** untuk aplikasi dan susun prioritas, misalnya WAG Hub
    bawaan → Fonnte, atau WAHA → WAG Hub bawaan.
 4. Kirim ke `/api/v1/messages` dengan `Idempotency-Key`, `route_key`, dan

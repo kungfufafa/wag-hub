@@ -17,7 +17,7 @@ class ProviderEndpointEnforcementTest extends TestCase
      * @param  array<string, string>  $configuration
      */
     #[DataProvider('blockedProviderEndpoints')]
-    public function test_drivers_never_send_http_to_a_provider_host_outside_the_allowlist(
+    public function test_drivers_never_send_http_to_a_private_or_metadata_provider_host(
         string $driver,
         array $configuration,
     ): void {
@@ -53,7 +53,7 @@ class ProviderEndpointEnforcementTest extends TestCase
             'WAHA' => [
                 'waha',
                 [
-                    'base_url' => 'https://attacker.example',
+                    'base_url' => 'https://127.0.0.1',
                     'api_key' => 'waha-secret',
                     'session' => 'default',
                 ],
@@ -61,14 +61,14 @@ class ProviderEndpointEnforcementTest extends TestCase
             'Fonnte' => [
                 'fonnte',
                 [
-                    'endpoint' => 'https://attacker.example/send',
+                    'endpoint' => 'https://127.0.0.1/send',
                     'token' => 'fonnte-secret',
                 ],
             ],
             'GOWA' => [
                 'gowa',
                 [
-                    'base_url' => 'https://attacker.example',
+                    'base_url' => 'https://127.0.0.1',
                     'username' => 'gateway',
                     'password' => 'gowa-secret',
                 ],
@@ -76,7 +76,7 @@ class ProviderEndpointEnforcementTest extends TestCase
             'WABA' => [
                 'waba',
                 [
-                    'base_url' => 'https://attacker.example',
+                    'base_url' => 'https://127.0.0.1',
                     'api_version' => 'v25.0',
                     'phone_number_id' => '123456789012345',
                     'access_token' => 'meta-token',
