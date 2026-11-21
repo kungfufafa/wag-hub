@@ -7,6 +7,7 @@ use App\Models\ApiCredential;
 use App\Models\ClientApplication;
 use App\Models\User;
 use App\Models\WhatsAppConnection;
+use App\Services\IntegrationPack;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
@@ -110,7 +111,7 @@ class ConnectWhatsAppPageTest extends TestCase
             'is_active' => true,
             'rate_limit_per_minute' => 60,
         ]);
-        ApiCredential::issue($application, 'Existing', ['messages:send', 'messages:read']);
+        ApiCredential::issue($application, 'Existing', app(IntegrationPack::class)->abilities());
         Http::fake([
             'https://api.fonnte.com/*' => Http::response(['status' => true, 'id' => 'fonnte-test']),
         ]);

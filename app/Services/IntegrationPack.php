@@ -15,7 +15,7 @@ final readonly class IntegrationPack
         $credential = ApiCredential::issue(
             $application,
             'WAG_TOKEN '.(string) Str::uuid(),
-            array_values(array_unique(array_merge(config('engine_v2.scopes', []), ['messages:send', 'messages:read', 'numbers:check', 'engine:use']))),
+            $this->abilities(),
         );
 
         return [
@@ -24,20 +24,38 @@ final readonly class IntegrationPack
         ];
     }
 
+    /**
+     * Every ability a pack token carries: the v2 full-control preset plus the v1 abilities.
+     *
+     * @return list<string>
+     */
+    public function abilities(): array
+    {
+        return array_values(array_unique(array_merge(config('engine_v2.scopes', []), ['messages:send', 'messages:read', 'numbers:check', 'engine:use'])));
+    }
+
+    /**
+     * Oldest active credential that already holds every pack ability. Limited or
+     * pre-v2 credentials never qualify, so they are not handed out as the pack token.
+     */
     public function existingUsable(ClientApplication $application): ?ApiCredential
     {
+        $required = $this->abilities();
+
         return $application->apiCredentials()
             ->whereNull('revoked_at')
             ->where(function ($query): void {
                 $query->whereNull('expires_at')->orWhere('expires_at', '>', now());
             })
             ->orderBy('id')
-            ->first();
+            ->get()
+            ->first(fn (ApiCredential $credential): bool => array_diff($required, $credential->abilities ?? []) === []);
     }
 
     /**
-     * Reuse an existing token when one is already issued. Plaintext cannot be
-     * recovered, so the snippet shows the stored prefix instead of minting again.
+     * Reuse an existing full pack token when one is already issued. Plaintext cannot be
+     * recovered, so the snippet names the stored prefix and asks for the saved token.
+     * Otherwise a new token is issued and its plaintext is shown once.
      *
      * @return array{issued: bool, credential: IssuedApiCredential|null, env: string}
      */
@@ -49,11 +67,12 @@ final readonly class IntegrationPack
             return [
                 'issued' => false,
                 'credential' => null,
-                'env' => $this->envSnippet(
-                    $application,
-                    $baseUrl ?? $this->hubUrl(),
-                    $existing->token_prefix.'…',
-                ),
+                'env' => '# Token sudah pernah diterbitkan dan tidak bisa ditampilkan ulang; pakai WAG_TOKEN yang tersimpan (awalan '.$existing->token_prefix.').'
+                    ."\n".$this->envSnippet(
+                        $application,
+                        $baseUrl ?? $this->hubUrl(),
+                        $existing->token_prefix.'…',
+                    ),
             ];
         }
 

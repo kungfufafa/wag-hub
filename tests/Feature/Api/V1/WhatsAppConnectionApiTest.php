@@ -180,12 +180,6 @@ class WhatsAppConnectionApiTest extends TestCase
     public function test_routed_connection_may_use_configured_fallback(): void
     {
         $client = $this->createClientApplication(['messages:send', 'messages:read']);
-        config([
-            'gateway.provider_endpoints.https_hosts' => array_values(array_unique([
-                ...config('gateway.provider_endpoints.https_hosts', []),
-                'primary.waha.test',
-            ])),
-        ]);
         Http::fake([
             'https://primary.waha.test/*' => Http::response(['error' => 'rejected'], 400),
             'https://api.fonnte.com/*' => Http::response(['status' => true, 'id' => 'fonnte-1']),
@@ -288,12 +282,6 @@ class WhatsAppConnectionApiTest extends TestCase
     public function test_a_second_provider_connection_keeps_its_own_policy_and_does_not_become_fallback(): void
     {
         $client = $this->createClientApplication(['messages:send', 'messages:read']);
-        config([
-            'gateway.provider_endpoints.https_hosts' => array_values(array_unique([
-                ...config('gateway.provider_endpoints.https_hosts', []),
-                'secondary.waha.test',
-            ])),
-        ]);
         Http::fake([
             'https://api.fonnte.com/*' => Http::response(['status' => true, 'id' => 'fonnte-1']),
             'https://secondary.waha.test/*' => Http::response(['id' => 'waha-1'], 201),
