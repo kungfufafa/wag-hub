@@ -178,7 +178,10 @@ class ConnectWhatsApp extends Page
         }
 
         try {
-            $connection = app(ConnectionProvisioner::class)->retry($connection);
+            $connection = app(ConnectionProvisioner::class)->retry(
+                $connection,
+                $this->provisioningPayload()['provider']['configuration'] ?? [],
+            );
             $this->connectionUuid = $connection->uuid;
             Notification::make()->title('Setup dilanjutkan')->success()->send();
         } catch (Throwable $exception) {

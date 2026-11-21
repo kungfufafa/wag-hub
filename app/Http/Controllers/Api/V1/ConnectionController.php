@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\WhatsAppConnectionException;
+use App\Exceptions\WhatsAppEngineException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ConnectWhatsAppConnectionRequest;
 use App\Http\Requests\StoreConnectionRequest;
@@ -43,7 +44,7 @@ class ConnectionController extends Controller
     {
         try {
             $provisioned = $this->provisioner->provision($this->application($request), $request->payload());
-        } catch (WhatsAppConnectionException $exception) {
+        } catch (WhatsAppConnectionException|WhatsAppEngineException $exception) {
             return $this->failure($request, $exception);
         }
 
@@ -57,7 +58,7 @@ class ConnectionController extends Controller
     {
         try {
             $connection = $this->resolver->resolve($this->application($request), $uuid);
-        } catch (WhatsAppConnectionException $exception) {
+        } catch (WhatsAppConnectionException|WhatsAppEngineException $exception) {
             return $this->failure($request, $exception);
         }
 
@@ -72,7 +73,7 @@ class ConnectionController extends Controller
         try {
             $connection = $this->resolver->resolve($this->application($request), $uuid);
             $connection = $this->provisioner->connect($connection, $request->validated());
-        } catch (WhatsAppConnectionException $exception) {
+        } catch (WhatsAppConnectionException|WhatsAppEngineException $exception) {
             return $this->failure($request, $exception);
         }
 
@@ -86,8 +87,9 @@ class ConnectionController extends Controller
     {
         try {
             $connection = $this->resolver->resolve($this->application($request), $uuid);
-            $connection = $this->provisioner->retry($connection);
-        } catch (WhatsAppConnectionException $exception) {
+            $configuration = $request->input('provider.configuration');
+            $connection = $this->provisioner->retry($connection, is_array($configuration) ? $configuration : []);
+        } catch (WhatsAppConnectionException|WhatsAppEngineException $exception) {
             return $this->failure($request, $exception);
         }
 
@@ -105,7 +107,11 @@ class ConnectionController extends Controller
             'purpose' => $request->input('purpose', 'notification'),
         ]);
 
-        return app(MessageController::class)->store($request);
+        try {
+            return app(MessageController::class)->store($request);
+        } catch (WhatsAppEngineException $exception) {
+            return $this->failure($request, $exception);
+        }
     }
 
     private function application(Request $request): ClientApplication
@@ -121,14 +127,16 @@ class ConnectionController extends Controller
         return (string) $request->attributes->get('request_id');
     }
 
-    private function failure(Request $request, WhatsAppConnectionException $exception): JsonResponse
+    private function failure(Request $request, WhatsAppConnectionException|WhatsAppEngineException $exception): JsonResponse
     {
+        $auditId = $exception instanceof WhatsAppConnectionException ? $exception->auditId : null;
+
         return response()->json([
             'message' => $exception->getMessage(),
             'error' => $this->errors->applicationError(
                 $exception->errorCode,
                 $exception->retryable,
-                $exception->auditId ?? $this->requestId($request),
+                $auditId ?? $this->requestId($request),
                 true,
             ),
             'request_id' => $this->requestId($request),

@@ -59,17 +59,7 @@ final class ConnectionProvisioner
 
             throw $exception;
         } catch (WhatsAppEngineException $exception) {
-            $code = $exception->errorCode === 'engine_unavailable' || $exception->errorCode === 'engine_unconfigured'
-                ? 'connection_not_ready'
-                : $exception->errorCode;
-            $this->markRecoverableFailure($connection, $code, $exception->getMessage());
-
-            throw new WhatsAppConnectionException(
-                $exception->getMessage(),
-                $exception->statusCode,
-                $code,
-                $exception->retryable,
-            );
+            throw $this->engineFailure($connection, $exception);
         }
 
         return new ProvisionedConnection(
@@ -110,7 +100,12 @@ final class ConnectionProvisioner
             return $this->health->refresh($connection);
         }
 
-        $this->sessions->connect($account, $mode === 'pairing' ? $phone : null);
+        try {
+            $this->sessions->connect($account, $mode === 'pairing' ? $phone : null);
+        } catch (WhatsAppEngineException $exception) {
+            throw $this->engineFailure($connection, $exception);
+        }
+
         $connection->forceFill([
             'setup_state' => array_merge($connection->setup_state ?? [], [
                 'session_id' => $connection->sessionId(),
@@ -124,7 +119,10 @@ final class ConnectionProvisioner
         return $this->health->refresh($connection->fresh() ?? $connection);
     }
 
-    public function retry(WhatsAppConnection $connection): WhatsAppConnection
+    /**
+     * @param  array<string, mixed>  $configuration  Corrected provider settings; omitted keys keep their stored value.
+     */
+    public function retry(WhatsAppConnection $connection, array $configuration = []): WhatsAppConnection
     {
         $account = $connection->providerAccount;
 
@@ -140,8 +138,9 @@ final class ConnectionProvisioner
             'mode' => $connection->setup_state['mode'] ?? 'qr',
             'phone' => $connection->setup_state['phone'] ?? null,
             'provider' => [
-                'driver' => $connection->providerAccount?->driver,
-                'configuration' => $connection->providerAccount?->configuration ?? [],
+                // A first validation failure leaves no account, so the requested driver lives in setup_state.
+                'driver' => $account?->driver ?? ($connection->setup_state['driver'] ?? null),
+                'configuration' => $configuration,
             ],
         ])->connection;
     }
@@ -259,6 +258,13 @@ final class ConnectionProvisioner
                 409,
                 'capability_not_supported',
             );
+        }
+
+        if ($driver !== '') {
+            // Remember the requested driver so retry can re-run validation before an account exists.
+            $connection->forceFill([
+                'setup_state' => array_merge($connection->setup_state ?? [], ['driver' => $driver]),
+            ])->save();
         }
 
         $existing = $account?->configuration ?? [];
@@ -492,6 +498,31 @@ final class ConnectionProvisioner
             ->update(['is_default' => false]);
 
         $connection->forceFill(['is_default' => true])->save();
+    }
+
+    /**
+     * Runner outages are transient: report them as a retryable not-ready connection, never as bad credentials.
+     */
+    private function engineFailure(WhatsAppConnection $connection, WhatsAppEngineException $exception): WhatsAppConnectionException
+    {
+        $unavailable = in_array(
+            $exception->errorCode,
+            ['engine_unavailable', 'engine_unconfigured', 'engine_unreachable'],
+            true,
+        );
+        $code = $unavailable ? 'connection_not_ready' : $exception->errorCode;
+        $retryable = $unavailable || $exception->retryable;
+
+        if ($unavailable || $exception->errorCode !== 'operation_pending') {
+            $this->markRecoverableFailure($connection, $code, $exception->getMessage());
+        }
+
+        return new WhatsAppConnectionException(
+            $exception->getMessage(),
+            $exception->statusCode,
+            $code,
+            $retryable,
+        );
     }
 
     private function markRecoverableFailure(WhatsAppConnection $connection, string $code, string $message): void

@@ -35,6 +35,18 @@ class MessageController extends Controller
         /** @var ClientApplication $application */
         $application = $request->attributes->get('client_application');
 
+        $payloadHash = $request->payloadHash();
+
+        // A replay of an accepted message returns the stored result whatever the connection's state is now.
+        $existing = $this->findExisting(
+            applicationId: $application->getKey(),
+            idempotencyKey: $request->idempotencyKey(),
+        );
+
+        if ($existing !== null) {
+            return $this->idempotentResponse($request, $existing, $payloadHash);
+        }
+
         try {
             $connection = $this->resolvedConnection($request, $application);
         } catch (WhatsAppConnectionException $exception) {
@@ -57,17 +69,6 @@ class MessageController extends Controller
                     $connection->uuid,
                 ));
             }
-        }
-
-        $payloadHash = $request->payloadHash();
-
-        $existing = $this->findExisting(
-            applicationId: $application->getKey(),
-            idempotencyKey: $request->idempotencyKey(),
-        );
-
-        if ($existing !== null) {
-            return $this->idempotentResponse($request, $existing, $payloadHash);
         }
 
         try {

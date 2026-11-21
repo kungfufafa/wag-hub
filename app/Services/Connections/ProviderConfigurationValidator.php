@@ -71,7 +71,7 @@ final class ProviderConfigurationValidator
 
         if ($driver !== 'wag_hub' && ($secret === null || blank($merged[$secret] ?? null))) {
             throw new WhatsAppConnectionException(
-                'Provider credentials are incomplete.',
+                'Provider credentials are incomplete: '.($secret ?? 'credentials').' is required.',
                 422,
                 'connection_not_ready',
             );

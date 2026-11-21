@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\WhatsAppConnections\Pages;
 
+use App\Exceptions\WhatsAppConnectionException;
+use App\Exceptions\WhatsAppEngineException;
 use App\Filament\Resources\WhatsAppConnections\WhatsAppConnectionResource;
 use App\Filament\Support\CopiesToClipboard;
 use App\Services\Connections\ConnectionHealthProjector;
@@ -118,9 +120,14 @@ class ViewWhatsAppConnection extends ViewRecord
                 ->icon(Heroicon::OutlinedQrCode)
                 ->visible(fn (): bool => $this->getRecord()->providerAccount?->supportsSessions() ?? false)
                 ->action(function (): void {
-                    app(ConnectionProvisioner::class)->connect($this->getRecord());
+                    try {
+                        app(ConnectionProvisioner::class)->connect($this->getRecord());
+                        Notification::make()->title('Koneksi diperbarui')->success()->send();
+                    } catch (WhatsAppConnectionException|WhatsAppEngineException $exception) {
+                        Notification::make()->title('Gagal menghubungkan ulang')->body($exception->getMessage())->danger()->send();
+                    }
+
                     $this->refreshRecord();
-                    Notification::make()->title('Koneksi diperbarui')->success()->send();
                 }),
             Action::make('test')
                 ->label('Kirim pesan uji')

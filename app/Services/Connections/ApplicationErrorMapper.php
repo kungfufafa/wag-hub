@@ -14,7 +14,7 @@ final class ApplicationErrorMapper
             'invalid_phone', 'recipient_invalid' => ApplicationErrorCode::RecipientInvalid,
             'connection_not_found', 'not_found' => ApplicationErrorCode::ConnectionNotFound,
             'not_connected', 'route_unavailable', 'engine_unavailable',
-            'engine_provider_unavailable', 'connection_not_ready' => ApplicationErrorCode::ConnectionNotReady,
+            'engine_provider_unavailable', 'connection_not_ready', 'operation_pending' => ApplicationErrorCode::ConnectionNotReady,
             'attachment_format_unsupported', 'capability_not_supported',
             'provider_driver_unsupported' => ApplicationErrorCode::CapabilityNotSupported,
             'message_expired' => ApplicationErrorCode::MessageExpired,
