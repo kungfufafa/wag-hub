@@ -1,16 +1,156 @@
-# WAG Hub: provider WhatsApp dan router mandiri
+# WAG Hub: plug and play WhatsApp
 
-WAG Hub mengurus koneksi WhatsApp, QR/pairing, logout, penyimpanan sesi, dan
-pengiriman. CESA, DND, atau aplikasi lain cukup memanggil HTTP API dari backend.
-Masing-masing aplikasi mempunyai token sendiri; ID sesi yang sama pada dua
-aplikasi tetap mengarah ke perangkat dan jurnal pesan yang berbeda.
+A consuming application only needs three concepts:
 
-WAG Hub memiliki provider bawaan berbasis Baileys. Provider ini memakai alur
-pengiriman, ledger, dan routing yang sama dengan WAHA, GOWA, Fonnte, dan WABA.
-UI CESA menggunakan API Hub untuk mengelola nomor; aplikasi lain dapat memakai
-kontrak yang sama tanpa bergantung pada modul Rekrutmen.
+**App → WhatsApp Connection → Message**
 
-## 1. Siapkan service sekali di WAG Hub
+The application integrates with `WAG_URL`, `WAG_TOKEN`, and one send call.
+Provider accounts, engine drivers, routing policies, route keys, and session
+implementation stay inside WAG Hub.
+
+## Happy path
+
+1. Create or select an **App**.
+2. Open **Hubungkan WhatsApp**.
+3. Choose **Pakai nomor WhatsApp saya** or **Pakai provider**.
+4. Scan QR / enter a pairing code, or enter provider credentials.
+5. Send a test message.
+6. Copy integration configuration.
+
+```dotenv
+WAG_URL=https://gateway.example.com
+WAG_TOKEN=wgh_token-aplikasi-ini
+```
+
+Every request goes to the v2 Connection API with the same token. List the
+application's connections once and keep the `id` of the one to send from:
+
+```bash
+curl "$WAG_URL/api/v2/connections" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
+  -H "Accept: application/json"
+```
+
+Send through that connection:
+
+```bash
+curl -X POST "$WAG_URL/api/v2/connections/$CONNECTION_ID/messages" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
+  -H "Idempotency-Key: order-1" \
+  -H "Accept: application/json" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "6281234567890", "type": "text", "text": "Halo"}'
+```
+
+- **Managed number** (`managed_number`): `202 Accepted`. The message is queued
+  on the connection's v2 engine session, exactly like
+  `POST /api/v2/sessions/{session}/messages`: pinned to that number, never
+  switched to another sender, and followed through `GET /api/v2/messages/{id}`
+  and the v2 events/webhook. Text, `image`, `document`, and `voice` (with a
+  `media_id` from `POST /api/v2/media`) are supported.
+- **Provider route** (`provider_route`): sent synchronously through the
+  connection's routing policy, including any fallback the operator adds later.
+  It never falls back to the application's default or another connection's
+  policy: while its own policy is disabled the send is `409
+  connection_not_ready`. `201 Created` once a provider accepted it; a delivery
+  failure returns the error object together with `data`. Provider routes
+  accept `text` only here.
+
+Repeating a request with the same `Idempotency-Key` returns the original
+message (even if the connection is no longer ready, or a managed number was
+reconnected onto a new session); reusing the key with a different body is
+`409 idempotency_conflict`. When the outcome is unknown,
+retry with the **same** key.
+
+Client copies: [PHP](examples/php/WagClient.php),
+[JavaScript](examples/javascript/wag.js),
+[Python](examples/python/wag.py).
+
+Compatibility guarantees: [COMPATIBILITY.md](COMPATIBILITY.md). The full
+schema is in [openapi-v2.yaml](openapi-v2.yaml).
+
+## Operator journeys
+
+### Managed WhatsApp number
+
+Create/select App → Connect WhatsApp → Use my WhatsApp number → Scan QR or
+pairing code → Ready → Send test → Copy configuration.
+
+A managed number **is** a v2 engine session: it uses one slot of the
+application's v2 session capacity and appears in `GET /api/v2/sessions`. WAG
+Hub creates no provider account, routing policy, or route key for it. When the
+application has no free slot, setup reports `capacity_exceeded`.
+
+### External provider
+
+Create/select App → Connect WhatsApp → Use provider → Select provider → Enter
+credentials → Validate → Send test → Ready → Copy configuration.
+
+Each connection gets its own single-step delivery policy. Ordered fallback,
+extra providers, and purpose-specific routes remain optional advanced
+configuration and are never attached automatically. Provider endpoints must be
+public hosts; internal and metadata addresses are refused at setup and again at
+send time.
+
+## Application-facing API
+
+All routes live under `/api/v2` (`Authorization: Bearer <WAG_TOKEN>`) and use
+the v2 envelope `{"data": ...}`; errors are
+`{"message": "...", "error": {"code": "...", "retryable": true|false}}`.
+
+| Action | Request | Ability | Success |
+| --- | --- | --- | --- |
+| List connections | `GET /api/v2/connections` | `sessions:read` | 200 |
+| Create connection | `POST /api/v2/connections` (`Idempotency-Key` required) | `sessions:manage` | 201 |
+| Status (QR / pairing code with `sessions:manage`) | `GET /api/v2/connections/{id}` | `sessions:read` | 200 |
+| Pair / reconnect | `POST /api/v2/connections/{id}/connect` | `sessions:manage` | 202 managed, 200 provider |
+| Retry setup | `POST /api/v2/connections/{id}/retry` | `sessions:manage` | 202 managed, 200 provider |
+| Send | `POST /api/v2/connections/{id}/messages` (`Idempotency-Key` required) | `messages:send` | 202 managed, 201 provider |
+
+Create a managed number (QR by default, or `"auth_method": "pairing"` with
+`"phone"`):
+
+```json
+{"type": "managed_number", "name": "Support", "auth_method": "qr"}
+```
+
+Create a provider route:
+
+```json
+{"type": "provider_route", "name": "Fonnte",
+ "provider": {"driver": "fonnte", "configuration": {"token": "..."}}}
+```
+
+Creation is idempotent per `Idempotency-Key`, like `POST /api/v2/sessions`
+(a managed number passes the same key to the session it creates). `connect`
+and `retry` on a managed number issue a v2 session `start` command; the
+response carries the pending `operation` (`retryable: true`) until the runner
+confirms it. Poll `GET /api/v2/connections/{id}` for `status`, `qr`, or
+`pairing_code`; QR and pairing codes are never stored, are only returned
+for the connection's own session, and only to credentials with
+`sessions:manage` (like `GET /api/v2/sessions/{id}/auth/qr`): a
+`sessions:read` token sees the status without them. A pending `stop`,
+`logout` or `delete` reports the connection as `disconnected`.
+
+Connection types: `managed_number`, `provider_route`.
+
+Connection states: `setup_required`, `connecting`, `ready`, `degraded`,
+`disconnected`, `error`. Each non-ready state includes `recommended_action`.
+A managed number is `ready` only while its session is `WORKING`, freshly
+observed, and has no pending operation.
+
+Capabilities (not provider names): `send_text`, `send_image`, `send_document`,
+`send_video`, `send_audio`, `number_lookup`, `inbound_messages`,
+`delivery_status`.
+
+Error codes: `connection_not_found` (404, also for another application's
+connection), `connection_not_ready` (retryable; `error.internal_code` keeps the
+engine cause such as `engine_unreachable` or `session_not_working`),
+`capability_not_supported`, `capacity_exceeded`, `idempotency_conflict`,
+`invalid_idempotency_key`, `invalid_phone`, `providers_failed`,
+`provider_outcome_unknown`, `message_expired`.
+
+## Advanced: engine runner (managed numbers)
 
 Siapkan provider bawaan di server WAG Hub:
 
@@ -41,111 +181,36 @@ privatnya. Secret runner berbeda dari token aplikasi dan hanya dipakai Hub.
 Default-nya `wag_hub`; nilai lama `baileys` masih diterima sebagai alias.
 Sesi WAHA yang sudah ada tetap memakai WAHA, termasuk setelah default berubah.
 Untuk sesi aplikasi baru melalui WAHA, gunakan `GATEWAY_ENGINE_DRIVER=waha` dan
-`GATEWAY_ENGINE_WAHA_SLUG` yang menunjuk akun host WAHA. Provider bawaan tetap
-bisa dipakai untuk routing pada saat yang sama; pilihan ini tidak mematikan
-provider lain. Sesi lama tidak dipindahkan otomatis antarengine.
+`GATEWAY_ENGINE_WAHA_SLUG` yang menunjuk akun host WAHA.
 
-## 2. Hubungkan setiap aplikasi
+## Advanced: legacy APIs and migration
 
-1. Buka **Aplikasi Klien** di dashboard WAG Hub, buat `cesa-web` atau `dnd-web`.
-2. Pada kredensial aplikasi, klik **Hubungkan aplikasi**.
-3. Salin blok yang ditampilkan ke backend aplikasi:
+`/api/v1/*` and `/engine/*` are legacy: they keep their original contracts
+until retired (then `410`). `/api/v1/messages` still requires `purpose`,
+`mode`, and `route_key` and has no connection fields; a provider route's
+`route_key` is its routing policy key if a legacy client must keep using it.
 
-```dotenv
-WAG_URL=https://gateway.example.com
-WAG_TOKEN=token-khusus-aplikasi-ini
+Map legacy native numbers to v2 sessions, then project every v2 session and
+default route into connections (safe to repeat):
+
+```bash
+php artisan engine:migrate-legacy
+php artisan gateway:sync-connections
 ```
 
-Token memberi izin pengelolaan sesi, pengiriman, pembacaan status, dan validasi
-nomor. Token hanya ditampilkan sekali. Token lama tetap berlaku; kredensial
-custom dengan izin terbatas masih dapat dibuat bila diperlukan.
+A connection created before the migration for a native number is linked to
+its migrated session rather than duplicated. Sessions created directly with
+`POST /api/v2/sessions` also appear as managed-number connections.
 
-**CESA:** jalankan `php artisan config:clear`, `php artisan queue:restart`, lalu
-`php artisan wag:status`. Hubungkan nomor di pengaturan WhatsApp Rekrutmen.
-Hapus override engine lama yang tidak dipakai; lihat [migrasi CESA](CESA_WEB.md).
+## Status and retries
 
-**DND/aplikasi baru:** panggil endpoint berikut dari backend dengan
-`Authorization: Bearer <WAG_TOKEN>`, `Accept: application/json`, dan
-`Content-Type: application/json`. Base URL: `<WAG_URL>/api/v1/engine`.
-
-| Aksi | Metode dan path | JSON |
-| --- | --- | --- |
-| Cek layanan | `GET /health` | — |
-| Login QR | `POST /sessions` | `{"id":"support-1","mode":"qr"}` |
-| Login pairing | `POST /sessions` | `{"id":"support-1","mode":"pairing","phone":"6281234567890"}` |
-| Status/QR/pairing | `GET /sessions/support-1` | — |
-| Logout | `DELETE /sessions/support-1` | `{"logout":true}` |
-| Kirim | `POST /sessions/support-1/send` | `{"phone":"6281234567890","text":"Halo","idempotency_key":"order-123"}` |
-| Status kirim | `GET /sessions/support-1/messages/order-123` | — |
-
-Setelah login, polling status hingga `connected`. Tampilkan `qr` (data URI)
-atau `pairing_code` pada UI aplikasi. Simpan ID sesi sebagai pilihan nomor
-pengirim di aplikasi. ID harus 2–47 karakter, diawali huruf kecil, hanya huruf
-kecil/angka/hyphen, tanpa dua hyphen berturut-turut atau hyphen di akhir.
-`logout_confirmed=false` berarti pengguna perlu mengecek Perangkat Tertaut di HP.
-
-## 3. Gunakan WAG Hub sebagai router
-
-1. Di **Akun Provider**, pilih **WAG Hub (bawaan)** dan simpan akun. Tidak perlu
-   URL atau token provider tambahan. Tautkan nomor di **Perangkat WhatsApp**.
-2. Tambahkan akun WAHA, GOWA, Fonnte, atau WABA jika diperlukan. Isi URL
-   provider di akun itu; hostname publik tidak perlu didaftarkan di environment.
-3. Buat **Aturan Rute** untuk aplikasi dan susun prioritas, misalnya WAG Hub
-   bawaan → Fonnte, atau WAHA → WAG Hub bawaan.
-4. Kirim ke `/api/v1/messages` dengan `Idempotency-Key`, `route_key`, dan
-   `purpose`. Contoh payload lengkap ada di [README](../README.md#mengirim-pesan).
-
-Sesi yang dibuat dari UI aplikasi juga tercatat sebagai akun provider milik
-aplikasi tersebut. Kirim melalui `/api/v1/engine/sessions/{id}/send` selalu
-terikat ke nomor yang dipilih dan tidak berpindah nomor akibat fallback.
-Administrator mengatur pool provider untuk pengiriman lewat `/api/v1/messages`.
-
-Cek nomor memakai aturan rute terpisah dengan jenis **Cek nomor WhatsApp**,
-melalui `/api/v1/number-checks` (kontrak lengkap) atau `/api/v1/numbers/check`
-(alias ringkas). Provider bawaan mendukung pengecekan dari sesi yang terhubung.
-
-## 4. Contoh Laravel untuk aplikasi apa pun
-
-Simpan env hanya di file konfigurasi agar tetap bekerja dengan `config:cache`:
-
-```php
-// config/wag.php
-return ['url' => env('WAG_URL'), 'token' => env('WAG_TOKEN')];
-```
-
-```php
-use Illuminate\Support\Facades\Http;
-
-$base = rtrim(config('wag.url'), '/').'/api/v1/engine';
-$session = Http::withToken(config('wag.token'))->acceptJson()->timeout(25)
-    ->post($base.'/sessions', ['id' => 'support-1', 'mode' => 'qr'])
-    ->throw()->json();
-```
-
-CESA sudah menyediakan `App\Services\WhatsApp\WagHubClient` dan
-`WagHubEngineClient` yang tidak bergantung pada Rekrutmen. Aplikasi lain dapat
-mengikuti contoh HTTP yang sama; tidak perlu memasang engine atau plugin CESA.
-
-## Status dan pengiriman ulang
-
-- `sent`: WhatsApp/provider menerima pesan; bukan bukti sudah dibaca penerima.
-- `failed`: kegagalan definitif; ikuti `retryable` dan `error_code`.
-- `unknown` atau timeout: cek status memakai sesi dan idempotency key yang sama.
-  Jangan membuat key baru untuk mengulang pesan yang hasilnya belum pasti.
-- `404 message_not_found`: jurnal belum ditemukan, bukan bukti pesan pasti gagal.
-
-Kontrak dan jurnal mempertahankan hasil kirim dengan key yang sama. Simpan key
-per pesan bisnis. Pengiriman dari suatu sesi selalu menggunakan nomor sesi itu.
-Jika runner terlambat mengonfirmasi kiriman, pembacaan status merekonsiliasi
-ledger Hub dari jurnal runner tanpa mengirim ulang. Hasil ambigu menghentikan
-fallback; hanya kegagalan pasti sebelum terkirim yang boleh lanjut ke provider
-berikutnya.
+- `sent` / `provider_accepted`: WhatsApp/provider menerima pesan; bukan bukti sudah dibaca.
+- `failed`: kegagalan definitif; ikuti `retryable` dan kode error.
+- `delivery_outcome_unknown` / `outcome_unknown`: jangan membuat idempotency key baru.
+- Pengiriman nomor terkelola tidak berpindah pengirim karena fallback.
 
 ## Cakupan provider bawaan
 
-Tersedia: QR/pairing, status, logout, pemulihan sesi saat restart, pengiriman
-teks dengan idempotensi, pemeriksaan status pesan, dan cek registrasi nomor.
-Lampiran serta webhook pesan masuk belum diimplementasikan pada runner bawaan.
-Gunakan provider eksternal yang sesuai untuk fitur tersebut. Ini bukan klaim
-kesetaraan seluruh fitur WAHA/GOWA. Uji scan QR dan pengiriman pada nomor uji
-sebelum mengaktifkan nomor operasional.
+Nomor terkelola memakai engine v2: QR/pairing, status, logout, pemulihan sesi
+saat restart, pengiriman teks, gambar, dokumen, dan voice dengan idempotensi,
+status pesan, serta event/webhook v2. Lihat [ENGINE_V2.md](ENGINE_V2.md).

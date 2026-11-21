@@ -48,7 +48,7 @@ final readonly class WahaDriver implements ProviderDriver, ProviderNumberChecker
         $endpoint = rtrim($baseUrl, '/').$path;
 
         try {
-            $this->endpoints->assertAllowed($endpoint);
+            $endpointOptions = $this->endpoints->assertAllowed($endpoint, $account);
         } catch (InvalidArgumentException) {
             return ProviderResult::providerFailed(
                 errorCode: 'provider_endpoint_not_allowed',
@@ -56,7 +56,7 @@ final readonly class WahaDriver implements ProviderDriver, ProviderNumberChecker
             );
         }
 
-        $request = Http::acceptJson()
+        $request = Http::withOptions($endpointOptions)->acceptJson()
             ->asJson()
             ->withoutRedirecting()
             ->timeout($this->timeout($account))
@@ -139,12 +139,12 @@ final readonly class WahaDriver implements ProviderDriver, ProviderNumberChecker
         $endpoint = rtrim($baseUrl, '/').'/api/contacts/check-exists';
 
         try {
-            $this->endpoints->assertAllowed($endpoint);
+            $endpointOptions = $this->endpoints->assertAllowed($endpoint, $account);
         } catch (InvalidArgumentException) {
             return NumberCheckResult::unknown('provider_endpoint_not_allowed');
         }
 
-        $request = Http::acceptJson()
+        $request = Http::withOptions($endpointOptions)->acceptJson()
             ->withoutRedirecting()
             ->timeout($this->timeout($account))
             ->connectTimeout(min(5, $this->timeout($account)));

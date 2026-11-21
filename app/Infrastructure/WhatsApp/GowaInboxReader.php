@@ -99,13 +99,13 @@ final readonly class GowaInboxReader implements ProviderInboxReader
 
     private function request(ProviderAccount $account, string $path): PendingRequest
     {
-        $this->endpoints->assertAllowed($this->url($account, $path));
+        $endpointOptions = $this->endpoints->assertAllowed($this->url($account, $path), $account);
 
         $configuration = $this->configuration($account);
         $username = InboxPayload::string($configuration['username'] ?? null) ?? '';
         $password = InboxPayload::string($configuration['password'] ?? null) ?? '';
 
-        $request = Http::acceptJson()
+        $request = Http::withOptions($endpointOptions)->acceptJson()
             ->withBasicAuth($username, $password)
             ->withoutRedirecting()
             ->timeout($this->timeout($account))

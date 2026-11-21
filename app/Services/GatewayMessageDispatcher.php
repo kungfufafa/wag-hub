@@ -338,6 +338,12 @@ final readonly class GatewayMessageDispatcher
             }
         }
 
+        // A message sent through a connection is pinned to that connection's own policy; falling
+        // back to the route key or default policy would send it through another connection.
+        if ($message->whatsapp_connection_id !== null) {
+            return null;
+        }
+
         foreach ([$message->client_application_id, null] as $applicationId) {
             $policy = $this->policyQuery($message, $applicationId)
                 ->where('key', $message->route_key)

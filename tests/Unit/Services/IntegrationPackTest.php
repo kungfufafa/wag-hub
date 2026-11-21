@@ -17,7 +17,7 @@ class IntegrationPackTest extends TestCase
         foreach (['web-cesa', 'cesa-web', 'dnd-web'] as $slug) {
             $env = app(IntegrationPack::class)->envSnippet(new ClientApplication(['slug' => $slug]), 'https://hub.test/', 'wgh_token');
 
-            $this->assertSame("# {$slug}\nWAG_URL=https://hub.test\nWAG_TOKEN=wgh_token", $env);
+            $this->assertSame("# {$slug}\nWAG_URL=https://hub.test\nWAG_TOKEN=wgh_token\n# Koneksi: GET \$WAG_URL/api/v2/connections; kirim: POST \$WAG_URL/api/v2/connections/{id}/messages", $env);
         }
     }
 
@@ -36,6 +36,42 @@ class IntegrationPackTest extends TestCase
         ], $pack['credential']->credential->abilities);
         $this->assertStringContainsString('WAG_TOKEN='.$pack['credential']->plainTextToken, $pack['env']);
         $this->assertNull($existing->credential->fresh()->revoked_at);
+        $this->assertSame(2, $application->apiCredentials()->count());
+    }
+
+    public function test_copy_or_issue_reuses_an_existing_full_pack_token_instead_of_minting_another(): void
+    {
+        $application = ClientApplication::query()->create([
+            'name' => 'HR', 'slug' => 'hr-web', 'is_active' => true, 'rate_limit_per_minute' => 60,
+        ]);
+        app(IntegrationPack::class)->issue($application);
+
+        $pack = app(IntegrationPack::class)->copyOrIssue($application, 'https://hub.test');
+
+        $this->assertFalse($pack['issued']);
+        $this->assertNull($pack['credential']);
+        $this->assertStringContainsString('WAG_TOKEN=wgh_', $pack['env']);
+        $this->assertStringContainsString('…', $pack['env']);
+        $this->assertStringContainsString('tidak bisa ditampilkan ulang', $pack['env']);
+        $this->assertSame(1, $application->apiCredentials()->count());
+    }
+
+    public function test_copy_or_issue_mints_a_v2_capable_token_when_existing_ones_lack_pack_abilities(): void
+    {
+        $application = ClientApplication::query()->create([
+            'name' => 'HR', 'slug' => 'hr-web', 'is_active' => true, 'rate_limit_per_minute' => 60,
+        ]);
+        $legacy = ApiCredential::issue($application, 'Pre-v2 WAG_TOKEN', ['messages:send', 'messages:read', 'numbers:check', 'engine:use']);
+
+        $pack = app(IntegrationPack::class)->copyOrIssue($application, 'https://hub.test');
+
+        $this->assertTrue($pack['issued']);
+        $this->assertNotNull($pack['credential']);
+        $this->assertTrue($pack['credential']->credential->hasAbility('sessions:manage'));
+        $this->assertTrue($pack['credential']->credential->hasAbility('messages:send'));
+        $this->assertStringContainsString('WAG_TOKEN='.$pack['credential']->plainTextToken, $pack['env']);
+        $this->assertStringNotContainsString('…', $pack['env']);
+        $this->assertNull($legacy->credential->fresh()->revoked_at);
         $this->assertSame(2, $application->apiCredentials()->count());
     }
 }

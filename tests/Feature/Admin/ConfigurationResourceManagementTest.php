@@ -20,6 +20,7 @@ use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
 use App\Models\RoutingStep;
 use App\Models\User;
+use App\Models\WhatsAppConnection;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -151,6 +152,42 @@ class ConfigurationResourceManagementTest extends TestCase
             ->assertNotified('Aplikasi klien dihapus');
 
         $this->assertTrue(ClientApplication::withTrashed()->findOrFail($application->getKey())->trashed());
+    }
+
+    public function test_deleting_a_client_application_soft_deletes_its_connections(): void
+    {
+        $application = $this->createClient('connected-app');
+        $connection = $this->createConnection($application, 'support');
+
+        $application->delete();
+
+        $this->assertTrue(ClientApplication::withTrashed()->findOrFail($application->getKey())->trashed());
+        $deleted = WhatsAppConnection::withTrashed()->findOrFail($connection->getKey());
+        $this->assertTrue($deleted->trashed());
+        $this->assertSame('support--d'.$connection->getKey(), $deleted->slug);
+    }
+
+    public function test_admin_can_delete_a_client_application_with_connections_from_the_ui(): void
+    {
+        $fromEdit = $this->createClient('edit-connected-app');
+        $editConnection = $this->createConnection($fromEdit, 'support');
+        $fromList = $this->createClient('list-connected-app');
+        $listConnection = $this->createConnection($fromList, 'support');
+
+        Livewire::test(EditClientApplication::class, ['record' => $fromEdit->getKey()])
+            ->callAction('delete')
+            ->assertHasNoActionErrors()
+            ->assertNotified('Aplikasi klien dihapus');
+
+        Livewire::test(ListClientApplications::class)
+            ->callTableAction('delete', $fromList)
+            ->assertHasNoTableActionErrors()
+            ->assertNotified('Aplikasi klien dihapus');
+
+        $this->assertTrue(ClientApplication::withTrashed()->findOrFail($fromEdit->getKey())->trashed());
+        $this->assertTrue(ClientApplication::withTrashed()->findOrFail($fromList->getKey())->trashed());
+        $this->assertTrue(WhatsAppConnection::withTrashed()->findOrFail($editConnection->getKey())->trashed());
+        $this->assertTrue(WhatsAppConnection::withTrashed()->findOrFail($listConnection->getKey())->trashed());
     }
 
     public function test_deleted_client_application_tokens_are_rejected_by_the_api(): void
@@ -360,6 +397,18 @@ class ConfigurationResourceManagementTest extends TestCase
             'slug' => $slug,
             'is_active' => true,
             'rate_limit_per_minute' => 60,
+        ]);
+    }
+
+    private function createConnection(ClientApplication $application, string $slug): WhatsAppConnection
+    {
+        return WhatsAppConnection::forceCreate([
+            'client_application_id' => $application->getKey(),
+            'name' => Str::headline($slug),
+            'slug' => $slug,
+            'type' => 'provider_route',
+            'status' => 'setup_required',
+            'is_default' => true,
         ]);
     }
 

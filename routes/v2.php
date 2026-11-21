@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V2\ConnectionController;
 use App\Http\Controllers\Api\V2\IntegrationController;
 use App\Http\Controllers\Api\V2\SessionController;
 use App\Http\Controllers\Api\V2\TransportController;
@@ -27,4 +28,10 @@ Route::prefix('api/v2')->middleware(['client.auth', 'client.rate:engine'])->name
     Route::post('media', [TransportController::class, 'upload'])->middleware('client.ability:media:write');
     Route::get('media/{media}', [TransportController::class, 'download'])->middleware('client.ability:media:read');
     Route::get('events', [TransportController::class, 'events'])->middleware('client.ability:messages:read');
+    Route::get('connections', [ConnectionController::class, 'index'])->name('connections.index')->middleware('client.ability:sessions:read');
+    Route::post('connections', [ConnectionController::class, 'store'])->name('connections.create')->middleware('client.ability:sessions:manage');
+    Route::get('connections/{uuid}', [ConnectionController::class, 'show'])->whereUuid('uuid')->name('connections.show')->middleware('client.ability:sessions:read');
+    Route::post('connections/{uuid}/connect', [ConnectionController::class, 'connect'])->whereUuid('uuid')->name('connections.connect')->middleware('client.ability:sessions:manage');
+    Route::post('connections/{uuid}/retry', [ConnectionController::class, 'retry'])->whereUuid('uuid')->name('connections.retry')->middleware('client.ability:sessions:manage');
+    Route::post('connections/{uuid}/messages', [ConnectionController::class, 'send'])->whereUuid('uuid')->name('connections.messages')->middleware('client.ability:messages:send');
 });

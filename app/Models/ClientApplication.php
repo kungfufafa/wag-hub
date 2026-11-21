@@ -44,6 +44,9 @@ class ClientApplication extends Model
 
             $application->routingPolicies
                 ->each(fn (RoutingPolicy $policy) => $policy->delete());
+
+            $application->whatsappConnections
+                ->each(fn (WhatsAppConnection $connection) => $connection->delete());
         });
     }
 
@@ -78,5 +81,10 @@ class ClientApplication extends Model
     public function numberCheckRequests(): HasMany
     {
         return $this->hasMany(NumberCheckRequest::class);
+    }
+
+    public function whatsappConnections(): HasMany
+    {
+        return $this->hasMany(WhatsAppConnection::class);
     }
 }
