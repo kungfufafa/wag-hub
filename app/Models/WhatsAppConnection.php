@@ -117,6 +117,29 @@ class WhatsAppConnection extends Model
         return $this->hasMany(GatewayMessage::class);
     }
 
+    /**
+     * Slug of the provider account this connection creates for tenant-supplied settings.
+     */
+    public function providerAccountSlug(): string
+    {
+        return ProviderAccount::CONNECTION_SLUG_PREFIX.hash('sha256', (string) $this->uuid);
+    }
+
+    /**
+     * A connection may only change, pair or read pairing secrets of the provider
+     * account it created itself, or a native session owned by its own application.
+     */
+    public function ownsProviderAccount(ProviderAccount $account): bool
+    {
+        if ($account->slug === $this->providerAccountSlug()) {
+            return true;
+        }
+
+        $owner = $account->configuration['owned_by_application_id'] ?? null;
+
+        return $owner !== null && (string) $owner === (string) $this->client_application_id;
+    }
+
     public function sessionId(): string
     {
         $stored = $this->setup_state['session_id'] ?? null;

@@ -48,6 +48,11 @@ final class ConnectionProvisioner
             (bool) ($input['is_default'] ?? false),
         );
 
+        if ($type !== ConnectionType::ManagedNumber) {
+            // Rejected before the try block so a refused request never stores an error on a shared connection.
+            $this->assertProviderAccountConfigurable($connection, $input);
+        }
+
         try {
             if ($type === ConnectionType::ManagedNumber) {
                 $this->provisionManaged($connection, $input);
@@ -143,6 +148,28 @@ final class ConnectionProvisioner
                 'configuration' => $configuration,
             ],
         ])->connection;
+    }
+
+    /**
+     * Tenant configuration may only land on the account this connection created.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private function assertProviderAccountConfigurable(WhatsAppConnection $connection, array $input): void
+    {
+        $provider = is_array($input['provider'] ?? null) ? $input['provider'] : [];
+        $driver = strtolower(trim((string) ($provider['driver'] ?? $connection->providerAccount?->driver ?? '')));
+        $account = $connection->providerAccount;
+
+        if ($driver === 'wag_hub' || $account === null || $account->slug === $this->accountSlug($connection)) {
+            return;
+        }
+
+        throw new WhatsAppConnectionException(
+            'This connection uses a provider account managed by the administrator.',
+            409,
+            'capability_not_supported',
+        );
     }
 
     /**
@@ -250,15 +277,6 @@ final class ConnectionProvisioner
         }
 
         $account = $connection->providerAccount;
-
-        // Tenant configuration may only land on the account this connection created.
-        if ($account !== null && $account->slug !== $this->accountSlug($connection)) {
-            throw new WhatsAppConnectionException(
-                'This connection uses a provider account managed by the administrator.',
-                409,
-                'capability_not_supported',
-            );
-        }
 
         if ($driver !== '') {
             // Remember the requested driver so retry can re-run validation before an account exists.
@@ -450,22 +468,12 @@ final class ConnectionProvisioner
 
     private function accountSlug(WhatsAppConnection $connection): string
     {
-        return ProviderAccount::CONNECTION_SLUG_PREFIX.hash('sha256', $connection->uuid);
+        return $connection->providerAccountSlug();
     }
 
-    /**
-     * A connection may only change the provider account it created itself, or
-     * a native session owned by its own application.
-     */
     private function ownsAccount(WhatsAppConnection $connection, ProviderAccount $account): bool
     {
-        if ($account->slug === $this->accountSlug($connection)) {
-            return true;
-        }
-
-        $owner = $account->configuration['owned_by_application_id'] ?? null;
-
-        return $owner !== null && (string) $owner === (string) $connection->client_application_id;
+        return $connection->ownsProviderAccount($account);
     }
 
     /**

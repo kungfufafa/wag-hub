@@ -50,7 +50,12 @@ final class ProviderEndpointGuard
     public function assertPublic(string $endpoint): array
     {
         [$parts, $host] = $this->parse($endpoint);
-        $host = rtrim($host, '.');
+
+        // curl ignores a CURLOPT_RESOLVE pin for "name" when the URL says "name.", so the
+        // checked address would not be the one connected to. Fully-qualified forms are refused.
+        if (str_ends_with($host, '.')) {
+            throw $this->notAllowed();
+        }
 
         if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
             $addresses = [$host];

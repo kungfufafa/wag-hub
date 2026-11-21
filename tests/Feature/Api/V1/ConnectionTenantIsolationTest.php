@@ -2,13 +2,16 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Filament\Resources\WhatsAppConnections\Pages\ViewWhatsAppConnection;
 use App\Infrastructure\WhatsApp\HostResolver;
 use App\Models\ProviderAccount;
 use App\Models\RoutingStep;
+use App\Models\User;
 use App\Models\WhatsAppConnection;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Livewire\Livewire;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -48,6 +51,70 @@ class ConnectionTenantIsolationTest extends TestCase
             'token' => 'ADMIN-SECRET',
         ], $account->configuration);
         $this->assertSame(1, ProviderAccount::query()->count());
+    }
+
+    public function test_rejected_request_leaves_no_error_on_a_shared_connection(): void
+    {
+        [$client, , $connection] = $this->syncedSharedRoute();
+        $before = $connection->fresh()->only(['status', 'last_error_code', 'last_error_message', 'recommended_action', 'setup_state']);
+
+        $this->withToken($client['token'])->postJson('/api/v1/connections', [
+            'name' => $connection->name,
+            'type' => 'provider_route',
+            'provider' => ['driver' => 'fonnte', 'configuration' => ['token' => 'x']],
+        ])->assertStatus(409);
+
+        $after = $connection->fresh();
+        $this->assertSame($before, $after->only(array_keys($before)));
+        $this->assertNull($after->last_error_code);
+        $this->assertNull($after->last_error_message);
+    }
+
+    public function test_tenant_never_receives_the_qr_of_a_shared_admin_session(): void
+    {
+        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+        $shared = $this->createProviderAccount('waha', 'waha-primary', [
+            'base_url' => 'https://waha.example.com',
+            'api_key' => 'ADMIN-KEY',
+            'session' => 'default',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$shared['id']]);
+
+        $this->withToken($client['token'])->getJson('/api/v1/connections')->assertOk();
+        $connection = WhatsAppConnection::query()->sole();
+        $this->assertSame($shared['id'], $connection->provider_account_id);
+
+        // The shared session now waits for a QR scan.
+        ProviderAccount::query()->whereKey($shared['id'])->update(['session_status' => 'scan_qr']);
+        Http::fake(['*' => Http::response(['mimetype' => 'image/png', 'data' => base64_encode('qr')])]);
+
+        $this->withToken($client['token'])->getJson('/api/v1/connections/'.$connection->uuid)
+            ->assertOk()
+            ->assertJsonMissingPath('data.qr')
+            ->assertJsonMissingPath('data.pairing_code');
+        $this->withToken($client['token'])->postJson('/api/v1/connections/'.$connection->uuid.'/connect')
+            ->assertOk()
+            ->assertJsonMissingPath('data.qr')
+            ->assertJsonMissingPath('data.pairing_code');
+
+        Http::assertNothingSent();
+    }
+
+    public function test_admin_reconnect_is_hidden_for_a_shared_admin_session(): void
+    {
+        $client = $this->createClientApplication(['messages:send', 'messages:read']);
+        $shared = $this->createProviderAccount('waha', 'waha-primary', [
+            'base_url' => 'https://waha.example.com',
+            'api_key' => 'ADMIN-KEY',
+            'session' => 'default',
+        ]);
+        $this->createRoutingPolicy($client['id'], [$shared['id']]);
+        $this->withToken($client['token'])->getJson('/api/v1/connections')->assertOk();
+
+        $this->actingAs(User::factory()->create(['is_admin' => true, 'is_active' => true]));
+
+        Livewire::test(ViewWhatsAppConnection::class, ['record' => WhatsAppConnection::query()->sole()->getRouteKey()])
+            ->assertActionHidden('reconnect');
     }
 
     public function test_retry_does_not_reenable_a_disabled_shared_account_or_step(): void

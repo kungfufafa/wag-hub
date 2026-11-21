@@ -101,6 +101,8 @@ class ProviderEndpointGuardTest extends TestCase
         yield 'hostname resolving to CGNAT' => ['https://cgnat.example.com/send'];
         yield 'hostname resolving to unique-local' => ['https://ula.example.com/send'];
         yield 'unresolvable hostname' => ['https://nowhere.example.com/send'];
+        yield 'trailing-dot hostname that would skip the pin' => ['http://api.fonnte.com.:8080/send'];
+        yield 'trailing-dot IPv4' => ['http://93.184.216.34./send'];
     }
 
     public function test_tenant_endpoints_are_pinned_to_the_checked_address(): void

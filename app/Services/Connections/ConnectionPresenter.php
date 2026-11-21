@@ -35,7 +35,8 @@ final class ConnectionPresenter
             'recommended_action' => $connection->recommended_action,
         ];
 
-        if ($includePairingSecrets && $account?->supportsSessions()) {
+        // Shared, admin-managed sessions never hand their QR or pairing code to a tenant.
+        if ($includePairingSecrets && $account?->supportsSessions() && $connection->ownsProviderAccount($account)) {
             $mode = $account->configuration['engine_mode'] ?? $account->configuration['cesa_mode'] ?? 'qr';
             $sessionStatus = $account->sessionStatus();
 

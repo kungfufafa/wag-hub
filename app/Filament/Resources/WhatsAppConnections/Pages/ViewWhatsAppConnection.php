@@ -112,14 +112,32 @@ class ViewWhatsAppConnection extends ViewRecord
         ]);
     }
 
+    private function canReconnect(): bool
+    {
+        $record = $this->getRecord();
+        $account = $record->providerAccount;
+
+        return $account !== null && $account->supportsSessions() && $record->ownsProviderAccount($account);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             Action::make('reconnect')
                 ->label('Hubungkan ulang')
                 ->icon(Heroicon::OutlinedQrCode)
-                ->visible(fn (): bool => $this->getRecord()->providerAccount?->supportsSessions() ?? false)
+                ->visible(fn (): bool => $this->canReconnect())
                 ->action(function (): void {
+                    if (! $this->canReconnect()) {
+                        Notification::make()
+                            ->title('Akun provider dikelola admin')
+                            ->body('Hubungkan ulang sesi ini dari halaman perangkat WhatsApp.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
                     try {
                         app(ConnectionProvisioner::class)->connect($this->getRecord());
                         Notification::make()->title('Koneksi diperbarui')->success()->send();
