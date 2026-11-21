@@ -25,8 +25,6 @@ class StoreMessageRequest extends FormRequest
      */
     public const CAPTION_MAX_LENGTH = 1024;
 
-    private bool $connectionOriented = false;
-
     public function authorize(): bool
     {
         return true;
@@ -48,20 +46,6 @@ class StoreMessageRequest extends FormRequest
 
         if (! $this->exists('route_key')) {
             $defaults['route_key'] = 'default';
-        }
-
-        $this->connectionOriented = $this->filled('connection_id')
-            || ! $this->exists('purpose')
-            || ! $this->exists('mode');
-
-        if ($this->connectionOriented) {
-            if (! $this->exists('purpose')) {
-                $defaults['purpose'] = 'notification';
-            }
-
-            if (! $this->exists('mode')) {
-                $defaults['mode'] = 'sync';
-            }
         }
 
         $this->merge($defaults);
@@ -136,7 +120,6 @@ class StoreMessageRequest extends FormRequest
                 'max:120',
                 'regex:/\A[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+(;\s*[a-z0-9_.-]+=[a-z0-9_.+"-]+)*\z/i',
             ],
-            'connection_id' => ['nullable', 'uuid'],
             'purpose' => ['required', Rule::in(['otp', 'transactional', 'notification'])],
             'mode' => ['required', Rule::in(['sync', 'async'])],
             'route_key' => ['required', 'string', 'min:1', 'max:80', 'regex:/\A[a-zA-Z0-9._:-]+\z/'],
@@ -224,18 +207,6 @@ class StoreMessageRequest extends FormRequest
         });
     }
 
-    public function usesConnectionAbstraction(): bool
-    {
-        return $this->connectionOriented || $this->filled('connection_id');
-    }
-
-    public function connectionId(): ?string
-    {
-        $id = $this->input('connection_id');
-
-        return is_string($id) && $id !== '' ? $id : null;
-    }
-
     public function idempotencyKey(): string
     {
         return (string) $this->validated('idempotency_key');
@@ -308,7 +279,7 @@ class StoreMessageRequest extends FormRequest
                 ];
         }
 
-        $payload = [
+        return [
             'recipient' => [
                 'type' => 'phone',
                 'value' => $this->canonicalRecipient(),
@@ -323,12 +294,6 @@ class StoreMessageRequest extends FormRequest
             'client_reference' => $this->validated('client_reference'),
             'metadata' => $this->sortRecursively($this->validated('metadata', [])),
         ];
-
-        if ($this->connectionId() !== null) {
-            $payload['connection_id'] = $this->connectionId();
-        }
-
-        return $payload;
     }
 
     public function payloadHash(): string
