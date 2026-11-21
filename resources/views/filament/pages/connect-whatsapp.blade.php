@@ -53,7 +53,7 @@
                     'border-gray-200 dark:border-white/10' => $this->type !== 'managed_number',
                 ])>
                     <strong>Pakai nomor WhatsApp saya</strong>
-                    <p class="mt-1 text-sm text-gray-500">Scan QR atau masukkan pairing code. Routing dibuat otomatis.</p>
+                    <p class="mt-1 text-sm text-gray-500">Scan QR atau masukkan pairing code. Memakai satu slot sesi WhatsApp aplikasi.</p>
                 </button>
                 <button type="button" wire:click="$set('type', 'provider_route')" @class([
                     'rounded-xl border p-4 text-start',
@@ -61,7 +61,7 @@
                     'border-gray-200 dark:border-white/10' => $this->type !== 'provider_route',
                 ])>
                     <strong>Pakai provider</strong>
-                    <p class="mt-1 text-sm text-gray-500">WAHA, GOWA, Fonnte, WABA, atau WAG Hub. Fallback bisa ditambah nanti.</p>
+                    <p class="mt-1 text-sm text-gray-500">WAHA, GOWA, Fonnte, atau WABA. Fallback bisa ditambah nanti.</p>
                 </button>
             </div>
 
@@ -87,7 +87,6 @@
                             <option value="waha">WAHA</option>
                             <option value="gowa">GOWA</option>
                             <option value="waba">WABA</option>
-                            <option value="wag_hub">WAG Hub</option>
                         </select>
                     </label>
                     @if ($this->driver === 'fonnte')
@@ -148,6 +147,7 @@
             @endif
             <div class="mt-4 flex gap-3">
                 <x-filament::button color="gray" wire:click="retrySetup">Coba lagi</x-filament::button>
+                <x-filament::button color="gray" wire:click="startNewAttempt">Koneksi lain</x-filament::button>
                 @if ($this->canSendTest())
                     <x-filament::button wire:click="$set('step', 4)">Kirim pesan uji</x-filament::button>
                 @endif
@@ -179,7 +179,8 @@
             <h3 class="text-lg font-semibold">Salin konfigurasi integrasi</h3>
             <p class="mt-1 text-sm text-gray-500">Aplikasi klien hanya butuh URL, token, dan satu pemanggilan kirim.</p>
             <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">{{ $this->issuedEnv }}</pre>
-            <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">wag.messages.send(null, '081234567890', 'Halo', 'order-1')</pre>
+            <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">wag.connections.send('{{ $this->connectionUuid ?? 'CONNECTION_ID' }}', '6281234567890', 'Halo', 'order-1')
+# POST /api/v2/connections/{id}/messages</pre>
             <div class="mt-4 flex gap-3">
                 <x-filament::button x-on:click="{!! $this->envCopyHandler() !!}">Salin WAG_URL dan WAG_TOKEN</x-filament::button>
                 <x-filament::button color="gray" tag="a" :href="\App\Filament\Resources\WhatsAppConnections\WhatsAppConnectionResource::getUrl('index')">

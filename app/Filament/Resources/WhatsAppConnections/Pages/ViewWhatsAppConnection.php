@@ -7,6 +7,7 @@ use App\Exceptions\WhatsAppEngineException;
 use App\Filament\Resources\WhatsAppConnections\WhatsAppConnectionResource;
 use App\Filament\Support\CopiesToClipboard;
 use App\Services\Connections\ConnectionHealthProjector;
+use App\Services\Connections\ConnectionPresenter;
 use App\Services\Connections\ConnectionProvisioner;
 use App\Services\Connections\ConnectionTestSender;
 use App\Services\IntegrationPack;
@@ -70,6 +71,25 @@ class ViewWhatsAppConnection extends ViewRecord
                         ->formatStateUsing(fn (): string => implode(', ', $this->getRecord()->capabilities ?? [])),
                 ])
                 ->columns(2),
+            Section::make('Autentikasi')
+                ->visible(fn (): bool => $this->getRecord()->isManaged())
+                ->schema([
+                    TextEntry::make('challenge')
+                        ->hiddenLabel()
+                        ->state(function (): HtmlString {
+                            $presentation = app(ConnectionPresenter::class)->toArray($this->getRecord(), true);
+
+                            if (filled($presentation['qr'] ?? null)) {
+                                return new HtmlString('<img src="'.e((string) $presentation['qr']).'" alt="QR WhatsApp" class="h-56 w-56 rounded-lg border" />');
+                            }
+
+                            if (filled($presentation['pairing_code'] ?? null)) {
+                                return new HtmlString('<p class="font-mono text-2xl">'.e((string) $presentation['pairing_code']).'</p>');
+                            }
+
+                            return new HtmlString('<p class="text-sm text-gray-500">'.e($presentation['recommended_action'] ?? 'Tidak ada tantangan autentikasi.').'</p>');
+                        }),
+                ]),
             Section::make('Kesehatan')
                 ->schema([
                     TextEntry::make('last_success')
@@ -105,7 +125,7 @@ class ViewWhatsAppConnection extends ViewRecord
 
                             return new HtmlString(
                                 '<pre class="overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">'.e($env).'</pre>'.
-                                '<p class="mt-2 text-sm text-gray-500">Terbitkan token dari aplikasi klien, lalu panggil wag.messages.send.</p>',
+                                '<p class="mt-2 text-sm text-gray-500">Terbitkan token dari aplikasi klien, lalu kirim lewat POST /api/v2/connections/'.e($this->getRecord()->uuid).'/messages.</p>',
                             );
                         }),
                 ]),
@@ -115,6 +135,12 @@ class ViewWhatsAppConnection extends ViewRecord
     private function canReconnect(): bool
     {
         $record = $this->getRecord();
+
+        // A managed number restarts its own v2 engine session.
+        if ($record->isManaged()) {
+            return true;
+        }
+
         $account = $record->providerAccount;
 
         return $account !== null && $account->supportsSessions() && $record->ownsProviderAccount($account);
@@ -140,9 +166,19 @@ class ViewWhatsAppConnection extends ViewRecord
 
                     try {
                         app(ConnectionProvisioner::class)->connect($this->getRecord());
-                        Notification::make()->title('Koneksi diperbarui')->success()->send();
+                        Notification::make()
+                            ->title('Koneksi diperbarui')
+                            ->body($this->getRecord()->isManaged() ? 'Perintah start dikirim ke engine; QR muncul setelah runner siap.' : null)
+                            ->success()
+                            ->send();
                     } catch (WhatsAppConnectionException|WhatsAppEngineException $exception) {
-                        Notification::make()->title('Gagal menghubungkan ulang')->body($exception->getMessage())->danger()->send();
+                        Notification::make()
+                            ->title($exception->errorCode === 'capacity_exceeded'
+                                ? 'Kuota nomor WhatsApp aplikasi ini sudah penuh'
+                                : 'Gagal menghubungkan ulang')
+                            ->body($exception->getMessage())
+                            ->danger()
+                            ->send();
                     }
 
                     $this->refreshRecord();
@@ -170,19 +206,17 @@ class ViewWhatsAppConnection extends ViewRecord
                     }
 
                     try {
-                        $response = app(ConnectionTestSender::class)->send(
+                        $delivery = app(ConnectionTestSender::class)->send(
                             $connection,
                             (string) $data['recipient'],
                             (string) $data['text'],
                         );
-                        $payload = $response->getData(true);
-                        $success = ($payload['data']['status'] ?? null) === 'provider_accepted';
                         Notification::make()
-                            ->title($success ? 'Uji kirim berhasil' : 'Uji kirim gagal')
-                            ->body($success
-                                ? 'Provider menerima pesan melalui POST /api/v1/messages.'
-                                : (string) ($payload['message'] ?? 'Provider menolak atau gagal menerima pesan.'))
-                            ->{$success ? 'success' : 'danger'}()
+                            ->title($delivery->accepted() ? 'Uji kirim diterima' : 'Uji kirim gagal')
+                            ->body($delivery->accepted()
+                                ? 'Pesan diterima melalui POST /api/v2/connections/{id}/messages.'
+                                : (string) ($delivery->message ?? 'Provider menolak atau gagal menerima pesan.'))
+                            ->{$delivery->accepted() ? 'success' : 'danger'}()
                             ->send();
                     } catch (Throwable $exception) {
                         Notification::make()->title('Uji kirim gagal')->body($exception->getMessage())->danger()->send();

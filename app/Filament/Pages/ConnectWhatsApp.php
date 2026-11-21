@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Domain\Connections\ConnectionType;
+use App\Exceptions\WhatsAppEngineException;
 use App\Filament\Support\CopiesToClipboard;
 use App\Filament\Support\PanelNavigation;
 use App\Models\ClientApplication;
@@ -76,8 +77,16 @@ class ConnectWhatsApp extends Page
 
     public ?string $issuedEnv = null;
 
+    /**
+     * Idempotency key of the current setup attempt: a double click or a retry after a failure
+     * resumes the same connection and v2 session instead of creating another one.
+     */
+    public string $attemptKey = '';
+
     public function mount(): void
     {
+        $this->attemptKey = (string) Str::uuid();
+
         $requested = request()->query('application');
         $application = is_string($requested)
             ? $this->findRequestedApplication($requested)
@@ -154,19 +163,47 @@ class ConnectWhatsApp extends Page
         }
 
         try {
-            $provisioned = app(ConnectionProvisioner::class)->provision($application, $this->provisioningPayload());
+            $provisioned = app(ConnectionProvisioner::class)->provision($application, $this->provisioningPayload(), $this->creationKey());
             $this->connectionUuid = $provisioned->connection->uuid;
             $this->step = 3;
             Notification::make()->title('Koneksi disiapkan')->success()->send();
+        } catch (WhatsAppEngineException $exception) {
+            // v2 session failures (capacity_exceeded, idempotency_conflict) create nothing.
+            Notification::make()
+                ->title(match ($exception->errorCode) {
+                    'capacity_exceeded' => 'Kuota nomor WhatsApp aplikasi ini sudah penuh',
+                    'idempotency_conflict' => 'Pengaturan berubah: mulai percobaan baru',
+                    default => 'Koneksi belum bisa disiapkan',
+                })
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
+
+            if ($exception->errorCode === 'idempotency_conflict') {
+                $this->attemptKey = (string) Str::uuid();
+            }
         } catch (Throwable $exception) {
+            // A provider route that failed validation is kept so the admin can fix and retry it.
             $connection = WhatsAppConnection::query()
                 ->where('client_application_id', $application->getKey())
-                ->where('name', $this->name)
+                ->where('creation_key', $this->creationKey())
                 ->first();
             $this->connectionUuid = $connection?->uuid;
-            $this->step = 3;
+            $this->step = $connection === null ? $this->step : 3;
             Notification::make()->title('Koneksi perlu ditindaklanjuti')->body($exception->getMessage())->warning()->send();
         }
+    }
+
+    public function startNewAttempt(): void
+    {
+        $this->attemptKey = (string) Str::uuid();
+        $this->connectionUuid = null;
+        $this->step = 2;
+    }
+
+    private function creationKey(): string
+    {
+        return 'panel:'.$this->attemptKey;
     }
 
     public function retrySetup(): void
@@ -178,12 +215,22 @@ class ConnectWhatsApp extends Page
         }
 
         try {
-            $connection = app(ConnectionProvisioner::class)->retry(
-                $connection,
-                $this->provisioningPayload()['provider']['configuration'] ?? [],
-            );
+            $connection = $connection->isManaged()
+                ? app(ConnectionProvisioner::class)->connect($connection, $this->managedStartInput())
+                : app(ConnectionProvisioner::class)->retry(
+                    $connection,
+                    $this->provisioningPayload()['provider']['configuration'] ?? [],
+                );
             $this->connectionUuid = $connection->uuid;
             Notification::make()->title('Setup dilanjutkan')->success()->send();
+        } catch (WhatsAppEngineException $exception) {
+            Notification::make()
+                ->title($exception->errorCode === 'capacity_exceeded'
+                    ? 'Kuota nomor WhatsApp aplikasi ini sudah penuh'
+                    : 'Setup belum selesai')
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
         } catch (Throwable $exception) {
             Notification::make()->title('Setup belum selesai')->body($exception->getMessage())->warning()->send();
         }
@@ -200,18 +247,16 @@ class ConnectWhatsApp extends Page
         }
 
         try {
-            $response = app(ConnectionTestSender::class)->send($connection, $this->testRecipient, $this->testText);
-            $payload = $response->getData(true);
-            $success = ($payload['data']['status'] ?? null) === 'provider_accepted';
+            $delivery = app(ConnectionTestSender::class)->send($connection, $this->testRecipient, $this->testText);
             Notification::make()
-                ->title($success ? 'Uji kirim berhasil' : 'Uji kirim gagal')
-                ->body($success
-                    ? 'Provider menerima pesan melalui POST /api/v1/messages.'
-                    : (string) ($payload['message'] ?? 'Provider menolak atau gagal menerima pesan.'))
-                ->{$success ? 'success' : 'danger'}()
+                ->title($delivery->accepted() ? 'Uji kirim diterima' : 'Uji kirim gagal')
+                ->body($delivery->accepted()
+                    ? 'Pesan diterima melalui POST /api/v2/connections/{id}/messages.'
+                    : (string) ($delivery->message ?? 'Provider menolak atau gagal menerima pesan.'))
+                ->{$delivery->accepted() ? 'success' : 'danger'}()
                 ->send();
 
-            if ($success) {
+            if ($delivery->accepted()) {
                 $this->step = 5;
             }
         } catch (Throwable $exception) {
@@ -238,6 +283,19 @@ class ConnectWhatsApp extends Page
     }
 
     /**
+     * @return array{auth_method: string, phone: string|null}
+     */
+    private function managedStartInput(): array
+    {
+        $pairing = $this->mode === 'pairing';
+
+        return [
+            'auth_method' => $pairing ? 'pairing' : 'qr',
+            'phone' => $pairing && trim($this->phone) !== '' ? trim($this->phone) : null,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function provisioningPayload(): array
@@ -246,9 +304,11 @@ class ConnectWhatsApp extends Page
             'name' => $this->name !== '' ? $this->name : 'WhatsApp',
             'type' => $this->type,
             'is_default' => false,
-            'mode' => $this->mode,
-            'phone' => $this->phone !== '' ? $this->phone : null,
         ];
+
+        if ($this->type === ConnectionType::ManagedNumber->value) {
+            $payload += $this->managedStartInput();
+        }
 
         if ($this->type === ConnectionType::ProviderRoute->value) {
             $payload['provider'] = [

@@ -51,10 +51,10 @@ class IntegrationDocumentation extends Page
                             ->content('Buat satu aplikasi per repo, lalu buka Hubungkan WhatsApp.'),
                         Placeholder::make('step_2')
                             ->label('2. Hubungkan WhatsApp')
-                            ->content('Pakai nomor sendiri (QR/pairing) atau provider. Routing default dibuat otomatis. Buat WAG_TOKEN dari Hubungkan aplikasi.'),
+                            ->content('Pakai nomor sendiri (QR/pairing, menjadi sesi engine v2) atau provider. Buat WAG_TOKEN dari Hubungkan aplikasi.'),
                         Placeholder::make('step_3')
                             ->label('3. Kirim pesan uji')
-                            ->content('Dari koneksi yang siap. Aplikasi klien memanggil POST /api/v1/messages tanpa route_key.'),
+                            ->content('Dari koneksi yang siap. Aplikasi klien memanggil POST /api/v2/connections/{id}/messages tanpa route_key.'),
                         Placeholder::make('step_4')
                             ->label('4. Integrasi')
                             ->content('Salin WAG_URL dan WAG_TOKEN. Detail engine, provider, dan fallback ada di bagian lanjutan.'),
@@ -68,8 +68,14 @@ class IntegrationDocumentation extends Page
                     ->description('Base URL diganti sesuai host Hub Anda.')
                     ->icon(Heroicon::OutlinedGlobeAlt)
                     ->schema([
+                        Placeholder::make('endpoint_connections')
+                            ->label('Koneksi WhatsApp (v2)')
+                            ->content(new HtmlString('<code class="text-xs">GET/POST /api/v2/connections</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Status, QR, connect, retry: /api/v2/connections/{id}</div>')),
+                        Placeholder::make('endpoint_connection_send')
+                            ->label('Kirim lewat koneksi')
+                            ->content(new HtmlString('<code class="text-xs">POST /api/v2/connections/{id}/messages</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Idempotency-Key wajib. 202 nomor terkelola, 201 rute provider.</div>')),
                         Placeholder::make('endpoint_send')
-                            ->label('Kirim pesan')
+                            ->label('Kirim pesan (legacy v1)')
                             ->content(new HtmlString('<code class="text-xs">POST /api/v1/messages</code>')),
                         Placeholder::make('endpoint_attachment')
                             ->label('Upload attachment')
