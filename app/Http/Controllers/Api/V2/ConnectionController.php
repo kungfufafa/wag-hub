@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ConnectConnectionRequest;
 use App\Http\Requests\SendEngineMessageRequest;
 use App\Http\Requests\StoreConnectionRequest;
+use App\Models\ApiCredential;
 use App\Models\ClientApplication;
 use App\Models\WhatsAppConnection;
 use App\Services\Connections\ApplicationErrorMapper;
@@ -53,7 +54,7 @@ class ConnectionController extends Controller
                 $request->idempotencyKey(),
             );
 
-            return $this->connectionResponse($provisioned->connection, 201);
+            return $this->connectionResponse($request, $provisioned->connection, 201);
         });
     }
 
@@ -69,7 +70,7 @@ class ConnectionController extends Controller
                 $connection->unsetRelation('engineSession');
             }
 
-            return $this->connectionResponse($connection, 200);
+            return $this->connectionResponse($request, $connection, 200);
         });
     }
 
@@ -79,7 +80,7 @@ class ConnectionController extends Controller
             $connection = $this->resolver->resolve($this->application($request), $uuid);
             $connection = $this->provisioner->connect($connection, $request->safe()->only(['auth_method', 'phone']));
 
-            return $this->connectionResponse($connection, $connection->isManaged() ? 202 : 200);
+            return $this->connectionResponse($request, $connection, $connection->isManaged() ? 202 : 200);
         });
     }
 
@@ -89,7 +90,7 @@ class ConnectionController extends Controller
             $connection = $this->resolver->resolve($this->application($request), $uuid);
             $connection = $this->provisioner->retry($connection, $request->providerConfiguration());
 
-            return $this->connectionResponse($connection, $connection->isManaged() ? 202 : 200);
+            return $this->connectionResponse($request, $connection, $connection->isManaged() ? 202 : 200);
         });
     }
 
@@ -115,10 +116,29 @@ class ConnectionController extends Controller
         });
     }
 
-    private function connectionResponse(WhatsAppConnection $connection, int $status): JsonResponse
+    /**
+     * A QR or pairing code can link a device to the number, so like GET sessions/{id}/auth/qr it is
+     * only handed to credentials that may manage sessions; read-only tokens see the status alone.
+     */
+    private function connectionResponse(Request $request, WhatsAppConnection $connection, int $status): JsonResponse
     {
-        return response()->json(['data' => $this->presenter->toArray($connection, includePairingSecrets: true)], $status)
+        $secrets = $this->canManageSessions($request);
+
+        return response()->json(['data' => $this->presenter->toArray($connection, includePairingSecrets: $secrets)], $status)
             ->header('Cache-Control', 'no-store');
+    }
+
+    private function canManageSessions(Request $request): bool
+    {
+        $credential = $request->attributes->get('api_credential');
+
+        if (! $credential instanceof ApiCredential) {
+            return false;
+        }
+
+        $abilities = $credential->abilities ?? [];
+
+        return is_array($abilities) && (in_array('*', $abilities, true) || in_array('sessions:manage', $abilities, true));
     }
 
     private function application(Request $request): ClientApplication

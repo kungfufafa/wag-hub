@@ -137,6 +137,22 @@ class WhatsAppConnection extends Model
         return $session;
     }
 
+    /**
+     * Every engine session this managed number has used, current first: a session replaced on
+     * reconnect still answers Idempotency-Key replays of the messages it accepted.
+     *
+     * @return list<int>
+     */
+    public function engineSessionHistory(): array
+    {
+        $previous = $this->setup_state['previous_engine_session_ids'] ?? [];
+
+        return array_values(array_unique(array_map('intval', array_filter([
+            $this->engine_session_id,
+            ...(is_array($previous) ? $previous : []),
+        ], static fn (mixed $id): bool => is_numeric($id)))));
+    }
+
     public function providerAccount(): BelongsTo
     {
         return $this->belongsTo(ProviderAccount::class);

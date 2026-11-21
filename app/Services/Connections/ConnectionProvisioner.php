@@ -179,8 +179,13 @@ final class ConnectionProvisioner
                     'phone' => $phone,
                 ], static fn (mixed $value): bool => $value !== null));
 
-                if (WhatsAppConnection::withTrashed()->where('engine_session_id', $session->getKey())->exists()) {
-                    throw new WhatsAppEngineException('This idempotency key belongs to a different request.', 409, 'idempotency_conflict');
+                $linked = WhatsAppConnection::withTrashed()->where('engine_session_id', $session->getKey())->first();
+
+                if ($linked !== null) {
+                    // The key created a v2 session (POST /api/v2/sessions) that GET /connections or
+                    // gateway:sync-connections already projected: adopt that projection, so the
+                    // answer does not depend on whether a read happened in between.
+                    return [$this->adopt($linked, $application, $key, $fingerprint, $makeDefault), true];
                 }
 
                 $sessionId = $session->getKey();
@@ -218,6 +223,39 @@ final class ConnectionProvisioner
 
             return [$connection->fresh() ?? $connection, true];
         });
+    }
+
+    /**
+     * Claim a projected connection (one without a creation key) for the session that this key
+     * created. A connection already created through this API under another key is a conflict.
+     */
+    private function adopt(
+        WhatsAppConnection $linked,
+        ClientApplication $application,
+        string $key,
+        string $fingerprint,
+        bool $makeDefault,
+    ): WhatsAppConnection {
+        if ($linked->creation_key !== null || (int) $linked->client_application_id !== (int) $application->getKey()
+            || ! $linked->isManaged()) {
+            throw new WhatsAppEngineException('This idempotency key belongs to a different request.', 409, 'idempotency_conflict');
+        }
+
+        if ($linked->trashed()) {
+            throw new WhatsAppEngineException('This connection was removed. Start a new attempt.', 410, 'connection_removed');
+        }
+
+        $linked->forceFill(['creation_key' => $key, 'creation_hash' => $fingerprint])->save();
+
+        if ($makeDefault || ! WhatsAppConnection::query()
+            ->where('client_application_id', $application->getKey())
+            ->where('is_default', true)
+            ->whereKeyNot($linked->getKey())
+            ->exists()) {
+            $this->markDefault($linked);
+        }
+
+        return $linked->fresh() ?? $linked;
     }
 
     private function replay(ClientApplication $application, string $key, string $fingerprint): WhatsAppConnection
@@ -270,9 +308,19 @@ final class ConnectionProvisioner
                 $this->sessions->command($session, 'start', $payload);
             }
 
+            $setup = array_merge($locked->setup_state ?? [], ['last_step' => 'connecting', 'auth_method' => $authMethod]);
+
+            if ($locked->engine_session_id !== null && (int) $locked->engine_session_id !== (int) $session->getKey()) {
+                // Remember the replaced session so its accepted messages still replay by key.
+                $setup['previous_engine_session_ids'] = array_values(array_unique([
+                    ...array_map('intval', (array) ($setup['previous_engine_session_ids'] ?? [])),
+                    (int) $locked->engine_session_id,
+                ]));
+            }
+
             $locked->forceFill([
                 'engine_session_id' => $session->getKey(),
-                'setup_state' => array_merge($locked->setup_state ?? [], ['last_step' => 'connecting', 'auth_method' => $authMethod]),
+                'setup_state' => $setup,
                 'last_error_code' => null,
                 'last_error_message' => null,
             ])->save();

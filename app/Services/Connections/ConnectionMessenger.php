@@ -4,8 +4,10 @@ namespace App\Services\Connections;
 
 use App\Exceptions\WhatsAppConnectionException;
 use App\Exceptions\WhatsAppEngineException;
+use App\Models\EngineMessage;
 use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
+use App\Models\RoutingPolicy;
 use App\Models\WhatsAppConnection;
 use App\Services\Engine\EngineTransportService;
 use App\Services\GatewayMessageDispatcher;
@@ -50,14 +52,17 @@ final class ConnectionMessenger
     private function sendManaged(WhatsAppConnection $connection, array $payload, string $key): ConnectionDelivery
     {
         $session = $connection->ownedEngineSession();
+        // A replay is answered against the session that accepted the original message, so a key
+        // stays a replay after a removed session was replaced through connect/retry.
+        $sessionUuid = $this->replayedSessionUuid($connection, $key) ?? $session?->uuid;
 
-        if ($session === null) {
+        if ($sessionUuid === null) {
             throw new WhatsAppConnectionException('WhatsApp connection is not ready.', 409, 'connection_not_ready', true);
         }
 
         try {
             // A removed session still answers replays: accept looks the key up before the session.
-            $message = $this->transport->accept($connection->clientApplication, $session->uuid, $payload, $key);
+            $message = $this->transport->accept($connection->clientApplication, $sessionUuid, $payload, $key);
         } catch (WhatsAppEngineException $exception) {
             if ($exception->errorCode === 'session_not_found') {
                 throw new WhatsAppConnectionException('WhatsApp connection has no active session. Reconnect it.', 409, 'connection_not_ready');
@@ -70,6 +75,29 @@ final class ConnectionMessenger
             ['connection_id' => (string) $connection->uuid, ...$this->transport->snapshot($message)],
             202,
         );
+    }
+
+    /**
+     * The session of an earlier message accepted under this key, when that session belongs (or
+     * belonged) to this connection. Any other stored message keeps hashing against the current
+     * session, so reusing its key here stays an idempotency_conflict.
+     */
+    private function replayedSessionUuid(WhatsAppConnection $connection, string $key): ?string
+    {
+        if ($key === '') {
+            return null;
+        }
+
+        $existing = EngineMessage::query()
+            ->where('client_application_id', $connection->client_application_id)
+            ->where('idempotency_key', $key)
+            ->first(['engine_session_id', 'session_uuid']);
+
+        if ($existing === null || ! in_array((int) $existing->engine_session_id, $connection->engineSessionHistory(), true)) {
+            return null;
+        }
+
+        return (string) $existing->session_uuid;
     }
 
     /**
@@ -116,7 +144,7 @@ final class ConnectionMessenger
             throw new WhatsAppEngineException('Message expiry must be in the future.', 422, 'invalid_expiry');
         }
 
-        if (! $connection->canAttemptSend()) {
+        if (! $connection->canAttemptSend() || ! $this->hasUsablePolicy($connection)) {
             throw new WhatsAppConnectionException('WhatsApp connection is not ready.', 409, 'connection_not_ready', true);
         }
 
@@ -143,6 +171,24 @@ final class ConnectionMessenger
         $dispatched = $this->dispatcher->dispatch($message);
 
         return $this->routedResult($connection, $dispatched->fresh() ?? $dispatched, $hash);
+    }
+
+    /**
+     * A connection sends only through its own routing policy. When that policy is inactive or gone
+     * the message must not fall back to the application's default (another connection's provider).
+     */
+    private function hasUsablePolicy(WhatsAppConnection $connection): bool
+    {
+        if ($connection->routing_policy_id === null) {
+            return false;
+        }
+
+        return RoutingPolicy::query()
+            ->whereKey($connection->routing_policy_id)
+            ->where('client_application_id', $connection->client_application_id)
+            ->where('operation', 'message')
+            ->where('is_active', true)
+            ->exists();
     }
 
     private function existing(WhatsAppConnection $connection, string $key): ?GatewayMessage

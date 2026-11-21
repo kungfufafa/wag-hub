@@ -13,6 +13,11 @@ final class ConnectionStatusProjector
     public const RUNNER_DOWN_ERRORS = ['engine_unavailable', 'engine_unconfigured', 'engine_unreachable'];
 
     /**
+     * Session commands that take a number offline (SessionService::command).
+     */
+    public const TEARDOWN_ACTIONS = ['stop', 'logout', 'delete'];
+
+    /**
      * Project a v2 engine session snapshot (SessionService::snapshot) onto a connection status.
      * A managed number is ready only while its session is WORKING, freshly observed, and idle.
      *
@@ -32,6 +37,12 @@ final class ConnectionStatusProjector
         $running = ($session['desired_state'] ?? 'STOPPED') === 'RUNNING';
         $stale = (bool) ($session['stale'] ?? true);
         $pending = ($session['pending_operation'] ?? null) !== null;
+        $action = $pending ? ($session['pending_operation']['action'] ?? null) : null;
+
+        // A pending stop, logout or delete is a teardown: the number is going away, not connecting.
+        if (in_array($action, self::TEARDOWN_ACTIONS, true)) {
+            return ConnectionStatus::Disconnected;
+        }
 
         if ($status === 'WORKING' && $running) {
             // An authenticated number whose runner is briefly unobserved is degraded, not lost.

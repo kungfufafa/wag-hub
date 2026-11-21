@@ -10,11 +10,14 @@ use App\Models\EngineIntegration;
 use App\Models\EngineMessage;
 use App\Models\EngineOperation;
 use App\Models\EngineSession;
+use App\Models\GatewayMessage;
 use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
 use App\Models\WhatsAppConnection;
 use App\Services\Connections\ConnectionHealthProjector;
+use App\Services\Connections\ConnectionStatusProjector;
 use App\Services\Engine\SessionService;
+use App\Services\GatewayMessageDispatcher;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
@@ -490,6 +493,173 @@ class WhatsAppConnectionApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.id', $legacy->uuid)
             ->assertJsonPath('data.0.session.id', $mapped->uuid);
+    }
+
+    public function test_read_only_credentials_never_receive_the_qr_or_pairing_code(): void
+    {
+        $client = $this->client();
+        $id = $this->createManaged($client, 'secret-1')->assertCreated()->json('data.id');
+        $session = EngineSession::query()->sole();
+        $this->settle($session, 'SCAN_QR_CODE', ['auth_method' => 'qr']);
+        Http::fake([
+            'runner.test/sessions/*/auth/qr' => Http::response(['qr' => 'data:image/png;base64,abc', 'generation' => 1, 'expires_at' => now()->addMinute()->toISOString()]),
+            'runner.test/sessions/*' => Http::response(['canonical_status' => 'SCAN_QR_CODE', 'auth_method' => 'qr', 'generation' => 1, 'revision' => 1]),
+        ]);
+        // A second credential of the same application that may only read sessions.
+        $reader = $this->createApiCredential($client['id'], ['sessions:read']);
+
+        $this->withToken($reader['token'])->getJson('/api/v2/sessions/'.$session->uuid.'/auth/qr')->assertForbidden();
+        $this->withToken($reader['token'])->getJson('/api/v2/connections/'.$id)
+            ->assertOk()
+            ->assertJsonPath('data.status', ConnectionStatus::Connecting->value)
+            ->assertJsonPath('data.recommended_action', 'Scan QR')
+            ->assertJsonMissingPath('data.qr')
+            ->assertJsonMissingPath('data.pairing_code')
+            ->assertJsonMissingPath('data.challenge_expires_at');
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/auth/qr'));
+
+        $this->withToken($client['token'])->getJson('/api/v2/connections/'.$id)
+            ->assertOk()
+            ->assertJsonPath('data.qr', 'data:image/png;base64,abc');
+    }
+
+    public function test_a_routed_send_never_falls_back_to_another_connections_provider(): void
+    {
+        $client = $this->client();
+        Http::fake([
+            'https://api.fonnte.com/*' => Http::response(['status' => true, 'id' => 'fonnte-1']),
+            'https://secondary.waha.test/*' => Http::response(['id' => 'waha-1'], 201),
+        ]);
+        // Connection A holds the application's default policy; B has its own dedicated policy.
+        $this->createProvider($client, 'a', 'Fonnte', 'fonnte', ['token' => 'fonnte-secret'])->assertCreated();
+        $b = $this->createProvider($client, 'b', 'WAHA', 'waha', [
+            'base_url' => 'https://secondary.waha.test', 'session' => 'default', 'api_key' => 'waha-key',
+        ])->assertCreated()->json('data.id');
+        $connection = WhatsAppConnection::query()->where('uuid', $b)->firstOrFail();
+        $this->send($client, $b, 'b-1', ['to' => '6281234567890', 'text' => 'Halo'])->assertCreated();
+        ProviderAccount::query()->whereKey($connection->provider_account_id)->update(['health_status' => 'healthy']);
+        RoutingPolicy::query()->whereKey($connection->routing_policy_id)->update(['is_active' => false]);
+
+        $this->send($client, $b, 'b-2', ['to' => '6281234567890', 'text' => 'Halo'])
+            ->assertConflict()
+            ->assertJsonPath('error.code', 'connection_not_ready')
+            ->assertJsonPath('error.retryable', true);
+        $this->withToken($client['token'])->getJson('/api/v2/connections/'.$b)
+            ->assertOk()
+            ->assertJsonPath('data.status', ConnectionStatus::Disconnected->value);
+
+        // A message already pinned to B (e.g. queued before the policy was disabled) fails
+        // instead of being routed through the application's default policy.
+        $original = GatewayMessage::query()->where('idempotency_key', 'b-1')->sole();
+        $pinned = $original->replicate();
+        $pinned->forceFill([
+            'uuid' => (string) Str::uuid(), 'idempotency_key' => 'b-3', 'status' => 'queued',
+            'accepted_provider_account_id' => null, 'provider_message_id' => null, 'provider_accepted_at' => null,
+        ])->save();
+
+        $result = app(GatewayMessageDispatcher::class)->dispatch($pinned);
+
+        $this->assertSame('failed', $result->fresh()->status);
+        $this->assertSame('route_unavailable', $result->fresh()->last_error_code);
+        Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'api.fonnte.com'));
+    }
+
+    public function test_managed_send_replays_after_the_session_is_replaced(): void
+    {
+        $client = $this->client();
+        $id = $this->createManaged($client, 'replace-1')->assertCreated()->json('data.id');
+        $session = EngineSession::query()->sole();
+        $this->settle($session, 'WORKING');
+        $payload = ['to' => '6281234567890', 'text' => 'Halo'];
+        $first = $this->send($client, $id, 'm1', $payload)->assertAccepted();
+
+        $session->refresh()->delete();
+        $this->withToken($client['token'])->postJson('/api/v2/connections/'.$id.'/retry')->assertAccepted();
+        $replacement = WhatsAppConnection::query()->sole()->engine_session_id;
+        $this->assertNotSame($session->id, $replacement);
+
+        $this->send($client, $id, 'm1', $payload)
+            ->assertAccepted()
+            ->assertJsonPath('data.id', $first->json('data.id'))
+            ->assertJsonPath('data.session_id', $session->uuid);
+        $this->send($client, $id, 'm1', [...$payload, 'text' => 'Lain'])
+            ->assertConflict()
+            ->assertJsonPath('error.code', 'idempotency_conflict');
+        $this->send($client, $id, 'm2', $payload)
+            ->assertConflict()
+            ->assertJsonPath('error.code', 'connection_not_ready');
+
+        // A key used on a session that never belonged to this connection is still a conflict.
+        $other = $this->withToken($client['token'])->postJson('/api/v2/sessions', ['name' => 'Other'], ['Idempotency-Key' => 'other-session'])
+            ->assertCreated()->json('data.session.id');
+        $this->settle(EngineSession::query()->where('uuid', $other)->sole(), 'WORKING');
+        $this->withToken($client['token'])->postJson('/api/v2/sessions/'.$other.'/messages', $payload, ['Idempotency-Key' => 'foreign-1'])
+            ->assertAccepted();
+        $this->settle(EngineSession::query()->findOrFail($replacement), 'WORKING');
+        $this->send($client, $id, 'foreign-1', $payload)
+            ->assertConflict()
+            ->assertJsonPath('error.code', 'idempotency_conflict');
+        $this->assertSame(2, EngineMessage::query()->count());
+    }
+
+    public function test_a_pending_teardown_is_reported_as_disconnected(): void
+    {
+        $projector = app(ConnectionStatusProjector::class);
+
+        foreach (['stop', 'logout', 'delete'] as $action) {
+            $snapshot = [
+                'status' => 'WORKING', 'desired_state' => 'STOPPED', 'stale' => false, 'deleted' => false,
+                'auth_method' => 'qr', 'last_error' => null, 'pending_operation' => ['action' => $action, 'status' => 'pending'],
+            ];
+            $status = $projector->projectEngineSession($snapshot);
+
+            $this->assertSame(ConnectionStatus::Disconnected, $status, $action);
+            $this->assertSame('Reconnect', $projector->recommendedEngineAction($status, $snapshot), $action);
+        }
+
+        $starting = ['status' => 'STOPPED', 'desired_state' => 'RUNNING', 'stale' => false, 'deleted' => false,
+            'auth_method' => 'qr', 'last_error' => null, 'pending_operation' => ['action' => 'start', 'status' => 'pending']];
+        $this->assertSame(ConnectionStatus::Connecting, $projector->projectEngineSession($starting));
+
+        $client = $this->client();
+        $id = $this->createManaged($client, 'teardown-1')->assertCreated()->json('data.id');
+        $session = EngineSession::query()->sole();
+        $this->settle($session, 'WORKING');
+        $this->withToken($client['token'])->postJson('/api/v2/sessions/'.$session->uuid.'/stop')->assertAccepted();
+
+        $this->withToken($client['token'])->getJson('/api/v2/connections')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $id)
+            ->assertJsonPath('data.0.status', ConnectionStatus::Disconnected->value)
+            ->assertJsonPath('data.0.recommended_action', 'Reconnect')
+            ->assertJsonPath('data.0.operation.action', 'stop');
+    }
+
+    public function test_create_with_a_key_already_used_for_a_session_does_not_depend_on_a_prior_read(): void
+    {
+        foreach ([false, true] as $readFirst) {
+            $client = $this->client();
+            $session = $this->withToken($client['token'])->postJson('/api/v2/sessions', ['name' => 'WhatsApp', 'start' => true], ['Idempotency-Key' => 'shared-key'])
+                ->assertCreated()->json('data.session.id');
+
+            if ($readFirst) {
+                // Projects the session as a managed connection.
+                $this->withToken($client['token'])->getJson('/api/v2/connections')->assertOk()->assertJsonCount(1, 'data');
+            }
+
+            $created = $this->createManaged($client, 'shared-key')
+                ->assertCreated()
+                ->assertJsonPath('data.session.id', $session);
+            $this->createManaged($client, 'shared-key')
+                ->assertCreated()
+                ->assertJsonPath('data.id', $created->json('data.id'));
+            $this->createManaged($client, 'shared-key', ['name' => 'Different'])
+                ->assertConflict()
+                ->assertJsonPath('error.code', 'idempotency_conflict');
+
+            $this->assertSame(1, EngineSession::query()->where('client_application_id', $client['id'])->count(), 'read first: '.var_export($readFirst, true));
+            $this->assertSame(1, WhatsAppConnection::query()->where('client_application_id', $client['id'])->count(), 'read first: '.var_export($readFirst, true));
+        }
     }
 
     private function hydrated(): WhatsAppConnection

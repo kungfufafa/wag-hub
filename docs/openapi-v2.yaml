@@ -890,7 +890,7 @@
       "summary": "Connection status, QR or pairing code"
       "operationId": "get_api_v2_connections_connection"
       "x-required-scope": "sessions:read"
-      "description": "For a managed number the session is refreshed like GET /api/v2/sessions/{id}; qr / pairing_code are present only while the session waits for authentication. Responses are Cache-Control: no-store. Another installation's connection is 404 connection_not_found."
+      "description": "For a managed number the session is refreshed like GET /api/v2/sessions/{id}; qr / pairing_code are present only while the session waits for authentication, and only for credentials with sessions:manage (as for GET /api/v2/sessions/{id}/auth/qr). Responses are Cache-Control: no-store. Another installation's connection is 404 connection_not_found."
       "responses":
         "200":
           "description": "Successful response"
@@ -1728,7 +1728,7 @@
         "qr":
           "type": "string"
           "nullable": true
-          "description": "Only on single-connection responses while a QR is awaited; never stored."
+          "description": "Only on single-connection responses while a QR is awaited, and only for credentials with sessions:manage; never stored."
         "pairing_code":
           "type": "string"
           "nullable": true

@@ -140,7 +140,9 @@ final class ConnectionHealthProjector
         $account = $connection->providerAccount;
         $circuitOpen = $account?->circuit_open_until !== null
             && now()->lessThan($account->circuit_open_until);
-        $configured = $account !== null && $account->is_active && $connection->routing_policy_id !== null;
+        // A route sends only through its own active policy; the dispatcher never falls back for it.
+        $configured = $account !== null && $account->is_active
+            && $connection->routing_policy_id !== null && (bool) $connection->routingPolicy?->is_active;
 
         return $this->statuses->projectRoute(
             $account?->health_status,

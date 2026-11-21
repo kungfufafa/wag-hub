@@ -50,12 +50,16 @@ curl -X POST "$WAG_URL/api/v2/connections/$CONNECTION_ID/messages" \
   `media_id` from `POST /api/v2/media`) are supported.
 - **Provider route** (`provider_route`): sent synchronously through the
   connection's routing policy, including any fallback the operator adds later.
-  `201 Created` once a provider accepted it; a delivery failure returns the
-  error object together with `data`. Provider routes accept `text` only here.
+  It never falls back to the application's default or another connection's
+  policy: while its own policy is disabled the send is `409
+  connection_not_ready`. `201 Created` once a provider accepted it; a delivery
+  failure returns the error object together with `data`. Provider routes
+  accept `text` only here.
 
 Repeating a request with the same `Idempotency-Key` returns the original
-message (even if the connection is no longer ready); reusing the key with a
-different body is `409 idempotency_conflict`. When the outcome is unknown,
+message (even if the connection is no longer ready, or a managed number was
+reconnected onto a new session); reusing the key with a different body is
+`409 idempotency_conflict`. When the outcome is unknown,
 retry with the **same** key.
 
 Client copies: [PHP](examples/php/WagClient.php),
@@ -98,7 +102,7 @@ the v2 envelope `{"data": ...}`; errors are
 | --- | --- | --- | --- |
 | List connections | `GET /api/v2/connections` | `sessions:read` | 200 |
 | Create connection | `POST /api/v2/connections` (`Idempotency-Key` required) | `sessions:manage` | 201 |
-| Status / QR / pairing code | `GET /api/v2/connections/{id}` | `sessions:read` | 200 |
+| Status (QR / pairing code with `sessions:manage`) | `GET /api/v2/connections/{id}` | `sessions:read` | 200 |
 | Pair / reconnect | `POST /api/v2/connections/{id}/connect` | `sessions:manage` | 202 managed, 200 provider |
 | Retry setup | `POST /api/v2/connections/{id}/retry` | `sessions:manage` | 202 managed, 200 provider |
 | Send | `POST /api/v2/connections/{id}/messages` (`Idempotency-Key` required) | `messages:send` | 202 managed, 201 provider |
@@ -122,8 +126,11 @@ Creation is idempotent per `Idempotency-Key`, like `POST /api/v2/sessions`
 and `retry` on a managed number issue a v2 session `start` command; the
 response carries the pending `operation` (`retryable: true`) until the runner
 confirms it. Poll `GET /api/v2/connections/{id}` for `status`, `qr`, or
-`pairing_code`; QR and pairing codes are never stored and are only returned
-for the connection's own session.
+`pairing_code`; QR and pairing codes are never stored, are only returned
+for the connection's own session, and only to credentials with
+`sessions:manage` (like `GET /api/v2/sessions/{id}/auth/qr`): a
+`sessions:read` token sees the status without them. A pending `stop`,
+`logout` or `delete` reports the connection as `disconnected`.
 
 Connection types: `managed_number`, `provider_route`.
 
