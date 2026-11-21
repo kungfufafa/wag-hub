@@ -33,6 +33,38 @@ class ConnectWhatsAppPageTest extends TestCase
         Http::preventStrayRequests();
     }
 
+    public function test_the_application_query_parameter_resolves_strictly_by_uuid_or_numeric_id(): void
+    {
+        $first = ClientApplication::query()->create([
+            'name' => 'Alpha',
+            'slug' => 'alpha-web',
+            'is_active' => true,
+            'rate_limit_per_minute' => 60,
+        ]);
+        $second = ClientApplication::query()->create([
+            'name' => 'Beta',
+            'slug' => 'beta-web',
+            'is_active' => true,
+            'rate_limit_per_minute' => 60,
+        ]);
+
+        Livewire::withQueryParams(['application' => $second->uuid])
+            ->test(ConnectWhatsApp::class)
+            ->assertSet('applicationId', $second->getKey());
+
+        Livewire::withQueryParams(['application' => (string) $second->getKey()])
+            ->test(ConnectWhatsApp::class)
+            ->assertSet('applicationId', $second->getKey());
+
+        Livewire::withQueryParams(['application' => $first->getKey().'.0'])
+            ->test(ConnectWhatsApp::class)
+            ->assertSet('applicationId', null);
+
+        Livewire::withQueryParams(['application' => $first->getKey().'abc'])
+            ->test(ConnectWhatsApp::class)
+            ->assertSet('applicationId', null);
+    }
+
     public function test_a_second_wizard_connection_does_not_steal_the_default(): void
     {
         $application = ClientApplication::query()->create([

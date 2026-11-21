@@ -18,6 +18,7 @@ use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Throwable;
 use UnitEnum;
 
@@ -79,10 +80,23 @@ class ConnectWhatsApp extends Page
     {
         $requested = request()->query('application');
         $application = is_string($requested)
-            ? ClientApplication::query()->where('uuid', $requested)->orWhere('id', $requested)->first()
+            ? $this->findRequestedApplication($requested)
             : $this->applications()->first();
 
         $this->applicationId = $application?->getKey();
+    }
+
+    private function findRequestedApplication(string $requested): ?ClientApplication
+    {
+        if (Str::isUuid($requested)) {
+            return ClientApplication::query()->where('uuid', $requested)->first();
+        }
+
+        if (ctype_digit($requested)) {
+            return ClientApplication::query()->whereKey((int) $requested)->first();
+        }
+
+        return null;
     }
 
     /**

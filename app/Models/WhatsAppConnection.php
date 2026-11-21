@@ -49,6 +49,11 @@ class WhatsAppConnection extends Model
         return 'slug';
     }
 
+    protected function deactivatedOnSoftDeleteColumn(): ?string
+    {
+        return null;
+    }
+
     protected function casts(): array
     {
         return [
