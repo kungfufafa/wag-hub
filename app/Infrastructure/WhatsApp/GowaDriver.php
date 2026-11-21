@@ -49,7 +49,7 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
         $endpoint = rtrim($baseUrl, '/').$path;
 
         try {
-            $this->endpoints->assertAllowed($endpoint);
+            $endpointOptions = $this->endpoints->assertAllowed($endpoint, $account);
         } catch (InvalidArgumentException) {
             return ProviderResult::providerFailed(
                 errorCode: 'provider_endpoint_not_allowed',
@@ -57,7 +57,7 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
             );
         }
 
-        $request = Http::acceptJson()
+        $request = Http::withOptions($endpointOptions)->acceptJson()
             ->withBasicAuth($username, $password)
             ->withoutRedirecting()
             ->timeout($this->timeout($account))
@@ -138,12 +138,12 @@ final readonly class GowaDriver implements ProviderDriver, ProviderNumberChecker
         $endpoint = rtrim($baseUrl, '/').'/user/check';
 
         try {
-            $this->endpoints->assertAllowed($endpoint);
+            $endpointOptions = $this->endpoints->assertAllowed($endpoint, $account);
         } catch (InvalidArgumentException) {
             return NumberCheckResult::unknown('provider_endpoint_not_allowed');
         }
 
-        $request = Http::acceptJson()
+        $request = Http::withOptions($endpointOptions)->acceptJson()
             ->withBasicAuth($username, $password)
             ->withoutRedirecting()
             ->timeout($this->timeout($account))

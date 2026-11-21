@@ -50,7 +50,7 @@ final readonly class FonnteDriver implements ProviderDriver, ProviderNumberCheck
         }
 
         try {
-            $this->endpoints->assertAllowed($endpoint);
+            $endpointOptions = $this->endpoints->assertAllowed($endpoint, $account);
         } catch (InvalidArgumentException) {
             return ProviderResult::providerFailed(
                 errorCode: 'provider_endpoint_not_allowed',
@@ -59,7 +59,7 @@ final readonly class FonnteDriver implements ProviderDriver, ProviderNumberCheck
         }
 
         try {
-            $response = Http::acceptJson()
+            $response = Http::withOptions($endpointOptions)->acceptJson()
                 ->withHeaders(['Authorization' => $token])
                 ->asMultipart()
                 ->withoutRedirecting()
@@ -124,13 +124,13 @@ final readonly class FonnteDriver implements ProviderDriver, ProviderNumberCheck
         }
 
         try {
-            $this->endpoints->assertAllowed($endpoint);
+            $endpointOptions = $this->endpoints->assertAllowed($endpoint, $account);
         } catch (InvalidArgumentException) {
             return NumberCheckResult::unknown('provider_endpoint_not_allowed');
         }
 
         try {
-            $response = Http::acceptJson()
+            $response = Http::withOptions($endpointOptions)->acceptJson()
                 ->withHeaders(['Authorization' => $token])
                 ->asMultipart()
                 ->withoutRedirecting()

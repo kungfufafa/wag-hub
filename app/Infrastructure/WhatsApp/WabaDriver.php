@@ -61,7 +61,7 @@ final readonly class WabaDriver implements ProviderDriver, ProviderNumberChecker
         $endpoint = rtrim($baseUrl, '/')."/{$apiVersion}/{$phoneNumberId}/messages";
 
         try {
-            $this->endpoints->assertAllowed($endpoint);
+            $endpointOptions = $this->endpoints->assertAllowed($endpoint, $account);
         } catch (InvalidArgumentException) {
             return ProviderResult::providerFailed(
                 errorCode: 'provider_endpoint_not_allowed',
@@ -70,7 +70,7 @@ final readonly class WabaDriver implements ProviderDriver, ProviderNumberChecker
         }
 
         try {
-            $response = Http::acceptJson()
+            $response = Http::withOptions($endpointOptions)->acceptJson()
                 ->asJson()
                 ->withToken($accessToken)
                 ->withoutRedirecting()

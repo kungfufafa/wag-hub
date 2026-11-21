@@ -106,7 +106,7 @@ final class ConnectionProvisioner
 
         $account = $connection->providerAccount;
 
-        if ($account === null || ! $account->supportsSessions()) {
+        if ($account === null || ! $account->supportsSessions() || ! $this->ownsAccount($connection, $account)) {
             return $this->health->refresh($connection);
         }
 
@@ -126,6 +126,13 @@ final class ConnectionProvisioner
 
     public function retry(WhatsAppConnection $connection): WhatsAppConnection
     {
+        $account = $connection->providerAccount;
+
+        if ($account !== null && ! $this->ownsAccount($connection, $account)) {
+            // Shared, admin-managed accounts and their routes are never rewritten or re-enabled from here.
+            return $this->health->refresh($connection);
+        }
+
         return $this->provision($connection->clientApplication, [
             'name' => $connection->name,
             'type' => $connection->type,
@@ -243,7 +250,18 @@ final class ConnectionProvisioner
             return;
         }
 
-        $existing = $connection->providerAccount?->configuration ?? [];
+        $account = $connection->providerAccount;
+
+        // Tenant configuration may only land on the account this connection created.
+        if ($account !== null && $account->slug !== $this->accountSlug($connection)) {
+            throw new WhatsAppConnectionException(
+                'This connection uses a provider account managed by the administrator.',
+                409,
+                'capability_not_supported',
+            );
+        }
+
+        $existing = $account?->configuration ?? [];
         $validated = $this->validator->validate($driver, $configuration, $existing);
 
         DB::transaction(function () use ($connection, $driver, $validated): void {
@@ -273,21 +291,8 @@ final class ConnectionProvisioner
         string $driver,
         array $configuration,
     ): ProviderAccount {
-        $account = $connection->providerAccount;
-
-        if ($account !== null) {
-            $account->forceFill([
-                'driver' => $driver,
-                'configuration' => array_merge($account->configuration ?? [], $configuration, [
-                    'whatsapp_connection_id' => $connection->getKey(),
-                ]),
-                'is_active' => true,
-            ])->save();
-
-            return $account;
-        }
-
-        $account = ProviderAccount::query()
+        // Only the account this connection created is ever updated; is_active stays as an admin left it.
+        $account = $connection->providerAccount ?? ProviderAccount::query()
             ->where('slug', $this->accountSlug($connection))
             ->first();
 
@@ -297,7 +302,6 @@ final class ConnectionProvisioner
                 'configuration' => array_merge($account->configuration ?? [], $configuration, [
                     'whatsapp_connection_id' => $connection->getKey(),
                 ]),
-                'is_active' => true,
             ])->save();
 
             return $account;
@@ -422,10 +426,7 @@ final class ConnectionProvisioner
             ->first();
 
         if ($existing !== null) {
-            if (! $existing->is_active) {
-                $existing->forceFill(['is_active' => true])->save();
-            }
-
+            // A disabled step stays disabled: only an administrator re-enables routing.
             return;
         }
 
@@ -443,7 +444,22 @@ final class ConnectionProvisioner
 
     private function accountSlug(WhatsAppConnection $connection): string
     {
-        return 'conn-acct-'.hash('sha256', $connection->uuid);
+        return ProviderAccount::CONNECTION_SLUG_PREFIX.hash('sha256', $connection->uuid);
+    }
+
+    /**
+     * A connection may only change the provider account it created itself, or
+     * a native session owned by its own application.
+     */
+    private function ownsAccount(WhatsAppConnection $connection, ProviderAccount $account): bool
+    {
+        if ($account->slug === $this->accountSlug($connection)) {
+            return true;
+        }
+
+        $owner = $account->configuration['owned_by_application_id'] ?? null;
+
+        return $owner !== null && (string) $owner === (string) $connection->client_application_id;
     }
 
     /**

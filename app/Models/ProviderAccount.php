@@ -19,6 +19,8 @@ class ProviderAccount extends Model
     use ReleasesUniqueIdentifierOnSoftDelete;
     use SoftDeletes;
 
+    public const CONNECTION_SLUG_PREFIX = 'conn-acct-';
+
     protected $fillable = [
         'uuid',
         'name',
@@ -82,6 +84,15 @@ class ProviderAccount extends Model
             || filled($config['engine_session_id'] ?? null)
             || filled($config['cesa_session_id'] ?? null)
             || str_contains((string) $this->slug, '-sess-');
+    }
+
+    /**
+     * Accounts created by the Connection API carry endpoints chosen by a client
+     * application, so they must only ever reach public hosts.
+     */
+    public function hasTenantSuppliedEndpoints(): bool
+    {
+        return str_starts_with((string) $this->slug, self::CONNECTION_SLUG_PREFIX);
     }
 
     public function sessionStatus(): SessionStatus

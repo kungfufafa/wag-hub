@@ -83,7 +83,7 @@ final class ProviderConfigurationValidator
             }
 
             try {
-                $this->endpoints->assertAllowed((string) $merged[$urlKey]);
+                $this->endpoints->assertPublic((string) $merged[$urlKey]);
             } catch (InvalidArgumentException) {
                 throw new WhatsAppConnectionException(
                     'Provider endpoint is not allowed.',

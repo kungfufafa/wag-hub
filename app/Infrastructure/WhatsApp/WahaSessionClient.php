@@ -198,9 +198,9 @@ final readonly class WahaSessionClient
 
     private function request(ProviderAccount $account, string $path): PendingRequest
     {
-        $this->endpoints->assertAllowed($this->url($account, $path));
+        $endpointOptions = $this->endpoints->assertAllowed($this->url($account, $path), $account);
 
-        $request = Http::acceptJson()
+        $request = Http::withOptions($endpointOptions)->acceptJson()
             ->withoutRedirecting()
             ->timeout($this->timeout($account))
             ->connectTimeout(min(5, $this->timeout($account)));
