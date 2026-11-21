@@ -272,3 +272,13 @@ path against compatible backups. Never dual-run old and new engines for the same
 account, re-send unknown messages, or drop additive tables as a routine rollback.
 The checked-in tests and container definitions do not substitute for the real
 MySQL restore, real WhatsApp media checks, and deployment/load acceptance above.
+
+## Connections
+
+`/api/v2/connections` is the application-facing layer on top of sessions: a
+`managed_number` connection is created through the same `SessionService::create`
+path (same `Idempotency-Key`, `start: true`, capacity) and is listed by
+`GET /api/v2/sessions`; its sends are `POST /api/v2/sessions/{id}/messages`
+semantics. A `provider_route` connection sends through the routed gateway. See
+[PLUG_AND_PLAY_GUIDE.md](PLUG_AND_PLAY_GUIDE.md) and the `Connection*` schemas
+in [openapi-v2.yaml](openapi-v2.yaml).

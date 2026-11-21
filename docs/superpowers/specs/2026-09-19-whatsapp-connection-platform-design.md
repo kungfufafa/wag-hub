@@ -9,8 +9,10 @@ implementation. Connections orchestrate them transactionally.
 
 A `whatsapp_connections` row is the stable public resource:
 
-- `managed_number` — pinned sender, no silent fallback
-- `provider_route` — default delivery strategy; fallback is optional later
+- `managed_number` — exactly one v2 `EngineSession` (`engine_session_id`,
+  unique); pinned sender, no silent fallback
+- `provider_route` — tenant-owned provider account behind a dedicated routing
+  policy; fallback is optional later
 
 Public fields: id, application, name, type, status, capabilities, sender
 identity, health summary. Credentials are never returned.
@@ -22,23 +24,41 @@ Capabilities are driver-derived, not provider-name branches.
 
 ## Provisioning
 
-`ConnectionProvisioner` creates or resumes the internal session/account,
-message policy, and optional number-check policy. Repeating the same app+name
-is idempotent. Engine failure leaves a recoverable `setup_required` row.
+The Connection API lives at `/api/v2/connections` (v2 auth, rate limit,
+abilities, envelope and errors). `ConnectionProvisioner` is idempotent per
+`Idempotency-Key` (`creation_key` / `creation_hash` on the row):
 
-Existing sessions and default routes are projected by
-`ConnectionSynchronizer`.
+- `managed_number` calls `SessionService::create` with the request key and
+  `start: true`, so capacity (`capacity_exceeded`), idempotency
+  (`idempotency_conflict`) and the start operation match `POST /api/v2/sessions`.
+  No legacy native session, provider account or route is created. Connect and
+  retry issue `SessionService::command('start')`; a removed session is replaced
+  by a new one.
+- `provider_route` validates tenant settings (`ProviderEndpointGuard` public
+  hosts only) and creates its own account and single-step policy. A failed
+  validation leaves a recoverable row; replaying the request or `retry`
+  completes it. Administrator-managed accounts are never rewritten.
+
+Status, QR and pairing codes of managed numbers come from the session
+(`SessionService::snapshot` / `challenge`); a managed number is `ready` only
+while its session is `WORKING`, fresh and idle.
+
+`ConnectionSynchronizer` (`gateway:sync-connections`, and every list call)
+projects each live `EngineSession` — including sessions created by
+`engine:migrate-legacy`, which re-link the pre-v2 connection of that native
+account — and the default routing policy into connections.
 
 ## Send path
 
-Connection-oriented `POST /api/v1/messages` (omit `purpose`/`mode`/`route_key`,
-or pass `connection_id`) resolves the default or named connection.
+`POST /api/v2/connections/{id}/messages` (`ConnectionMessenger`):
 
-Pinned `whatsapp_connection_id` + `pinned_provider_account_id` keep managed
-sends on that number. Routed sends use the connection policy, including
-configured fallback.
+- managed: `EngineTransportService::accept` on the connection's session (202).
+- provider route: a `GatewayMessage` on the connection's routing policy,
+  dispatched synchronously by `GatewayMessageDispatcher` (201 when accepted).
 
-Legacy payloads keep existing error codes and gain `error.action`.
+Idempotency-Key replay is answered before readiness checks. Outages are
+`connection_not_ready` (retryable) with the engine cause in
+`error.internal_code`. The legacy `/api/v1/messages` contract is unchanged.
 
 ## UI
 

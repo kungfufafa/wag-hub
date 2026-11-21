@@ -812,6 +812,343 @@
             "minimum": 1
             "maximum": 100
             "default": 100
+  "/api/v2/connections":
+    "get":
+      "summary": "List WhatsApp connections"
+      "operationId": "get_api_v2_connections"
+      "x-required-scope": "sessions:read"
+      "description": "Every v2 session of the installation (including sessions mapped by engine:migrate-legacy) is listed as a managed_number connection; the default routing policy is listed as a provider_route. Never returns QR or pairing codes."
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "type": "array"
+                    "items":
+                      "$ref": "#/components/schemas/Connection"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. Connection outages are connection_not_ready (retryable) with the engine cause in error.internal_code."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/ConnectionError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+    "post":
+      "summary": "Create a managed number or provider route connection"
+      "operationId": "post_api_v2_connections"
+      "x-required-scope": "sessions:manage"
+      "description": "managed_number creates and starts a v2 session through the same path as POST /api/v2/sessions (start:true, same Idempotency-Key): it reserves capacity (capacity_exceeded) and appears in /api/v2/sessions. provider_route stores tenant-owned provider settings (public hosts only) behind a dedicated routing policy. Same key and body returns the original connection; same key with a changed body returns 409 idempotency_conflict."
+      "responses":
+        "201":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Connection"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. Connection outages are connection_not_ready (retryable) with the engine cause in error.internal_code."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/ConnectionError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/ConnectionCreate"
+      "parameters":
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": true
+          "schema":
+            "type": "string"
+            "minLength": 1
+            "maxLength": 160
+          "description": "Installation-scoped key retained for retries. For a managed number it is also the session creation key."
+  "/api/v2/connections/{connection}":
+    "get":
+      "summary": "Connection status, QR or pairing code"
+      "operationId": "get_api_v2_connections_connection"
+      "x-required-scope": "sessions:read"
+      "description": "For a managed number the session is refreshed like GET /api/v2/sessions/{id}; qr / pairing_code are present only while the session waits for authentication. Responses are Cache-Control: no-store. Another installation's connection is 404 connection_not_found."
+      "responses":
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Connection"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. Connection outages are connection_not_ready (retryable) with the engine cause in error.internal_code."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/ConnectionError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "parameters":
+        -
+          "name": "connection"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/connections/{connection}/connect":
+    "post":
+      "summary": "Pair or reconnect"
+      "operationId": "post_api_v2_connections_connection_connect"
+      "x-required-scope": "sessions:manage"
+      "description": "Managed number: issues a v2 session start command (202, pending operation is reported with retryable:true), or creates a new session when the previous one was removed (capacity applies). Provider route: reconnects a tenant-owned session provider (200)."
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Connection"
+                "required":
+                  - "data"
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Connection"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. Connection outages are connection_not_ready (retryable) with the engine cause in error.internal_code."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/ConnectionError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "requestBody":
+        "required": false
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "auth_method":
+                  "type": "string"
+                  "enum":
+                    - "qr"
+                    - "pairing"
+                  "default": "qr"
+                "phone":
+                  "type": "string"
+                  "description": "Required for pairing; international number."
+                  "pattern": "^\\+?[1-9][0-9]{6,14}$"
+                "provider":
+                  "type": "object"
+                  "description": "Provider routes only: corrected settings; omitted keys keep their stored value."
+                  "properties":
+                    "configuration":
+                      "type": "object"
+                      "additionalProperties": true
+      "parameters":
+        -
+          "name": "connection"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/connections/{connection}/retry":
+    "post":
+      "summary": "Retry a stalled setup"
+      "operationId": "post_api_v2_connections_connection_retry"
+      "x-required-scope": "sessions:manage"
+      "description": "Managed number: same as connect (202). Provider route: re-validates the stored settings merged with provider.configuration (200). Settings of an administrator-managed account are never changed (409 capability_not_supported)."
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Connection"
+                "required":
+                  - "data"
+        "200":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/Connection"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. Connection outages are connection_not_ready (retryable) with the engine cause in error.internal_code."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/ConnectionError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "requestBody":
+        "required": false
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "auth_method":
+                  "type": "string"
+                  "enum":
+                    - "qr"
+                    - "pairing"
+                  "default": "qr"
+                "phone":
+                  "type": "string"
+                  "description": "Required for pairing; international number."
+                  "pattern": "^\\+?[1-9][0-9]{6,14}$"
+                "provider":
+                  "type": "object"
+                  "description": "Provider routes only: corrected settings; omitted keys keep their stored value."
+                  "properties":
+                    "configuration":
+                      "type": "object"
+                      "additionalProperties": true
+      "parameters":
+        -
+          "name": "connection"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+  "/api/v2/connections/{connection}/messages":
+    "post":
+      "summary": "Send through a connection"
+      "operationId": "post_api_v2_connections_connection_messages"
+      "x-required-scope": "messages:send"
+      "description": "Managed number: identical to POST /api/v2/sessions/{session}/messages on the connection's session (202, text/image/document/voice, same idempotency and media rules). Provider route: text only, dispatched synchronously through the routing policy and its fallback: 201 once a provider accepted, 202 while still in flight; a failed delivery returns the error object together with data. An Idempotency-Key replay returns the original message before any readiness check."
+      "responses":
+        "202":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/ConnectionMessage"
+                "required":
+                  - "data"
+        "201":
+          "description": "Successful response"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "$ref": "#/components/schemas/ConnectionMessage"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation, capacity, lifecycle, rate-limit or availability error. Connection outages are connection_not_ready (retryable) with the engine cause in error.internal_code."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/ConnectionError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "to":
+                  "type": "string"
+                  "pattern": "^\\+?[1-9][0-9]{7,14}$"
+                "type":
+                  "type": "string"
+                  "enum":
+                    - "text"
+                    - "image"
+                    - "document"
+                    - "voice"
+                  "default": "text"
+                "text":
+                  "type": "string"
+                  "maxLength": 10000
+                "media_id":
+                  "type": "string"
+                  "format": "uuid"
+                  "description": "Managed numbers only; required for media types."
+                "expires_at":
+                  "type": "string"
+                  "format": "date-time"
+              "required":
+                - "to"
+      "parameters":
+        -
+          "name": "connection"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": true
+          "schema":
+            "type": "string"
+            "minLength": 1
+            "maxLength": 160
+          "description": "Installation-scoped key retained for retries. Same payload returns the original message; changed payload returns 409."
   "/health/live":
     "get":
       "summary": "Process liveness"
@@ -1238,6 +1575,220 @@
         - "events"
         - "next_cursor"
         - "has_more"
+    "ConnectionCreate":
+      "type": "object"
+      "properties":
+        "type":
+          "type": "string"
+          "enum":
+            - "managed_number"
+            - "provider_route"
+        "name":
+          "type": "string"
+          "maxLength": 120
+        "is_default":
+          "type": "boolean"
+        "auth_method":
+          "type": "string"
+          "enum":
+            - "qr"
+            - "pairing"
+          "default": "qr"
+          "description": "managed_number only."
+        "phone":
+          "type": "string"
+          "description": "Required for pairing; international number."
+          "pattern": "^\\+?[1-9][0-9]{6,14}$"
+        "provider":
+          "type": "object"
+          "description": "Required for provider_route; prohibited for managed_number."
+          "properties":
+            "driver":
+              "type": "string"
+              "enum":
+                - "waha"
+                - "fonnte"
+                - "gowa"
+                - "waba"
+            "configuration":
+              "type": "object"
+              "additionalProperties": true
+          "required":
+            - "driver"
+      "required":
+        - "type"
+    "Connection":
+      "type": "object"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "application":
+          "type": "string"
+          "format": "uuid"
+        "name":
+          "type": "string"
+        "type":
+          "type": "string"
+          "enum":
+            - "managed_number"
+            - "provider_route"
+        "status":
+          "type": "string"
+          "description": "A managed number is ready only while its session is WORKING, freshly observed and idle."
+          "enum":
+            - "setup_required"
+            - "connecting"
+            - "ready"
+            - "degraded"
+            - "disconnected"
+            - "error"
+        "is_default":
+          "type": "boolean"
+        "capabilities":
+          "type": "array"
+          "items":
+            "type": "string"
+            "enum":
+              - "send_text"
+              - "send_image"
+              - "send_document"
+              - "send_video"
+              - "send_audio"
+              - "number_lookup"
+              - "inbound_messages"
+              - "delivery_status"
+        "sender":
+          "type": "object"
+          "nullable": true
+          "properties":
+            "name":
+              "type": "string"
+            "driver":
+              "type": "string"
+            "phone":
+              "type": "string"
+              "nullable": true
+        "health":
+          "type": "object"
+          "additionalProperties": true
+        "recommended_action":
+          "type": "string"
+          "nullable": true
+        "session":
+          "type": "object"
+          "nullable": true
+          "description": "managed_number only: the backing v2 session (also visible in /api/v2/sessions)."
+          "properties":
+            "id":
+              "type": "string"
+              "format": "uuid"
+            "status":
+              "type": "string"
+              "enum":
+                - "STOPPED"
+                - "STARTING"
+                - "SCAN_QR_CODE"
+                - "WORKING"
+                - "FAILED"
+            "desired_state":
+              "type": "string"
+            "auth_method":
+              "type": "string"
+              "nullable": true
+            "phone_number":
+              "type": "string"
+              "nullable": true
+            "stale":
+              "type": "boolean"
+            "engine_available":
+              "type": "boolean"
+            "last_error":
+              "type": "string"
+              "nullable": true
+            "deleted":
+              "type": "boolean"
+        "operation":
+          "type": "object"
+          "nullable": true
+          "description": "managed_number only: the pending session command; retryable is always true while pending."
+          "properties":
+            "id":
+              "type": "string"
+              "format": "uuid"
+            "action":
+              "type": "string"
+            "status":
+              "type": "string"
+            "last_error":
+              "type": "string"
+              "nullable": true
+            "retryable":
+              "type": "boolean"
+        "qr":
+          "type": "string"
+          "nullable": true
+          "description": "Only on single-connection responses while a QR is awaited; never stored."
+        "pairing_code":
+          "type": "string"
+          "nullable": true
+        "challenge_expires_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+        "created_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+        "updated_at":
+          "type": "string"
+          "format": "date-time"
+          "nullable": true
+      "required":
+        - "id"
+        - "type"
+        - "status"
+    "ConnectionMessage":
+      "allOf":
+        -
+          "$ref": "#/components/schemas/Message"
+        -
+          "type": "object"
+          "properties":
+            "connection_id":
+              "type": "string"
+              "format": "uuid"
+            "session_id":
+              "type": "string"
+              "format": "uuid"
+              "nullable": true
+              "description": "null for provider routes."
+          "required":
+            - "connection_id"
+    "ConnectionError":
+      "type": "object"
+      "properties":
+        "message":
+          "type": "string"
+        "error":
+          "type": "object"
+          "properties":
+            "code":
+              "type": "string"
+              "description": "connection_not_found, connection_not_ready, capability_not_supported, capacity_exceeded, idempotency_conflict, connection_removed, invalid_idempotency_key, invalid_phone, providers_failed, provider_outcome_unknown, message_expired, ..."
+            "retryable":
+              "type": "boolean"
+            "internal_code":
+              "type": "string"
+              "description": "Present when an engine or route outage was reported as connection_not_ready."
+          "required":
+            - "code"
+            - "retryable"
+        "data":
+          "$ref": "#/components/schemas/ConnectionMessage"
+      "required":
+        - "message"
+        - "error"
     "EngineError":
       "type": "object"
       "properties":

@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Copy this class into a consuming application.
+ * Copy this class into a consuming application. It talks to the v2 Connection API.
  *
  * Required environment:
  *   WAG_URL=https://gateway.example.com
@@ -15,34 +15,20 @@ final class WagClient
     ) {}
 
     /**
-     * @param  array{type: string, value: string}  $recipient
-     * @param  array{type: string, text?: string, attachment?: array<string, mixed>}  $message
+     * Send through a connection. A managed number answers 202 (queued on its v2 session);
+     * a provider route answers 201 once a provider accepted the message.
+     *
      * @return array<string, mixed>
      */
-    public function send(
-        ?string $connectionId,
-        array $recipient,
-        array $message,
-        string $idempotencyKey,
-    ): array {
-        $payload = [
-            'recipient' => $recipient,
-            'message' => $message,
-        ];
-
-        if ($connectionId !== null && $connectionId !== '') {
-            $payload['connection_id'] = $connectionId;
-        }
-
-        $response = $this->request('POST', '/api/v1/messages', $payload, [
-            'Idempotency-Key: '.$idempotencyKey,
-        ]);
-
-        if (($response['error']['code'] ?? null) === 'delivery_outcome_unknown') {
-            // Do not invent a new idempotency key. Read the same message again.
-        }
-
-        return $response;
+    public function send(string $connectionId, string $to, string $text, string $idempotencyKey): array
+    {
+        // On a timeout or delivery_outcome_unknown, retry with the SAME idempotency key:
+        // the original message is returned instead of sending twice.
+        return $this->request('POST', '/api/v2/connections/'.rawurlencode($connectionId).'/messages', [
+            'to' => $to,
+            'type' => 'text',
+            'text' => $text,
+        ], ['Idempotency-Key: '.$idempotencyKey]);
     }
 
     /**
@@ -50,7 +36,31 @@ final class WagClient
      */
     public function connections(): array
     {
-        return $this->request('GET', '/api/v1/connections')['data'] ?? [];
+        return $this->request('GET', '/api/v2/connections')['data'] ?? [];
+    }
+
+    /**
+     * Status, QR, or pairing code of one connection.
+     *
+     * @return array<string, mixed>
+     */
+    public function connection(string $connectionId): array
+    {
+        return $this->request('GET', '/api/v2/connections/'.rawurlencode($connectionId))['data'] ?? [];
+    }
+
+    /**
+     * Create a managed number (QR) once per idempotency key.
+     *
+     * @return array<string, mixed>
+     */
+    public function createManagedNumber(string $name, string $idempotencyKey): array
+    {
+        return $this->request('POST', '/api/v2/connections', [
+            'type' => 'managed_number',
+            'name' => $name,
+            'auth_method' => 'qr',
+        ], ['Idempotency-Key: '.$idempotencyKey])['data'] ?? [];
     }
 
     /**
@@ -80,7 +90,8 @@ final class WagClient
 
         if ($status >= 400) {
             $code = is_array($decoded['error'] ?? null) ? ($decoded['error']['code'] ?? $status) : $status;
-            throw new RuntimeException('WAG Hub request failed: '.$code);
+            $retryable = (bool) ($decoded['error']['retryable'] ?? false);
+            throw new RuntimeException('WAG Hub request failed: '.$code.($retryable ? ' (retryable)' : ''));
         }
 
         return $decoded;

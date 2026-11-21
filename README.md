@@ -19,8 +19,11 @@ Lihat [panduan plug and play](docs/PLUG_AND_PLAY_GUIDE.md),
 [jaminan kompatibilitas](docs/COMPATIBILITY.md), dan
 [migrasi CESA](docs/CESA_WEB.md).
 
-Kirim melalui koneksi default di `POST /api/v1/messages`, atau tetap memakai
-`/api/v1/engine/sessions/{id}/send` dan `route_key` yang sudah ada.
+Kelola koneksi di `GET/POST /api/v2/connections` dan kirim melalui
+`POST /api/v2/connections/{id}/messages`. Nomor terkelola adalah sesi engine v2
+(terlihat di `/api/v2/sessions`, memakai kapasitas v2); rute provider memakai
+routing dan fallback. Klien lama `/api/v1/messages` dengan `route_key` dan
+`/api/v1/engine` tetap berjalan sebagai API legacy.
 Provider **WAG Hub (bawaan)** dapat menjadi utama maupun fallback, bersama
 provider eksternal. Keduanya memakai ledger yang sama dan satu token aplikasi.
 

@@ -15,46 +15,51 @@ These remain supported without a breaking version bump:
 - Message statuses including `outcome_unknown`
 - No blind fallback after a request may already have reached a provider
 
-Legacy fields `purpose`, `mode`, and `route_key` still work. If they are
-present, Hub uses the existing routing engine.
+`/api/v1/*` and `/engine/*` are legacy surfaces: their contracts do not
+change, and they answer `410` once retired. `POST /api/v1/messages` keeps its
+original request (`purpose`, `mode`, `route_key`) and response; it has no
+connection fields.
 
-## Additive application-facing contract
+## Connection API (v2)
 
-New clients can omit `purpose`, `mode`, and `route_key` and send through a
-`connection_id` or the application's default connection:
+The application-facing model lives in the v2 API with the v2 conventions
+(`client.auth`, `client.rate:engine`, v2 abilities, `{"data": ...}` envelope,
+`{"message", "error": {"code", "retryable"}}` errors):
+
+- `GET /api/v2/connections` (`sessions:read`)
+- `POST /api/v2/connections` (`sessions:manage`, `Idempotency-Key` required, 201)
+- `GET /api/v2/connections/{id}` (`sessions:read`)
+- `POST /api/v2/connections/{id}/connect` and `/retry` (`sessions:manage`)
+- `POST /api/v2/connections/{id}/messages` (`messages:send`, `Idempotency-Key` required)
 
 ```http
-POST /api/v1/messages
+POST /api/v2/connections/{id}/messages
 Authorization: Bearer <WAG_TOKEN>
 Idempotency-Key: order-1
 ```
 
 ```json
-{
-  "recipient": {"type": "phone", "value": "081234567890"},
-  "message": {"type": "text", "text": "Halo"}
-}
+{"to": "6281234567890", "type": "text", "text": "Halo"}
 ```
 
-New resources:
+A managed number is a v2 engine session: it counts against v2 capacity
+(`capacity_exceeded`), is listed by `GET /api/v2/sessions`, and its sends are
+`POST /api/v2/sessions/{session}/messages` semantics (202, same idempotency
+and media rules). Engine and route outages are reported as
+`connection_not_ready` with `retryable: true` and the cause in
+`error.internal_code`; other codes match `/api/v2/sessions`.
 
-- `GET/POST /api/v1/connections`
-- `GET /api/v1/connections/{id}`
-- `POST /api/v1/connections/{id}/connect`
-- `POST /api/v1/connections/{id}/retry`
-- `POST /api/v1/connections/{id}/messages`
-
-Connection-oriented errors use actionable codes such as
-`connection_not_ready` and `connection_not_found`, and keep
-`error.internal_code` plus `error.audit_id`. Legacy payloads keep their
-original `error.code` and gain `error.action`.
+The `/api/v1/connections` routes of the unreleased preview were removed.
 
 ## Delivery semantics
 
 - A **managed_number** send is pinned to that number. It never switches
   sender because another provider is healthier.
 - A **provider_route** send uses the connection's routing policy, including
-  any fallback the operator later configures.
+  any fallback the operator later configures. It is dispatched synchronously:
+  201 once a provider accepted it.
+- An `Idempotency-Key` replay returns the original message before any
+  readiness check, so a retry after an outage never sends twice.
 - Switching providers on a routed connection does not require application
   code changes.
 

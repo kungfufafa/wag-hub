@@ -1,3 +1,4 @@
+// v2 Connection API client. WAG_URL and WAG_TOKEN come from the integration pack.
 export function createWag({ url, token }) {
   const base = url.replace(/\/$/, '');
 
@@ -24,30 +25,31 @@ export function createWag({ url, token }) {
 
     if (!response.ok) {
       const code = json?.error?.code || response.status;
-      throw new Error(`WAG Hub request failed: ${code}`);
+      const error = new Error(`WAG Hub request failed: ${code}`);
+      error.retryable = Boolean(json?.error?.retryable);
+      throw error;
     }
 
     return json;
   }
 
   return {
-    messages: {
-      send(connection, recipient, message, idempotencyKey) {
-        const payload = { recipient, message };
-
-        if (connection) {
-          payload.connection_id = connection;
-        }
-
-        return request('/api/v1/messages', {
+    connections: {
+      list() {
+        return request('/api/v2/connections');
+      },
+      get(connectionId) {
+        return request(`/api/v2/connections/${encodeURIComponent(connectionId)}`);
+      },
+      // 202 for a managed number (queued on its v2 session), 201 for a provider route.
+      // Retry with the SAME idempotencyKey: the original message is returned.
+      send(connectionId, to, text, idempotencyKey) {
+        return request(`/api/v2/connections/${encodeURIComponent(connectionId)}/messages`, {
           method: 'POST',
-          body: payload,
+          body: { to, type: 'text', text },
           idempotencyKey,
         });
       },
-    },
-    connections() {
-      return request('/api/v1/connections');
     },
   };
 }

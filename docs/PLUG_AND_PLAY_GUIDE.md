@@ -22,27 +22,48 @@ WAG_URL=https://gateway.example.com
 WAG_TOKEN=wgh_token-aplikasi-ini
 ```
 
+Every request goes to the v2 Connection API with the same token. List the
+application's connections once and keep the `id` of the one to send from:
+
 ```bash
-curl -X POST "$WAG_URL/api/v1/messages" \
+curl "$WAG_URL/api/v2/connections" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
+  -H "Accept: application/json"
+```
+
+Send through that connection:
+
+```bash
+curl -X POST "$WAG_URL/api/v2/connections/$CONNECTION_ID/messages" \
   -H "Authorization: Bearer $WAG_TOKEN" \
   -H "Idempotency-Key: order-1" \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
-  -d '{
-    "recipient": {"type": "phone", "value": "081234567890"},
-    "message": {"type": "text", "text": "Halo"}
-  }'
+  -d '{"to": "6281234567890", "type": "text", "text": "Halo"}'
 ```
 
-The default connection is used when `connection_id` is omitted. Managed
-numbers stay pinned to that sender. Routed connections may later add fallback
-without changing application code.
+- **Managed number** (`managed_number`): `202 Accepted`. The message is queued
+  on the connection's v2 engine session, exactly like
+  `POST /api/v2/sessions/{session}/messages`: pinned to that number, never
+  switched to another sender, and followed through `GET /api/v2/messages/{id}`
+  and the v2 events/webhook. Text, `image`, `document`, and `voice` (with a
+  `media_id` from `POST /api/v2/media`) are supported.
+- **Provider route** (`provider_route`): sent synchronously through the
+  connection's routing policy, including any fallback the operator adds later.
+  `201 Created` once a provider accepted it; a delivery failure returns the
+  error object together with `data`. Provider routes accept `text` only here.
+
+Repeating a request with the same `Idempotency-Key` returns the original
+message (even if the connection is no longer ready); reusing the key with a
+different body is `409 idempotency_conflict`. When the outcome is unknown,
+retry with the **same** key.
 
 Client copies: [PHP](examples/php/WagClient.php),
 [JavaScript](examples/javascript/wag.js),
 [Python](examples/python/wag.py).
 
-Compatibility guarantees: [COMPATIBILITY.md](COMPATIBILITY.md).
+Compatibility guarantees: [COMPATIBILITY.md](COMPATIBILITY.md). The full
+schema is in [openapi-v2.yaml](openapi-v2.yaml).
 
 ## Operator journeys
 
@@ -51,9 +72,10 @@ Compatibility guarantees: [COMPATIBILITY.md](COMPATIBILITY.md).
 Create/select App → Connect WhatsApp → Use my WhatsApp number → Scan QR or
 pairing code → Ready → Send test → Copy configuration.
 
-WAG Hub provisions the engine session and a pinned delivery path
-automatically. You do not create a provider account, routing policy, or route
-key for this path.
+A managed number **is** a v2 engine session: it uses one slot of the
+application's v2 session capacity and appears in `GET /api/v2/sessions`. WAG
+Hub creates no provider account, routing policy, or route key for it. When the
+application has no free slot, setup reports `capacity_exceeded`.
 
 ### External provider
 
@@ -62,33 +84,64 @@ credentials → Validate → Send test → Ready → Copy configuration.
 
 Each connection gets its own single-step delivery policy. Ordered fallback,
 extra providers, and purpose-specific routes remain optional advanced
-configuration and are never attached automatically.
+configuration and are never attached automatically. Provider endpoints must be
+public hosts; internal and metadata addresses are refused at setup and again at
+send time.
 
 ## Application-facing API
 
-| Action | Request |
-| --- | --- |
-| List connections | `GET /api/v1/connections` |
-| Create connection | `POST /api/v1/connections` |
-| Connection status / QR | `GET /api/v1/connections/{id}` |
-| Pair / reconnect | `POST /api/v1/connections/{id}/connect` |
-| Retry setup | `POST /api/v1/connections/{id}/retry` |
-| Send | `POST /api/v1/messages` |
-| Send via connection | `POST /api/v1/connections/{id}/messages` |
+All routes live under `/api/v2` (`Authorization: Bearer <WAG_TOKEN>`) and use
+the v2 envelope `{"data": ...}`; errors are
+`{"message": "...", "error": {"code": "...", "retryable": true|false}}`.
+
+| Action | Request | Ability | Success |
+| --- | --- | --- | --- |
+| List connections | `GET /api/v2/connections` | `sessions:read` | 200 |
+| Create connection | `POST /api/v2/connections` (`Idempotency-Key` required) | `sessions:manage` | 201 |
+| Status / QR / pairing code | `GET /api/v2/connections/{id}` | `sessions:read` | 200 |
+| Pair / reconnect | `POST /api/v2/connections/{id}/connect` | `sessions:manage` | 202 managed, 200 provider |
+| Retry setup | `POST /api/v2/connections/{id}/retry` | `sessions:manage` | 202 managed, 200 provider |
+| Send | `POST /api/v2/connections/{id}/messages` (`Idempotency-Key` required) | `messages:send` | 202 managed, 201 provider |
+
+Create a managed number (QR by default, or `"auth_method": "pairing"` with
+`"phone"`):
+
+```json
+{"type": "managed_number", "name": "Support", "auth_method": "qr"}
+```
+
+Create a provider route:
+
+```json
+{"type": "provider_route", "name": "Fonnte",
+ "provider": {"driver": "fonnte", "configuration": {"token": "..."}}}
+```
+
+Creation is idempotent per `Idempotency-Key`, like `POST /api/v2/sessions`
+(a managed number passes the same key to the session it creates). `connect`
+and `retry` on a managed number issue a v2 session `start` command; the
+response carries the pending `operation` (`retryable: true`) until the runner
+confirms it. Poll `GET /api/v2/connections/{id}` for `status`, `qr`, or
+`pairing_code`; QR and pairing codes are never stored and are only returned
+for the connection's own session.
 
 Connection types: `managed_number`, `provider_route`.
 
 Connection states: `setup_required`, `connecting`, `ready`, `degraded`,
 `disconnected`, `error`. Each non-ready state includes `recommended_action`.
+A managed number is `ready` only while its session is `WORKING`, freshly
+observed, and has no pending operation.
 
 Capabilities (not provider names): `send_text`, `send_image`, `send_document`,
 `send_video`, `send_audio`, `number_lookup`, `inbound_messages`,
 `delivery_status`.
 
-Application errors: `connection_not_ready`, `connection_not_found`,
-`authentication_failed`, `recipient_invalid`, `capability_not_supported`,
-`message_expired`, `rate_limited`, `delivery_failed`,
-`delivery_outcome_unknown`.
+Error codes: `connection_not_found` (404, also for another application's
+connection), `connection_not_ready` (retryable; `error.internal_code` keeps the
+engine cause such as `engine_unreachable` or `session_not_working`),
+`capability_not_supported`, `capacity_exceeded`, `idempotency_conflict`,
+`invalid_idempotency_key`, `invalid_phone`, `providers_failed`,
+`provider_outcome_unknown`, `message_expired`.
 
 ## Advanced: engine runner (managed numbers)
 
@@ -123,17 +176,24 @@ Sesi WAHA yang sudah ada tetap memakai WAHA, termasuk setelah default berubah.
 Untuk sesi aplikasi baru melalui WAHA, gunakan `GATEWAY_ENGINE_DRIVER=waha` dan
 `GATEWAY_ENGINE_WAHA_SLUG` yang menunjuk akun host WAHA.
 
-## Advanced: existing engine and routing APIs
+## Advanced: legacy APIs and migration
 
-Existing `/api/v1/engine` and `/api/v1/messages` clients keep working. Engine
-sends stay pinned to the selected session. Routed `/api/v1/messages` calls
-that still send `route_key` and `purpose` use the routing engine unchanged.
+`/api/v1/*` and `/engine/*` are legacy: they keep their original contracts
+until retired (then `410`). `/api/v1/messages` still requires `purpose`,
+`mode`, and `route_key` and has no connection fields; a provider route's
+`route_key` is its routing policy key if a legacy client must keep using it.
 
-Project existing sessions and default routes into connections:
+Map legacy native numbers to v2 sessions, then project every v2 session and
+default route into connections (safe to repeat):
 
 ```bash
+php artisan engine:migrate-legacy
 php artisan gateway:sync-connections
 ```
+
+A connection created before the migration for a native number is linked to
+its migrated session rather than duplicated. Sessions created directly with
+`POST /api/v2/sessions` also appear as managed-number connections.
 
 ## Status and retries
 
@@ -144,7 +204,6 @@ php artisan gateway:sync-connections
 
 ## Cakupan provider bawaan
 
-Tersedia: QR/pairing, status, logout, pemulihan sesi saat restart, pengiriman
-teks dengan idempotensi, pemeriksaan status pesan, dan cek registrasi nomor.
-Lampiran serta webhook pesan masuk belum diimplementasikan pada runner bawaan.
-Gunakan provider eksternal yang sesuai untuk fitur tersebut.
+Nomor terkelola memakai engine v2: QR/pairing, status, logout, pemulihan sesi
+saat restart, pengiriman teks, gambar, dokumen, dan voice dengan idempotensi,
+status pesan, serta event/webhook v2. Lihat [ENGINE_V2.md](ENGINE_V2.md).

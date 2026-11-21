@@ -91,6 +91,7 @@ final readonly class IntegrationPack
             '# '.$application->slug,
             'WAG_URL='.rtrim($baseUrl, '/'),
             'WAG_TOKEN='.$token,
+            '# Koneksi: GET $WAG_URL/api/v2/connections; kirim: POST $WAG_URL/api/v2/connections/{id}/messages',
         ]);
     }
 
