@@ -11,112 +11,117 @@ use App\Models\ProviderAccount;
 use App\Models\RoutingPolicy;
 use App\Models\RoutingStep;
 use App\Models\WhatsAppConnection;
-use App\Services\WhatsAppEngineService;
+use App\Services\Engine\SessionService;
 use App\Services\WhatsAppSessionManager;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
+/**
+ * Creates and (re)connects WhatsApp connections. A managed number is one v2 engine session
+ * (SessionService), so it shares v2 capacity, idempotency and lifecycle; a provider route is a
+ * tenant-owned provider account behind a dedicated routing policy.
+ */
 final class ConnectionProvisioner
 {
     public function __construct(
-        private WhatsAppEngineService $engine,
-        private WhatsAppSessionManager $sessions,
+        private SessionService $sessions,
+        private WhatsAppSessionManager $providerSessions,
         private ProviderConfigurationValidator $validator,
         private ConnectionHealthProjector $health,
         private ConnectionCapabilityCatalog $capabilities,
     ) {}
 
     /**
+     * Create a connection once per Idempotency-Key. A replay with the same key and request returns
+     * the original connection; the same key with a different request is an idempotency_conflict.
+     *
      * @param  array<string, mixed>  $input
      */
-    public function provision(ClientApplication $application, array $input): ProvisionedConnection
+    public function provision(ClientApplication $application, array $input, string $idempotencyKey): ProvisionedConnection
     {
         $type = ConnectionType::from((string) ($input['type'] ?? ConnectionType::ManagedNumber->value));
         $name = trim((string) ($input['name'] ?? ''));
+        $name = $name !== '' ? $name : ($type === ConnectionType::ManagedNumber ? 'WhatsApp' : 'Provider');
+        $authMethod = ($input['auth_method'] ?? 'qr') === 'pairing' ? 'pairing' : 'qr';
+        $phone = $this->phone($input['phone'] ?? null);
+        $provider = is_array($input['provider'] ?? null) ? $input['provider'] : [];
 
-        if ($name === '') {
-            $name = $type === ConnectionType::ManagedNumber ? 'WhatsApp' : 'Provider';
+        if ($type === ConnectionType::ManagedNumber) {
+            $this->assertPairingPhone($authMethod, $phone);
+        } else {
+            $this->assertExternalDriver((string) ($provider['driver'] ?? ''));
         }
 
-        $this->assertPairingPhone($type, $input);
-
-        [$connection, $created] = $this->findOrCreate(
-            $application,
-            $name,
-            $type,
-            (bool) ($input['is_default'] ?? false),
-        );
-
-        if ($type !== ConnectionType::ManagedNumber) {
-            // Rejected before the try block so a refused request never stores an error on a shared connection.
-            $this->assertProviderAccountConfigurable($connection, $input);
-        }
+        $fingerprint = hash('sha256', json_encode([
+            'type' => $type->value,
+            'name' => $name,
+            'is_default' => (bool) ($input['is_default'] ?? false),
+            'auth_method' => $type === ConnectionType::ManagedNumber ? $authMethod : null,
+            'phone' => $type === ConnectionType::ManagedNumber ? $phone : null,
+            'driver' => $type === ConnectionType::ProviderRoute ? strtolower(trim((string) ($provider['driver'] ?? ''))) : null,
+            'configuration' => $type === ConnectionType::ProviderRoute
+                ? hash('sha256', json_encode($this->sorted($provider['configuration'] ?? []), JSON_THROW_ON_ERROR))
+                : null,
+        ], JSON_THROW_ON_ERROR));
 
         try {
-            if ($type === ConnectionType::ManagedNumber) {
-                $this->provisionManaged($connection, $input);
-            } else {
-                $this->provisionProvider($connection, $input);
-            }
-        } catch (WhatsAppConnectionException $exception) {
-            $this->markRecoverableFailure($connection, $exception->errorCode, $exception->getMessage());
-
-            throw $exception;
-        } catch (WhatsAppEngineException $exception) {
-            throw $this->engineFailure($connection, $exception);
+            [$connection, $created] = $this->findOrCreate(
+                $application, $idempotencyKey, $fingerprint, $type, $name,
+                (bool) ($input['is_default'] ?? false), $authMethod, $phone,
+            );
+        } catch (UniqueConstraintViolationException) {
+            // A concurrent request with the same key won the insert: answer as its replay.
+            [$connection, $created] = [$this->replay($application, $idempotencyKey, $fingerprint), false];
         }
 
-        return new ProvisionedConnection(
-            $this->health->refresh($connection->fresh() ?? $connection),
-            $created,
-        );
+        // A provider route whose first validation failed is completed by replaying the same request.
+        if ($type === ConnectionType::ProviderRoute && ($created || ! $connection->isConfigured())) {
+            $this->configureProvider($connection, $provider);
+        }
+
+        return new ProvisionedConnection($this->health->refresh($connection->fresh() ?? $connection), $created);
     }
 
     /**
+     * Start (or restart) the connection. For a managed number this issues a v2 session start
+     * command, or a new session when the previous one was removed; the runner carries it out
+     * asynchronously and the pending operation is reported on the connection.
+     *
      * @param  array<string, mixed>  $input
      */
     public function connect(WhatsAppConnection $connection, array $input = []): WhatsAppConnection
     {
-        $mode = ($input['mode'] ?? 'qr') === 'pairing' ? 'pairing' : 'qr';
-        $phone = is_string($input['phone'] ?? null) ? trim((string) $input['phone']) : null;
-
-        if ($connection->typeEnum() === ConnectionType::ManagedNumber) {
-            $this->assertPairingPhone($connection->typeEnum(), ['mode' => $mode, 'phone' => $phone]);
+        if ($connection->isManaged()) {
+            return $this->startManaged($connection, $input);
         }
 
         if ($connection->provider_account_id === null) {
-            return $this->provision($connection->clientApplication, [
-                'name' => $connection->name,
-                'type' => $connection->type,
-                'is_default' => $connection->is_default,
-                'mode' => $mode,
-                'phone' => $phone,
-                'provider' => [
-                    'driver' => $input['driver'] ?? $connection->providerAccount?->driver,
-                    'configuration' => $input['configuration'] ?? [],
-                ],
-            ])->connection;
+            return $this->reconfigureProvider($connection, []);
         }
 
         $account = $connection->providerAccount;
 
-        if ($account === null || ! $account->supportsSessions() || ! $this->ownsAccount($connection, $account)) {
+        if ($account === null || ! $account->supportsSessions() || ! $connection->ownsProviderAccount($account)) {
             return $this->health->refresh($connection);
         }
 
+        $authMethod = ($input['auth_method'] ?? 'qr') === 'pairing' ? 'pairing' : 'qr';
+        $phone = $this->phone($input['phone'] ?? null);
+
+        if ($authMethod === 'pairing') {
+            $this->assertPairingPhone($authMethod, $phone);
+        }
+
         try {
-            $this->sessions->connect($account, $mode === 'pairing' ? $phone : null);
+            $this->providerSessions->connect($account, $authMethod === 'pairing' ? $phone : null);
         } catch (WhatsAppEngineException $exception) {
             throw $this->engineFailure($connection, $exception);
         }
 
         $connection->forceFill([
-            'setup_state' => array_merge($connection->setup_state ?? [], [
-                'session_id' => $connection->sessionId(),
-                'last_step' => 'connecting',
-                'mode' => $mode,
-            ]),
+            'setup_state' => array_merge($connection->setup_state ?? [], ['last_step' => 'connecting', 'auth_method' => $authMethod]),
             'last_error_code' => null,
             'last_error_message' => null,
         ])->save();
@@ -125,51 +130,18 @@ final class ConnectionProvisioner
     }
 
     /**
-     * @param  array<string, mixed>  $configuration  Corrected provider settings; omitted keys keep their stored value.
+     * Retry a stalled setup. Managed numbers restart their session; provider routes re-validate
+     * the stored settings merged with corrected ones (omitted keys keep their stored value).
+     *
+     * @param  array<string, mixed>  $configuration
      */
     public function retry(WhatsAppConnection $connection, array $configuration = []): WhatsAppConnection
     {
-        $account = $connection->providerAccount;
-
-        if ($account !== null && ! $this->ownsAccount($connection, $account)) {
-            // Shared, admin-managed accounts and their routes are never rewritten or re-enabled from here.
-            return $this->health->refresh($connection);
+        if ($connection->isManaged()) {
+            return $this->startManaged($connection, []);
         }
 
-        return $this->provision($connection->clientApplication, [
-            'name' => $connection->name,
-            'type' => $connection->type,
-            'is_default' => $connection->is_default,
-            'mode' => $connection->setup_state['mode'] ?? 'qr',
-            'phone' => $connection->setup_state['phone'] ?? null,
-            'provider' => [
-                // A first validation failure leaves no account, so the requested driver lives in setup_state.
-                'driver' => $account?->driver ?? ($connection->setup_state['driver'] ?? null),
-                'configuration' => $configuration,
-            ],
-        ])->connection;
-    }
-
-    /**
-     * Tenant configuration may only land on the account this connection created.
-     *
-     * @param  array<string, mixed>  $input
-     */
-    private function assertProviderAccountConfigurable(WhatsAppConnection $connection, array $input): void
-    {
-        $provider = is_array($input['provider'] ?? null) ? $input['provider'] : [];
-        $driver = strtolower(trim((string) ($provider['driver'] ?? $connection->providerAccount?->driver ?? '')));
-        $account = $connection->providerAccount;
-
-        if ($driver === 'wag_hub' || $account === null || $account->slug === $this->accountSlug($connection)) {
-            return;
-        }
-
-        throw new WhatsAppConnectionException(
-            'This connection uses a provider account managed by the administrator.',
-            409,
-            'capability_not_supported',
-        );
+        return $this->reconfigureProvider($connection, $configuration);
     }
 
     /**
@@ -177,42 +149,64 @@ final class ConnectionProvisioner
      */
     private function findOrCreate(
         ClientApplication $application,
-        string $name,
+        string $key,
+        string $fingerprint,
         ConnectionType $type,
+        string $name,
         bool $makeDefault,
+        string $authMethod,
+        ?string $phone,
     ): array {
-        return DB::transaction(function () use ($application, $name, $type, $makeDefault): array {
+        return DB::transaction(function () use ($application, $key, $fingerprint, $type, $name, $makeDefault, $authMethod, $phone): array {
             ClientApplication::query()->whereKey($application->getKey())->lockForUpdate()->firstOrFail();
 
-            $connection = WhatsAppConnection::query()
+            if (WhatsAppConnection::withTrashed()
                 ->where('client_application_id', $application->getKey())
-                ->where('name', $name)
-                ->first();
-            $created = false;
-
-            if ($connection === null) {
-                $connection = new WhatsAppConnection;
-                $connection->forceFill([
-                    'uuid' => (string) Str::uuid(),
-                    'client_application_id' => $application->getKey(),
-                    'name' => $name,
-                    'type' => $type->value,
-                    'status' => ConnectionStatus::SetupRequired->value,
-                    'is_default' => false,
-                    'capabilities' => $this->capabilities->forDriver(
-                        $type === ConnectionType::ManagedNumber ? 'wag_hub' : 'waha',
-                    ),
-                    'setup_state' => [],
-                ]);
-                $connection->save();
-                $created = true;
-            } elseif ($connection->type !== $type->value) {
-                throw new WhatsAppConnectionException(
-                    'A connection named '.$name.' already exists as '.$connection->type.'.',
-                    409,
-                    'capability_not_supported',
-                );
+                ->where('creation_key', $key)
+                ->exists()) {
+                return [$this->replay($application, $key, $fingerprint), false];
             }
+
+            $sessionId = null;
+
+            if ($type === ConnectionType::ManagedNumber) {
+                // Same capacity, idempotency and start semantics as POST /api/v2/sessions; any
+                // failure (capacity_exceeded, idempotency_conflict) rolls the connection back too.
+                $session = $this->sessions->create($application, $key, array_filter([
+                    'name' => $name,
+                    'start' => true,
+                    'auth_method' => $authMethod,
+                    'phone' => $phone,
+                ], static fn (mixed $value): bool => $value !== null));
+
+                if (WhatsAppConnection::withTrashed()->where('engine_session_id', $session->getKey())->exists()) {
+                    throw new WhatsAppEngineException('This idempotency key belongs to a different request.', 409, 'idempotency_conflict');
+                }
+
+                $sessionId = $session->getKey();
+            }
+
+            $connection = new WhatsAppConnection;
+            $connection->forceFill([
+                'uuid' => (string) Str::uuid(),
+                'client_application_id' => $application->getKey(),
+                'name' => $name,
+                'type' => $type->value,
+                'engine_session_id' => $sessionId,
+                'creation_key' => $key,
+                'creation_hash' => $fingerprint,
+                'status' => $type === ConnectionType::ManagedNumber
+                    ? ConnectionStatus::Connecting->value
+                    : ConnectionStatus::SetupRequired->value,
+                'is_default' => false,
+                'capabilities' => $type === ConnectionType::ManagedNumber
+                    ? $this->capabilities->forEngineSession()
+                    : [],
+                'setup_state' => $type === ConnectionType::ManagedNumber
+                    ? ['last_step' => 'connecting', 'auth_method' => $authMethod]
+                    : ['last_step' => 'created'],
+            ]);
+            $connection->save();
 
             if ($makeDefault || ! WhatsAppConnection::query()
                 ->where('client_application_id', $application->getKey())
@@ -222,60 +216,123 @@ final class ConnectionProvisioner
                 $this->markDefault($connection);
             }
 
-            return [$connection->fresh() ?? $connection, $created];
+            return [$connection->fresh() ?? $connection, true];
         });
     }
 
-    /**
-     * @param  array<string, mixed>  $input
-     */
-    private function provisionManaged(WhatsAppConnection $connection, array $input): void
+    private function replay(ClientApplication $application, string $key, string $fingerprint): WhatsAppConnection
     {
-        $mode = ($input['mode'] ?? 'qr') === 'pairing' ? 'pairing' : 'qr';
-        $phone = is_string($input['phone'] ?? null) ? trim((string) $input['phone']) : null;
-        $sessionId = $connection->sessionId();
+        $existing = WhatsAppConnection::withTrashed()
+            ->where('client_application_id', $application->getKey())
+            ->where('creation_key', $key)
+            ->firstOrFail();
 
-        $account = $this->engine->provisionOwnedSession(
-            $connection->clientApplication,
-            $sessionId,
-            $mode,
-        );
-        $policyId = $this->engine->sessionRouteIdFor($connection->clientApplication, $sessionId, $account);
+        if (! hash_equals((string) $existing->creation_hash, $fingerprint)) {
+            throw new WhatsAppEngineException('This idempotency key belongs to a different request.', 409, 'idempotency_conflict');
+        }
 
-        $connection->forceFill([
-            'provider_account_id' => $account->getKey(),
-            'routing_policy_id' => $policyId,
-            'setup_state' => [
-                'session_id' => $sessionId,
-                'last_step' => 'provisioned',
-                'mode' => $mode,
-                'phone' => $phone,
-            ],
-            'last_error_code' => null,
-            'last_error_message' => null,
-        ])->save();
+        if ($existing->trashed()) {
+            throw new WhatsAppEngineException('This connection was removed. Start a new attempt.', 410, 'connection_removed');
+        }
 
-        $this->sessions->connect($account, $mode === 'pairing' ? $phone : null);
-        $connection->forceFill([
-            'setup_state' => array_merge($connection->setup_state ?? [], ['last_step' => 'connecting']),
-        ])->save();
+        return $existing;
     }
 
     /**
      * @param  array<string, mixed>  $input
      */
-    private function provisionProvider(WhatsAppConnection $connection, array $input): void
+    private function startManaged(WhatsAppConnection $connection, array $input): WhatsAppConnection
     {
-        $provider = is_array($input['provider'] ?? null) ? $input['provider'] : [];
-        $driver = strtolower(trim((string) ($provider['driver'] ?? $connection->providerAccount?->driver ?? '')));
-        $configuration = is_array($provider['configuration'] ?? null) ? $provider['configuration'] : [];
+        $requested = $input['auth_method'] ?? null;
+        $phone = $this->phone($input['phone'] ?? null);
 
-        if ($driver === 'wag_hub') {
-            $this->provisionManaged($connection, $input);
-
-            return;
+        if ($requested === 'pairing') {
+            $this->assertPairingPhone('pairing', $phone);
         }
 
+        // Pairing needs a fresh phone each time; without one a restart falls back to QR.
+        $authMethod = $requested === 'pairing' ? 'pairing' : 'qr';
+
+        DB::transaction(function () use ($connection, $authMethod, $phone): void {
+            $locked = WhatsAppConnection::query()->whereKey($connection->getKey())->lockForUpdate()->firstOrFail();
+            $session = $locked->ownedEngineSession();
+            $payload = array_filter(['mode' => $authMethod, 'phone' => $authMethod === 'pairing' ? $phone : null]);
+
+            if ($session === null || $session->trashed()) {
+                // The previous session was removed: a new one is a new v2 session and uses capacity.
+                $session = $this->sessions->create($locked->clientApplication, 'connection:'.$locked->uuid.':'.Str::lower(Str::random(16)), array_filter([
+                    'name' => $locked->name,
+                    'start' => true,
+                    'auth_method' => $authMethod,
+                    'phone' => $payload['phone'] ?? null,
+                ], static fn (mixed $value): bool => $value !== null));
+            } else {
+                $this->sessions->command($session, 'start', $payload);
+            }
+
+            $locked->forceFill([
+                'engine_session_id' => $session->getKey(),
+                'setup_state' => array_merge($locked->setup_state ?? [], ['last_step' => 'connecting', 'auth_method' => $authMethod]),
+                'last_error_code' => null,
+                'last_error_message' => null,
+            ])->save();
+        });
+
+        return $this->health->refresh($connection->fresh() ?? $connection);
+    }
+
+    /**
+     * @param  array<string, mixed>  $configuration
+     */
+    private function reconfigureProvider(WhatsAppConnection $connection, array $configuration): WhatsAppConnection
+    {
+        $account = $connection->providerAccount;
+
+        if ($account !== null && ! $connection->ownsProviderAccount($account)) {
+            if ($configuration !== []) {
+                // Rejected before any write so a refused request never stores an error on a shared connection.
+                throw new WhatsAppConnectionException(
+                    'This connection uses a provider account managed by the administrator.',
+                    409,
+                    'capability_not_supported',
+                );
+            }
+
+            // Shared, admin-managed accounts and their routes are never rewritten or re-enabled from here.
+            return $this->health->refresh($connection);
+        }
+
+        $this->configureProvider($connection, [
+            // A first validation failure leaves no account, so the requested driver lives in setup_state.
+            'driver' => $account?->driver ?? ($connection->setup_state['driver'] ?? null),
+            'configuration' => $configuration,
+        ]);
+
+        return $this->health->refresh($connection->fresh() ?? $connection);
+    }
+
+    /**
+     * @param  array<string, mixed>  $provider
+     */
+    private function configureProvider(WhatsAppConnection $connection, array $provider): void
+    {
+        try {
+            $this->provisionProvider($connection, $provider);
+        } catch (WhatsAppConnectionException $exception) {
+            $this->markRecoverableFailure($connection, $exception->errorCode, $exception->getMessage());
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $provider
+     */
+    private function provisionProvider(WhatsAppConnection $connection, array $provider): void
+    {
+        $driver = strtolower(trim((string) ($provider['driver'] ?? $connection->providerAccount?->driver ?? '')));
+        $configuration = is_array($provider['configuration'] ?? null) ? $provider['configuration'] : [];
+        $this->assertExternalDriver($driver);
         $account = $connection->providerAccount;
 
         if ($driver !== '') {
@@ -471,30 +528,49 @@ final class ConnectionProvisioner
         return $connection->providerAccountSlug();
     }
 
-    private function ownsAccount(WhatsAppConnection $connection, ProviderAccount $account): bool
+    /**
+     * The native WAG Hub number is a managed_number connection, never a tenant provider account.
+     */
+    private function assertExternalDriver(string $driver): void
     {
-        return $connection->ownsProviderAccount($account);
+        if (strtolower(trim($driver)) === 'wag_hub') {
+            throw new WhatsAppConnectionException(
+                'Use a managed_number connection for the built-in WAG Hub number.',
+                422,
+                'capability_not_supported',
+            );
+        }
     }
 
-    /**
-     * @param  array<string, mixed>  $input
-     */
-    private function assertPairingPhone(ConnectionType $type, array $input): void
+    private function assertPairingPhone(string $authMethod, ?string $phone): void
     {
-        if ($type !== ConnectionType::ManagedNumber) {
-            return;
-        }
-
-        $mode = ($input['mode'] ?? 'qr') === 'pairing' ? 'pairing' : 'qr';
-        $phone = is_string($input['phone'] ?? null) ? trim((string) $input['phone']) : '';
-
-        if ($mode === 'pairing' && $phone === '') {
+        if ($authMethod === 'pairing' && ($phone === null || $phone === '')) {
             throw new WhatsAppConnectionException(
                 'Pairing requires a phone number.',
                 422,
                 'recipient_invalid',
             );
         }
+    }
+
+    private function phone(mixed $value): ?string
+    {
+        $phone = is_string($value) ? trim($value) : '';
+
+        return $phone === '' ? null : $phone;
+    }
+
+    private function sorted(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        if (! array_is_list($value)) {
+            ksort($value);
+        }
+
+        return array_map(fn (mixed $item): mixed => $this->sorted($item), $value);
     }
 
     private function markDefault(WhatsAppConnection $connection): void

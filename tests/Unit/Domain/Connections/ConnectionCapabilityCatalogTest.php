@@ -24,6 +24,17 @@ class ConnectionCapabilityCatalogTest extends TestCase
         $this->assertSame([], $catalog->forDriver('unknown-future'));
     }
 
+    public function test_managed_numbers_expose_the_v2_engine_send_types(): void
+    {
+        $catalog = new ConnectionCapabilityCatalog;
+
+        foreach (['text', 'image', 'document', 'voice'] as $type) {
+            $this->assertTrue($catalog->supports($catalog->forEngineSession(), $type), $type);
+        }
+
+        $this->assertFalse($catalog->supports($catalog->forEngineSession(), 'video'));
+    }
+
     public function test_routed_connections_expose_the_union_of_provider_capabilities(): void
     {
         $catalog = new ConnectionCapabilityCatalog;

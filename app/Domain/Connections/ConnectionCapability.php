@@ -34,7 +34,7 @@ enum ConnectionCapability: string
             'image' => self::SendImage,
             'document' => self::SendDocument,
             'video' => self::SendVideo,
-            'audio' => self::SendAudio,
+            'audio', 'voice' => self::SendAudio,
             default => null,
         };
     }

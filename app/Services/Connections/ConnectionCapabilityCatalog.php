@@ -7,6 +7,24 @@ use App\Domain\Connections\ConnectionCapability;
 final class ConnectionCapabilityCatalog
 {
     /**
+     * What a managed number backed by a v2 engine session can do: the v2 send types
+     * (text, image, document, voice) plus inbound events and delivery receipts.
+     *
+     * @return list<string>
+     */
+    public function forEngineSession(): array
+    {
+        return [
+            ConnectionCapability::SendText->value,
+            ConnectionCapability::SendImage->value,
+            ConnectionCapability::SendDocument->value,
+            ConnectionCapability::SendAudio->value,
+            ConnectionCapability::InboundMessages->value,
+            ConnectionCapability::DeliveryStatus->value,
+        ];
+    }
+
+    /**
      * @return list<string>
      */
     public function forDriver(string $driver): array

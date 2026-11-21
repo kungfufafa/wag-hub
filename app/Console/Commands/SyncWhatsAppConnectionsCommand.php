@@ -10,7 +10,7 @@ class SyncWhatsAppConnectionsCommand extends Command
 {
     protected $signature = 'gateway:sync-connections';
 
-    protected $description = 'Project existing engine sessions and default routes into WhatsApp connections.';
+    protected $description = 'Project v2 engine sessions (including migrated legacy numbers) and default routes into WhatsApp connections.';
 
     public function handle(ConnectionResolver $resolver): int
     {

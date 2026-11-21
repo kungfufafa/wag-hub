@@ -27,6 +27,7 @@ class WhatsAppConnection extends Model
         'name',
         'slug',
         'type',
+        'engine_session_id',
         'status',
         'is_default',
         'provider_account_id',
@@ -38,6 +39,8 @@ class WhatsAppConnection extends Model
         'last_error_message',
         'recommended_action',
     ];
+
+    protected $hidden = ['creation_key', 'creation_hash'];
 
     public function uniqueIds(): array
     {
@@ -78,13 +81,27 @@ class WhatsAppConnection extends Model
         return $this->typeEnum()->pinsSender();
     }
 
+    public function isManaged(): bool
+    {
+        return $this->typeEnum() === ConnectionType::ManagedNumber;
+    }
+
     public function isConfigured(): bool
     {
+        if ($this->isManaged()) {
+            return $this->engine_session_id !== null;
+        }
+
         return $this->provider_account_id !== null && $this->routing_policy_id !== null;
     }
 
     public function canAttemptSend(): bool
     {
+        // A managed number only sends from a WORKING, freshly observed engine session.
+        if ($this->isManaged()) {
+            return $this->statusEnum() === ConnectionStatus::Ready;
+        }
+
         if ($this->statusEnum()->canAttemptSend()) {
             return true;
         }
@@ -95,6 +112,29 @@ class WhatsAppConnection extends Model
     public function clientApplication(): BelongsTo
     {
         return $this->belongsTo(ClientApplication::class);
+    }
+
+    /**
+     * The v2 engine session behind a managed number, removed sessions included.
+     */
+    public function engineSession(): BelongsTo
+    {
+        return $this->belongsTo(EngineSession::class)->withTrashed();
+    }
+
+    /**
+     * The linked session only when it belongs to this connection's application, so a
+     * mismatched row can never surface or command another tenant's session.
+     */
+    public function ownedEngineSession(): ?EngineSession
+    {
+        $session = $this->engineSession;
+
+        if ($session === null || (int) $session->client_application_id !== (int) $this->client_application_id) {
+            return null;
+        }
+
+        return $session;
     }
 
     public function providerAccount(): BelongsTo
@@ -138,16 +178,5 @@ class WhatsAppConnection extends Model
         $owner = $account->configuration['owned_by_application_id'] ?? null;
 
         return $owner !== null && (string) $owner === (string) $this->client_application_id;
-    }
-
-    public function sessionId(): string
-    {
-        $stored = $this->setup_state['session_id'] ?? null;
-
-        if (is_string($stored) && $stored !== '') {
-            return $stored;
-        }
-
-        return 'wa-'.substr(str_replace('-', '', (string) $this->uuid), 0, 8);
     }
 }

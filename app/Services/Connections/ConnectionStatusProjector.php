@@ -4,24 +4,68 @@ namespace App\Services\Connections;
 
 use App\Domain\Connections\ConnectionStatus;
 use App\Domain\Connections\ConnectionType;
-use App\Domain\WhatsApp\SessionStatus;
 
 final class ConnectionStatusProjector
 {
-    public function projectManaged(?SessionStatus $session, string $health, bool $circuitOpen): ConnectionStatus
+    /**
+     * Runner failures that mean the engine itself is down, not that the number is broken.
+     */
+    public const RUNNER_DOWN_ERRORS = ['engine_unavailable', 'engine_unconfigured', 'engine_unreachable'];
+
+    /**
+     * Project a v2 engine session snapshot (SessionService::snapshot) onto a connection status.
+     * A managed number is ready only while its session is WORKING, freshly observed, and idle.
+     *
+     * @param  array<string, mixed>|null  $session
+     */
+    public function projectEngineSession(?array $session): ConnectionStatus
     {
         if ($session === null) {
             return ConnectionStatus::SetupRequired;
         }
 
-        return match ($session) {
-            SessionStatus::ScanQr, SessionStatus::Starting => ConnectionStatus::Connecting,
-            SessionStatus::Working => ($circuitOpen || $health === 'degraded')
-                ? ConnectionStatus::Degraded
-                : ConnectionStatus::Ready,
-            SessionStatus::Failed => ConnectionStatus::Error,
-            SessionStatus::Stopped => ConnectionStatus::Disconnected,
-            SessionStatus::Unknown => ConnectionStatus::SetupRequired,
+        if ($session['deleted'] ?? false) {
+            return ConnectionStatus::Disconnected;
+        }
+
+        $status = (string) ($session['status'] ?? 'STOPPED');
+        $running = ($session['desired_state'] ?? 'STOPPED') === 'RUNNING';
+        $stale = (bool) ($session['stale'] ?? true);
+        $pending = ($session['pending_operation'] ?? null) !== null;
+
+        if ($status === 'WORKING' && $running) {
+            // An authenticated number whose runner is briefly unobserved is degraded, not lost.
+            return $stale || $pending ? ConnectionStatus::Degraded : ConnectionStatus::Ready;
+        }
+
+        if (in_array($session['last_error'] ?? null, self::RUNNER_DOWN_ERRORS, true) && ($stale || $pending)) {
+            return ConnectionStatus::SetupRequired;
+        }
+
+        if ($status === 'FAILED' && ! $pending) {
+            return ConnectionStatus::Error;
+        }
+
+        if ($running || $pending || in_array($status, ['STARTING', 'SCAN_QR_CODE'], true)) {
+            return ConnectionStatus::Connecting;
+        }
+
+        return ConnectionStatus::Disconnected;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $session
+     */
+    public function recommendedEngineAction(ConnectionStatus $status, ?array $session): ?string
+    {
+        return match ($status) {
+            ConnectionStatus::Ready => null,
+            ConnectionStatus::Connecting => ($session['auth_method'] ?? null) === 'pairing'
+                ? 'Enter pairing code'
+                : 'Scan QR',
+            ConnectionStatus::SetupRequired => $session === null ? 'Reconnect' : 'Start WAG Hub runner',
+            ConnectionStatus::Degraded => 'Provider temporarily unavailable',
+            ConnectionStatus::Disconnected, ConnectionStatus::Error => 'Reconnect',
         };
     }
 
@@ -52,38 +96,29 @@ final class ConnectionStatusProjector
         return ConnectionStatus::Disconnected;
     }
 
-    public function recommendedAction(
-        ConnectionType $type,
-        ConnectionStatus $status,
-        ?SessionStatus $session = null,
-        bool $configured = false,
-    ): ?string {
-        if ($status === ConnectionStatus::Ready) {
-            return null;
-        }
-
-        if ($type === ConnectionType::ManagedNumber) {
-            return match ($status) {
-                ConnectionStatus::Connecting => $session === SessionStatus::ScanQr || $session === null
-                    ? 'Scan QR'
-                    : 'Enter pairing code',
-                ConnectionStatus::SetupRequired => 'Start WAG Hub runner',
-                ConnectionStatus::Disconnected => 'Reconnect',
-                ConnectionStatus::Degraded => 'Provider temporarily unavailable',
-                ConnectionStatus::Error => 'Reconnect',
-                default => null,
-            };
-        }
-
+    public function recommendedRouteAction(ConnectionStatus $status, bool $configured = false): ?string
+    {
         return match ($status) {
+            ConnectionStatus::Ready => null,
             ConnectionStatus::SetupRequired => $configured
                 ? 'Send a test message'
                 : 'Fix credentials',
-            ConnectionStatus::Error => 'Fix credentials',
             ConnectionStatus::Degraded => 'Provider temporarily unavailable',
-            ConnectionStatus::Disconnected => 'Fix credentials',
-            ConnectionStatus::Connecting => 'Fix credentials',
-            default => null,
+            ConnectionStatus::Error, ConnectionStatus::Disconnected, ConnectionStatus::Connecting => 'Fix credentials',
         };
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $session
+     */
+    public function recommendedAction(
+        ConnectionType $type,
+        ConnectionStatus $status,
+        ?array $session = null,
+        bool $configured = false,
+    ): ?string {
+        return $type === ConnectionType::ManagedNumber
+            ? $this->recommendedEngineAction($status, $session)
+            : $this->recommendedRouteAction($status, $configured);
     }
 }
