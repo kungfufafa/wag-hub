@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Events\ProviderHealthChanged;
+use App\Http\Middleware\TrustCurrentHostForLogViewer;
 use App\Notifications\Channels\TelegramChannel;
 use App\Services\Alerts\SendProviderHealthAlerts;
 use Filament\Support\Assets\Js;
@@ -11,6 +12,8 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\ServiceProvider;
 use Opcodes\LogViewer\Facades\LogViewer;
+use Opcodes\LogViewer\Http\Middleware\AuthorizeLogViewer;
+use Opcodes\LogViewer\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,7 +22,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Set before Log Viewer registers its API routes (during boot).
+        config(['log-viewer.api_middleware' => [
+            TrustCurrentHostForLogViewer::class,
+            EnsureFrontendRequestsAreStateful::class,
+            AuthorizeLogViewer::class,
+        ]]);
     }
 
     /**
