@@ -2,9 +2,13 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Domain\Connections\ConnectionCapability;
+use App\Domain\Connections\ConnectionStatus;
 use App\Exceptions\WhatsAppEngineException;
 use App\Filament\Pages\ConnectWhatsApp;
+use App\Filament\Resources\WhatsAppConnections\Pages\ListWhatsAppConnections;
 use App\Filament\Resources\WhatsAppConnections\Pages\ViewWhatsAppConnection;
+use App\Filament\Support\ConnectionLabels;
 use App\Jobs\ProcessEngineOperation;
 use App\Models\ApiCredential;
 use App\Models\ClientApplication;
@@ -13,6 +17,7 @@ use App\Models\EngineSession;
 use App\Models\ProviderAccount;
 use App\Models\User;
 use App\Models\WhatsAppConnection;
+use App\Services\Connections\ConnectionPresenter;
 use App\Services\Engine\SessionService;
 use App\Services\IntegrationPack;
 use Filament\Notifications\Notification;
@@ -259,7 +264,9 @@ class ConnectWhatsAppPageTest extends TestCase
             ->set('type', 'managed_number')
             ->call('createConnection');
         $connection = WhatsAppConnection::query()->sole();
-        $capabilities = implode(', ', $connection->capabilities);
+        $capabilities = collect($connection->capabilities)
+            ->map(fn (string $capability): string => ConnectionCapability::from($capability)->label())
+            ->implode(', ');
         $this->assertNotSame('', $capabilities);
 
         $html = Livewire::test(ViewWhatsAppConnection::class, ['record' => $connection->getRouteKey()])->html();
@@ -400,21 +407,19 @@ class ConnectWhatsAppPageTest extends TestCase
 
     public function test_exception_notifications_translate_known_errors_and_hide_unknown_raw_messages(): void
     {
-        $page = new ConnectWhatsApp;
-        $message = new \ReflectionMethod($page, 'exceptionMessage');
         foreach ([
             ['capacity_exceeded', 'Kuota nomor WhatsApp aplikasi ini sudah penuh. Hapus nomor yang tidak digunakan atau hubungi administrator.'],
             ['idempotency_conflict', 'Pengaturan berbeda dari percobaan sebelumnya. Mulai percobaan baru melalui Koneksi lain.'],
             ['provider_configuration_invalid', 'Pengaturan provider belum lengkap atau tidak valid. Pilih Ubah pengaturan untuk memperbaikinya.'],
         ] as [$code, $expected]) {
-            $this->assertSame($expected, $message->invoke($page, new WhatsAppEngineException('Raw English detail', 422, $code)));
+            $this->assertSame($expected, ConnectionLabels::exceptionMessage(new WhatsAppEngineException('Raw English detail', 422, $code)));
         }
-        $this->assertSame('Panjang nomor WhatsApp tidak valid.', $message->invoke($page, new \InvalidArgumentException('Panjang nomor WhatsApp tidak valid.')));
+        $this->assertSame('Panjang nomor WhatsApp tidak valid.', ConnectionLabels::exceptionMessage(new \InvalidArgumentException('Panjang nomor WhatsApp tidak valid.')));
         foreach ([
             new \RuntimeException('Raw English exception'),
             new WhatsAppEngineException('Raw unknown error', 500, 'unknown'),
         ] as $exception) {
-            $this->assertSame('Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.', $message->invoke($page, $exception));
+            $this->assertSame('Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.', ConnectionLabels::exceptionMessage($exception));
         }
     }
 
@@ -462,6 +467,144 @@ class ConnectWhatsAppPageTest extends TestCase
         $this->assertNotSame($attemptKey, $page->get('attemptKey'));
         $this->assertNotSame($connection->uuid, $page->get('connectionUuid'));
         $this->assertSame(2, WhatsAppConnection::query()->count());
+    }
+
+    public function test_provider_setup_after_pairing_and_driver_cycling_ignores_stale_mode(): void
+    {
+        Queue::fake();
+        $page = Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('step', 2)
+            ->set('mode', 'pairing')
+            ->set('phone', '+6281234567890')
+            ->assertSeeHtml('wire:key="managed-settings"')
+            ->assertSeeHtml('wire:key="managed-mode"')
+            ->call('createConnection')
+            ->assertSet('step', 3)
+            ->call('startNewAttempt')
+            ->assertSet('step', 2)
+            ->assertSet('connectionUuid', null)
+            ->assertSet('mode', 'qr')
+            ->set('mode', 'pairing')
+            ->set('type', 'provider_route')
+            ->assertSet('mode', 'qr')
+            ->assertSeeHtml('wire:key="provider-driver"')
+            ->assertDontSeeHtml('wire:key="managed-mode"');
+
+        foreach (['fonnte', 'waha', 'gowa', 'waba', 'waha'] as $driver) {
+            $page->set('driver', $driver)
+                ->assertSeeHtml('wire:key="provider-settings-'.$driver.'"');
+        }
+
+        $page->set('mode', 'waba')
+            ->set('baseUrl', 'https://waha.example.com')
+            ->set('session', 'default')
+            ->set('token', 'secret')
+            ->call('createConnection')
+            ->assertHasNoErrors()
+            ->assertSet('step', 3);
+
+        $this->assertSame(2, WhatsAppConnection::query()->count());
+        $this->assertSame('waha', WhatsAppConnection::query()->where('uuid', $page->get('connectionUuid'))->sole()->providerAccount->driver);
+        $page->call('startNewAttempt')
+            ->set('mode', 'waba')
+            ->set('type', 'managed_number')
+            ->assertSet('mode', 'qr')
+            ->assertSeeHtml('wire:key="managed-mode"')
+            ->assertDontSeeHtml('wire:key="provider-driver"');
+    }
+
+    public function test_validation_errors_without_inline_messages_are_shown_in_notifications(): void
+    {
+        $page = Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('step', 2)
+            ->set('mode', 'waba')
+            ->call('createConnection')
+            ->assertSet('step', 2)
+            ->assertHasErrors(['mode'])
+            ->assertNotified(Notification::make()
+                ->title('Periksa pengaturan koneksi')
+                ->body('Pilihan Mode koneksi tidak valid.')
+                ->danger());
+
+        $page->set('type', 'provider_route')
+            ->set('driver', 'unknown')
+            ->call('createConnection')
+            ->assertSet('step', 2)
+            ->assertHasErrors(['driver'])
+            ->assertNotified(Notification::make()
+                ->title('Periksa pengaturan koneksi')
+                ->body('Pilihan Provider tidak valid.')
+                ->danger());
+        $this->assertSame(0, WhatsAppConnection::query()->count());
+    }
+
+    public function test_failed_provider_actions_are_indonesian_in_the_list_and_detail_only(): void
+    {
+        Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('type', 'provider_route')
+            ->set('driver', 'waha')
+            ->set('baseUrl', 'http://127.0.0.1')
+            ->set('token', 'secret')
+            ->call('createConnection')
+            ->assertSet('step', 3);
+        $connection = WhatsAppConnection::query()->sole();
+        Livewire::test(ListWhatsAppConnections::class)
+            ->assertTableColumnFormattedStateSet('recommended_action', 'Perbaiki pengaturan provider.', $connection)
+            ->assertTableColumnFormattedStateSet('status', 'Kesalahan', $connection);
+        $view = Livewire::test(ViewWhatsAppConnection::class, ['record' => $connection->getRouteKey()])
+            ->assertSee('Perbaiki pengaturan provider.')
+            ->assertSee('Tidak tersedia');
+        $this->assertStringNotContainsString('Fix provider settings', strip_tags($view->html()));
+        $this->assertStringNotContainsString('setup_required', strip_tags($view->html()));
+        $this->assertStringContainsString('Perbaiki pengaturan provider.', $view->instance()->getSubheading());
+
+        $presentation = app(ConnectionPresenter::class)->toArray($connection);
+        $this->assertSame('Fix provider settings', $presentation['recommended_action']);
+        $this->assertSame('setup_required', $presentation['status']);
+        $this->assertSame('down', $presentation['health']['operational_status']);
+    }
+
+    public function test_pairing_instructions_are_translated_in_the_connection_detail(): void
+    {
+        Queue::fake();
+        Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('mode', 'pairing')
+            ->set('phone', '+6281234567890')
+            ->call('createConnection');
+        $connection = WhatsAppConnection::query()->sole();
+        Livewire::test(ViewWhatsAppConnection::class, ['record' => $connection->getRouteKey()])
+            ->assertSee('Masukkan kode pairing di WhatsApp pada HP Anda.')
+            ->assertSee('Menghubungkan')
+            ->assertSee('Terganggu');
+    }
+
+    public function test_connection_labels_cover_actions_statuses_and_safe_fallbacks(): void
+    {
+        foreach ([
+            'Enter pairing code' => 'Masukkan kode pairing di WhatsApp pada HP Anda.',
+            'Scan QR' => 'Pindai kode QR melalui menu Perangkat tertaut di WhatsApp.',
+            'Fix provider settings' => 'Perbaiki pengaturan provider.',
+            'Fix credentials' => 'Perbaiki pengaturan provider.',
+            'Reconnect' => 'Hubungkan kembali WhatsApp.',
+            'Start WAG Hub runner' => 'Jalankan layanan WAG Hub runner.',
+            'Provider temporarily unavailable' => 'Provider sementara tidak tersedia.',
+            'Send a test message' => 'Kirim pesan uji untuk memeriksa koneksi.',
+            'Unknown English action' => 'Periksa pengaturan koneksi.',
+        ] as $action => $label) {
+            $this->assertSame($label, ConnectionLabels::recommendedAction($action));
+        }
+        $this->assertNull(ConnectionLabels::recommendedAction(null));
+        $this->assertNull(ConnectionLabels::recommendedAction(''));
+        $this->assertSame('Kesalahan', ConnectionLabels::status(ConnectionStatus::Error));
+        $this->assertSame('Siap', ConnectionLabels::operationalStatus('ready'));
+        $this->assertSame('Terganggu', ConnectionLabels::operationalStatus('degraded'));
+        $this->assertSame('Tidak tersedia', ConnectionLabels::operationalStatus('down'));
+        $this->assertSame('Belum diketahui', ConnectionLabels::operationalStatus('unknown'));
+        $this->assertSame('Tidak ada provider yang menerima pesan. Periksa koneksi lalu coba lagi.', ConnectionLabels::errorMessage('providers_failed'));
     }
 
     private function application(): ClientApplication

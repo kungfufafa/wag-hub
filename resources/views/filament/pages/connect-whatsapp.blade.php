@@ -18,7 +18,7 @@
     </div>
 
     @if ($this->step === 1)
-        <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
+        <div wire:key="connect-step-1" class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Pilih aplikasi</h3>
             <div class="mt-4 grid gap-3 md:grid-cols-2">
                 <label class="text-sm font-medium">Aplikasi
@@ -47,7 +47,7 @@
     @endif
 
     @if ($this->step === 2)
-        <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
+        <div wire:key="connect-step-2" class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Pilih cara menghubungkan</h3>
             @if ($this->connectionUuid !== null)
                 <p class="mt-1 text-sm text-gray-500">Jenis koneksi dan provider tidak dapat diubah. Pilih Koneksi lain untuk membuat koneksi baru.</p>
@@ -70,17 +70,17 @@
             </div>
 
             @if ($this->type === 'managed_number')
-                <div class="mt-4 grid gap-3 md:grid-cols-2">
+                <div wire:key="managed-settings" class="mt-4 grid gap-3 md:grid-cols-2">
                     <label class="text-sm font-medium">Mode
                         <x-filament::input.wrapper class="mt-1">
-                            <x-filament::input.select wire:model.live="mode">
+                            <x-filament::input.select wire:key="managed-mode" wire:model.live="mode">
                             <option value="qr">Scan QR</option>
                             <option value="pairing">Kode pairing</option>
                             </x-filament::input.select>
                         </x-filament::input.wrapper>
                     </label>
                     @if ($this->mode === 'pairing')
-                        <label class="text-sm font-medium">Nomor HP
+                        <label wire:key="pairing-phone" class="text-sm font-medium">Nomor HP
                             <x-filament::input.wrapper class="mt-1">
                                 <x-filament::input wire:model="phone" />
                             </x-filament::input.wrapper>
@@ -89,10 +89,10 @@
                     @endif
                 </div>
             @else
-                <div class="mt-4 grid gap-3 md:grid-cols-2">
+                <div wire:key="provider-settings-{{ $this->driver }}" class="mt-4 grid gap-3 md:grid-cols-2">
                     <label class="text-sm font-medium">Provider
                         <x-filament::input.wrapper class="mt-1">
-                            <x-filament::input.select wire:model.live="driver" :disabled="$this->connectionUuid !== null">
+                            <x-filament::input.select wire:key="provider-driver" wire:model.live="driver" :disabled="$this->connectionUuid !== null">
                             <option value="fonnte">Fonnte</option>
                             <option value="waha">WAHA</option>
                             <option value="gowa">GOWA</option>
@@ -173,7 +173,7 @@
     @endif
 
     @if ($this->step === 3)
-        <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900" @if (($presentation['status'] ?? null) === 'connecting') wire:poll.3s @endif>
+        <div wire:key="connect-step-3" class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900" @if (($presentation['status'] ?? null) === 'connecting') wire:poll.3s @endif>
             <h3 class="text-lg font-semibold">Status koneksi</h3>
             <p class="mt-1 text-sm text-gray-500">{{ $presentation['recommended_action'] ?? 'Menunggu kesiapan koneksi.' }}</p>
             <p class="mt-3 text-sm"><strong>Status:</strong> {{ $presentation['status_label'] ?? 'Perlu disiapkan' }}</p>
@@ -197,7 +197,7 @@
     @endif
 
     @if ($this->step === 4)
-        <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
+        <div wire:key="connect-step-4" class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Kirim pesan uji</h3>
             <div class="mt-4 grid gap-3 md:grid-cols-2">
                 <label class="text-sm font-medium">Nomor tujuan
@@ -222,7 +222,7 @@
     @endif
 
     @if ($this->step === 5)
-        <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
+        <div wire:key="connect-step-5" class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Salin konfigurasi integrasi</h3>
             <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">{{ $this->issuedEnv }}</pre>
             <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">wag.sendMessage('081234567890', 'Halo', 'order-1')
