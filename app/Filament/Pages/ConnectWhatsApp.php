@@ -13,6 +13,7 @@ use App\Services\Connections\ConnectionPresenter;
 use App\Services\Connections\ConnectionProvisioner;
 use App\Services\Connections\ConnectionTestSender;
 use App\Services\IntegrationPack;
+use App\Support\PhoneNormalizer;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -141,7 +142,28 @@ class ConnectWhatsApp extends Page
     {
         $connection = $this->connection();
 
-        return $connection === null ? null : app(ConnectionPresenter::class)->toArray($connection, true);
+        if ($connection === null) {
+            return null;
+        }
+
+        $presentation = app(ConnectionPresenter::class)->toArray($connection, true);
+        if ($connection->isManaged() && $presentation['status'] === 'connecting'
+            && ($connection->setup_state['auth_method'] ?? null) === 'pairing') {
+            $presentation['recommended_action'] = 'Enter pairing code';
+        }
+        $presentation['status_label'] = $connection->statusEnum()->label();
+        $presentation['recommended_action'] = match ($presentation['recommended_action']) {
+            'Enter pairing code' => 'Masukkan kode pairing di WhatsApp pada HP Anda.',
+            'Scan QR' => 'Pindai kode QR melalui menu Perangkat tertaut di WhatsApp.',
+            'Fix provider settings', 'Fix credentials' => 'Perbaiki pengaturan provider.',
+            'Reconnect' => 'Hubungkan kembali WhatsApp.',
+            'Start WAG Hub runner' => 'Jalankan layanan WAG Hub runner.',
+            'Provider temporarily unavailable' => 'Provider sementara tidak tersedia.',
+            'Send a test message' => 'Kirim pesan uji untuk memeriksa koneksi.',
+            default => 'Menunggu kesiapan koneksi.',
+        };
+
+        return $presentation;
     }
 
     public function createConnection(): void
@@ -154,15 +176,18 @@ class ConnectWhatsApp extends Page
             return;
         }
 
-        if ($this->type === ConnectionType::ManagedNumber->value
-            && $this->mode === 'pairing'
-            && trim($this->phone) === '') {
-            Notification::make()->title('Nomor HP pairing wajib diisi')->danger()->send();
-
-            return;
-        }
+        $this->validateSettings();
 
         try {
+            $existing = $this->connection();
+            if ($existing !== null && ! $existing->isManaged()) {
+                app(ConnectionProvisioner::class)->retry($existing, $this->provisioningPayload()['provider']['configuration']);
+                $this->step = 3;
+                Notification::make()->title('Pengaturan koneksi diperbarui')->success()->send();
+
+                return;
+            }
+
             $provisioned = app(ConnectionProvisioner::class)->provision($application, $this->provisioningPayload(), $this->creationKey());
             $this->connectionUuid = $provisioned->connection->uuid;
             $this->step = 3;
@@ -175,7 +200,7 @@ class ConnectWhatsApp extends Page
                     'idempotency_conflict' => 'Pengaturan berubah: mulai percobaan baru',
                     default => 'Koneksi belum bisa disiapkan',
                 })
-                ->body($exception->getMessage())
+                ->body('Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.')
                 ->danger()
                 ->send();
 
@@ -190,7 +215,7 @@ class ConnectWhatsApp extends Page
                 ->first();
             $this->connectionUuid = $connection?->uuid;
             $this->step = $connection === null ? $this->step : 3;
-            Notification::make()->title('Koneksi perlu ditindaklanjuti')->body($exception->getMessage())->warning()->send();
+            Notification::make()->title('Koneksi perlu ditindaklanjuti')->body('Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.')->warning()->send();
         }
     }
 
@@ -199,6 +224,48 @@ class ConnectWhatsApp extends Page
         $this->attemptKey = (string) Str::uuid();
         $this->connectionUuid = null;
         $this->step = 2;
+    }
+
+    public function editSettings(): void
+    {
+        if ($this->connection()?->isManaged() === false) {
+            $this->step = 2;
+        }
+    }
+
+    private function validateSettings(): void
+    {
+        $rules = [
+            'type' => 'required|in:managed_number,provider_route',
+            'mode' => 'required|in:qr,pairing',
+        ];
+        if ($this->type === 'managed_number' && $this->mode === 'pairing') {
+            $this->phone = trim($this->phone);
+            $rules['phone'] = ['required', 'regex:/^\+?[0-9]{8,15}$/'];
+        }
+        if ($this->type === 'provider_route') {
+            $rules['driver'] = 'required|in:fonnte,waha,gowa,waba';
+            $rules += match ($this->driver) {
+                'fonnte' => ['token' => 'required'],
+                'waha' => ['baseUrl' => 'required|url', 'session' => 'required', 'token' => 'required'],
+                'gowa' => ['baseUrl' => 'required|url', 'username' => 'required', 'password' => 'required'],
+                'waba' => ['phoneNumberId' => 'required', 'accessToken' => 'required'],
+                default => [],
+            };
+        }
+        $this->validate($rules, [
+            'required' => ':attribute wajib diisi.',
+            'in' => 'Pilihan :attribute tidak valid.',
+            'url' => ':attribute harus berupa URL yang valid.',
+            'phone.regex' => 'Nomor HP harus terdiri dari 8–15 digit dengan tanda + opsional di awal.',
+        ], [
+            'phone' => 'Nomor HP', 'token' => 'Token / kunci API', 'baseUrl' => 'URL dasar',
+            'session' => 'Sesi', 'username' => 'Nama pengguna', 'password' => 'Kata sandi',
+            'phoneNumberId' => 'ID nomor telepon', 'accessToken' => 'Token akses',
+        ]);
+        if (isset($rules['phone'])) {
+            $this->phone = PhoneNormalizer::international($this->phone);
+        }
     }
 
     private function creationKey(): string
@@ -228,11 +295,11 @@ class ConnectWhatsApp extends Page
                 ->title($exception->errorCode === 'capacity_exceeded'
                     ? 'Kuota nomor WhatsApp aplikasi ini sudah penuh'
                     : 'Setup belum selesai')
-                ->body($exception->getMessage())
+                ->body('Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.')
                 ->danger()
                 ->send();
         } catch (Throwable $exception) {
-            Notification::make()->title('Setup belum selesai')->body($exception->getMessage())->warning()->send();
+            Notification::make()->title('Setup belum selesai')->body('Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.')->warning()->send();
         }
     }
 
@@ -260,7 +327,7 @@ class ConnectWhatsApp extends Page
                 $this->step = 5;
             }
         } catch (Throwable $exception) {
-            Notification::make()->title('Uji kirim gagal')->body($exception->getMessage())->danger()->send();
+            Notification::make()->title('Uji kirim gagal')->body('Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.')->danger()->send();
         }
     }
 

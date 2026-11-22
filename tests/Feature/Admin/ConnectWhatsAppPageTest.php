@@ -265,6 +265,114 @@ class ConnectWhatsAppPageTest extends TestCase
         $this->assertSame(1, substr_count($html, e($capabilities)));
     }
 
+    public function test_pairing_rejects_invalid_phone_numbers_before_provisioning(): void
+    {
+        $application = $this->application();
+        foreach (['', 'abc', '1234567', '1234567890123456', '12+34567890'] as $phone) {
+            Livewire::test(ConnectWhatsApp::class)
+                ->set('applicationId', $application->id)
+                ->set('step', 2)
+                ->set('mode', 'pairing')
+                ->set('phone', $phone)
+                ->call('createConnection')
+                ->assertHasErrors(['phone'])
+                ->assertSet('step', 2);
+        }
+        $this->assertSame(0, WhatsAppConnection::query()->count());
+        $this->assertSame(0, EngineSession::query()->count());
+    }
+
+    public function test_pairing_instructions_do_not_tell_the_user_to_scan_a_qr(): void
+    {
+        Queue::fake();
+        Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('step', 2)
+            ->set('mode', 'pairing')
+            ->assertSee('Nomor HP')
+            ->set('phone', '+6281234567890')
+            ->call('createConnection')
+            ->assertHasNoErrors()
+            ->assertSet('step', 3)
+            ->assertSee('Masukkan kode pairing')
+            ->assertDontSee('Pindai kode QR')
+            ->assertSee('Menghubungkan');
+    }
+
+    public function test_blank_provider_credentials_do_not_create_connections(): void
+    {
+        $application = $this->application();
+        foreach ([
+            'fonnte' => ['token'],
+            'waha' => ['baseUrl', 'token', 'session'],
+            'gowa' => ['baseUrl', 'username', 'password'],
+            'waba' => ['phoneNumberId', 'accessToken'],
+        ] as $driver => $fields) {
+            Livewire::test(ConnectWhatsApp::class)
+                ->set('applicationId', $application->id)
+                ->set('step', 2)
+                ->set('type', 'provider_route')
+                ->set('driver', $driver)
+                ->set('session', '')
+                ->call('createConnection')
+                ->assertHasErrors($fields)
+                ->assertSet('step', 2);
+        }
+        $this->assertSame(0, WhatsAppConnection::query()->count());
+        $this->assertSame(0, ProviderAccount::query()->count());
+    }
+
+    public function test_provider_settings_can_be_corrected_on_the_same_connection(): void
+    {
+        $page = Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('type', 'provider_route')
+            ->set('token', 'first-token')
+            ->call('createConnection')
+            ->assertSet('step', 3)
+            ->assertSee('Ubah pengaturan');
+        $connection = WhatsAppConnection::query()->sole();
+        $accountId = $connection->provider_account_id;
+        $page->call('editSettings')
+            ->assertSet('step', 2)
+            ->set('token', '')
+            ->call('createConnection')
+            ->assertHasErrors(['token'])
+            ->assertSet('step', 2)
+            ->set('token', 'corrected-token')
+            ->call('createConnection')
+            ->assertHasNoErrors()
+            ->assertSet('step', 3)
+            ->assertSet('connectionUuid', $connection->uuid);
+        $this->assertSame(1, WhatsAppConnection::query()->count());
+        $this->assertSame(1, ProviderAccount::query()->count());
+        $this->assertSame($accountId, $connection->fresh()->provider_account_id);
+        $this->assertSame('corrected-token', $connection->fresh()->providerAccount->configuration['token']);
+    }
+
+    public function test_rejected_provider_endpoint_can_be_edited_without_a_new_record(): void
+    {
+        $page = Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('type', 'provider_route')
+            ->set('driver', 'waha')
+            ->set('baseUrl', 'http://127.0.0.1')
+            ->set('token', 'secret')
+            ->call('createConnection')
+            ->assertSet('step', 3)
+            ->assertSee('Perbaiki pengaturan provider.')
+            ->assertDontSee('Fix provider settings');
+        $connection = WhatsAppConnection::query()->sole();
+        $page->call('editSettings')
+            ->set('baseUrl', 'https://waha.example.com')
+            ->call('createConnection')
+            ->assertHasNoErrors()
+            ->assertSet('step', 3)
+            ->assertSet('connectionUuid', $connection->uuid);
+        $this->assertSame(1, WhatsAppConnection::query()->count());
+        $this->assertNotNull($connection->fresh()->provider_account_id);
+    }
+
     private function application(): ClientApplication
     {
         return ClientApplication::query()->create([
