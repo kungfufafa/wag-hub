@@ -204,11 +204,6 @@ class WhatsAppDevices extends Page
         ]);
     }
 
-    public function getSubheading(): ?string
-    {
-        return 'Nomor WhatsApp milik WAG Hub dan perangkat WAHA.';
-    }
-
     protected function getHeaderActions(): array
     {
         return [

@@ -9,7 +9,6 @@ use App\Filament\Pages\WhatsAppInbox;
 use App\Filament\Resources\ProviderAccounts\Pages\CreateProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\EditProviderAccount;
 use App\Filament\Resources\ProviderAccounts\Pages\ListProviderAccounts;
-use App\Filament\Support\ConfigurationListLayout;
 use App\Filament\Support\PanelNavigation;
 use App\Filament\Support\SyncsSlugFromName;
 use App\Http\Requests\StoreMessageRequest;
@@ -32,19 +31,13 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
-use Filament\Support\Enums\FontWeight;
-use Filament\Support\Enums\TextSize;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\Column;
-use Filament\Tables\Columns\Layout\Component;
-use Filament\Tables\Columns\Layout\Split;
-use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
@@ -75,249 +68,204 @@ class ProviderAccountResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema
-            ->columns([
-                'default' => 1,
-                'lg' => 3,
-            ])
+            ->columns(1)
             ->components([
-                Group::make([
-                    Section::make('Akun provider')
-                        ->description('Secret hanya bisa ditulis ulang dan disimpan terenkripsi.')
-                        ->schema([
-                            TextInput::make('name')
-                                ->label('Nama')
-                                ->placeholder('Contoh: WhatsApp Utama')
-                                ->required()
-                                ->maxLength(120)
-                                ->live(onBlur: true)
-                                ->afterStateUpdated(SyncsSlugFromName::afterStateUpdated()),
-                            TextInput::make('slug')
-                                ->label('ID provider')
-                                ->placeholder('whatsapp-utama')
-                                ->helperText('Diisi otomatis dari nama. Boleh diubah sebelum disimpan.')
-                                ->alphaDash()
-                                ->maxLength(80)
-                                ->unique(
-                                    ignoreRecord: true,
-                                    modifyRuleUsing: fn (Unique $rule): Unique => $rule->withoutTrashed(),
-                                )
-                                ->validationMessages([
-                                    'unique' => 'ID provider ini sudah dipakai.',
-                                    'alpha_dash' => 'Gunakan huruf kecil, angka, dan tanda hubung.',
-                                ]),
-                            Select::make('driver')
-                                ->label('Provider')
-                                ->helperText('Form koneksi di bawah menyesuaikan pilihan ini.')
-                                ->options([
-                                    'wag_hub' => 'WAG Hub (bawaan)',
-                                    'waha' => 'WAHA',
-                                    'fonnte' => 'Fonnte',
-                                    'gowa' => 'GOWA',
-                                    'waba' => 'WABA (Meta Cloud API)',
-                                ])
-                                ->default('wag_hub')
-                                ->required()
-                                ->native(false)
-                                ->live(),
-                            TextInput::make('timeout_seconds')
-                                ->label('Timeout (detik)')
-                                ->helperText('Batas waktu menunggu jawaban provider.')
-                                ->numeric()
-                                ->required()
-                                ->minValue(1)
-                                ->maxValue(60)
-                                ->default(15),
-                            Toggle::make('is_active')
-                                ->label('Provider aktif')
-                                ->helperText('Nonaktifkan agar dilewati saat pengiriman, tanpa menghapus akun.')
-                                ->default(true)
-                                ->required(),
-                        ])
-                        ->columns(['md' => 2]),
-                    Section::make('WhatsApp bawaan WAG Hub')
-                        ->description('Simpan akun, lalu buka Perangkat WhatsApp untuk menautkan nomor dengan QR. Akun ini dapat digunakan sebagai provider utama atau fallback pada Aturan Rute.')
-                        ->schema([])
-                        ->visible(fn (Get $get): bool => $get('driver') === 'wag_hub'),
-                    Section::make('Koneksi WAHA')
-                        ->schema([
-                            TextInput::make('configuration.base_url')
-                                ->label('Base URL')
-                                ->url()
-                                ->required(fn (Get $get): bool => $get('driver') === 'waha')
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.session')
-                                ->label('Session')
-                                ->required(fn (Get $get): bool => $get('driver') === 'waha')
-                                ->maxLength(120)
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.api_key')
-                                ->label('API key')
-                                ->password()
-                                ->revealable()
-                                ->helperText('Kosongkan saat mengubah bila ingin mempertahankan kunci yang ada.')
-                                ->required(fn (string $operation): bool => $operation === 'create')
-                                ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
-                                ->dehydrated(fn (?string $state): bool => filled($state))
-                                ->dehydratedWhenHidden(false),
-                        ])
-                        ->visible(fn (Get $get): bool => $get('driver') === 'waha')
-                        ->columns(['md' => 2]),
-                    Section::make('Koneksi Fonnte')
-                        ->schema([
-                            TextInput::make('configuration.endpoint')
-                                ->label('Endpoint')
-                                ->url()
-                                ->required(fn (Get $get): bool => $get('driver') === 'fonnte')
-                                ->default('https://api.fonnte.com/send')
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.validate_endpoint')
-                                ->label('Endpoint validasi nomor')
-                                ->url()
-                                ->required(fn (Get $get): bool => $get('driver') === 'fonnte')
-                                ->default('https://api.fonnte.com/validate')
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.token')
-                                ->label('Token')
-                                ->password()
-                                ->revealable()
-                                ->helperText('Kosongkan saat mengubah bila ingin mempertahankan token yang ada.')
-                                ->required(fn (string $operation): bool => $operation === 'create')
-                                ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
-                                ->dehydrated(fn (?string $state): bool => filled($state))
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.attachment_max_bytes')
-                                ->label('Batas attachment (byte)')
-                                ->numeric()
-                                ->minValue(1)
-                                ->maxValue(16777216)
-                                ->default(4 * 1024 * 1024)
-                                ->helperText('Kebijakan awal Fonnte 4 MB; naikkan setelah batas akun terverifikasi.')
-                                ->dehydratedWhenHidden(false),
-                        ])
-                        ->visible(fn (Get $get): bool => $get('driver') === 'fonnte')
-                        ->columns(['md' => 2]),
-                    Section::make('Koneksi GOWA')
-                        ->schema([
-                            TextInput::make('configuration.base_url')
-                                ->label('Base URL')
-                                ->url()
-                                ->required(fn (Get $get): bool => $get('driver') === 'gowa')
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.username')
-                                ->label('Username Basic Auth')
-                                ->required(fn (Get $get): bool => $get('driver') === 'gowa')
-                                ->maxLength(120)
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.password')
-                                ->label('Password Basic Auth')
-                                ->password()
-                                ->revealable()
-                                ->helperText('Kosongkan saat mengubah bila ingin mempertahankan password yang ada.')
-                                ->required(fn (string $operation): bool => $operation === 'create')
-                                ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
-                                ->dehydrated(fn (?string $state): bool => filled($state))
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.device_id')
-                                ->label('Device ID')
-                                ->helperText('Opsional bila server GOWA hanya memiliki satu device.')
-                                ->maxLength(255)
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.version')
-                                ->label('Versi GOWA')
-                                ->placeholder('8.10.0')
-                                ->helperText('Wajib dikonfigurasi minimal 8.10.0 untuk mengirim dokumen melalui URL.')
-                                ->maxLength(32)
-                                ->dehydratedWhenHidden(false),
-                        ])
-                        ->visible(fn (Get $get): bool => $get('driver') === 'gowa')
-                        ->columns(['md' => 2]),
-                    Section::make('Koneksi WABA')
-                        ->description('Meta Cloud API resmi. Lookup registrasi nomor tidak tersedia; pengecekan akan berstatus unsupported.')
-                        ->schema([
-                            TextInput::make('configuration.base_url')
-                                ->label('Graph API Base URL')
-                                ->url()
-                                ->default('https://graph.facebook.com')
-                                ->required(fn (Get $get): bool => $get('driver') === 'waba')
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.api_version')
-                                ->label('Graph API Version')
-                                ->default('v25.0')
-                                ->regex('/^v\d+\.\d+$/')
-                                ->required(fn (Get $get): bool => $get('driver') === 'waba')
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.phone_number_id')
-                                ->label('Phone Number ID')
-                                ->regex('/^\d+$/')
-                                ->required(fn (Get $get): bool => $get('driver') === 'waba')
-                                ->dehydratedWhenHidden(false),
-                            TextInput::make('configuration.access_token')
-                                ->label('System User Access Token')
-                                ->password()
-                                ->revealable()
-                                ->helperText('Gunakan token system user; kosongkan saat mengubah untuk mempertahankan token.')
-                                ->required(fn (string $operation): bool => $operation === 'create')
-                                ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
-                                ->dehydrated(fn (?string $state): bool => filled($state))
-                                ->dehydratedWhenHidden(false),
-                        ])
-                        ->visible(fn (Get $get): bool => $get('driver') === 'waba')
-                        ->columns(['md' => 2]),
-                    Section::make('Webhook pesan masuk')
-                        ->description('Arahkan webhook provider ke URL ini supaya inbox menerima pesan, bukan hanya kirim.')
-                        ->schema([
-                            Placeholder::make('inbox_webhook_url')
-                                ->label('URL webhook')
-                                ->content(function (?ProviderAccount $record): string {
-                                    if ($record === null || blank($record->uuid)) {
-                                        return 'Simpan akun dulu. URL webhook akan muncul setelah akun tersimpan.';
-                                    }
-
-                                    return url('/webhooks/whatsapp/'.$record->uuid);
-                                }),
-                            TextInput::make('configuration.webhook_secret')
-                                ->label('Token webhook (opsional)')
-                                ->password()
-                                ->revealable()
-                                ->helperText('Jika diisi, kirim sebagai query token= atau header X-Webhook-Token. Untuk WABA, pakai nilai yang sama sebagai Verify Token. Kosongkan saat mengubah untuk mempertahankan token yang ada.')
-                                ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
-                                ->dehydrated(fn (?string $state): bool => filled($state)),
-                        ]),
-                ])->columnSpan([
-                    'default' => 'full',
-                    'lg' => 2,
-                ]),
-                Section::make('Sebelum menyimpan')
-                    ->description('Provider hanya dipakai oleh Hub, bukan aplikasi sumber.')
+                Section::make('Akun provider')
                     ->schema([
-                        Placeholder::make('provider_connection')
-                            ->label('1. Lengkapi koneksi')
-                            ->content('Isi koneksi sesuai driver: WAHA, Fonnte, GOWA, atau Meta WABA.'),
-                        Placeholder::make('provider_secret')
-                            ->label('2. Simpan secret')
-                            ->content('API key atau token disimpan terenkripsi dan tidak dapat dilihat kembali.'),
-                        Placeholder::make('provider_activation')
-                            ->label('3. Aktifkan lalu uji')
-                            ->content(fn (string $operation): string => $operation === 'edit'
-                                ? 'Uji koneksi dari tombol Uji di atas, lalu masukkan akun ini ke aturan rute.'
-                                : 'Setelah disimpan, uji koneksi dari daftar Akun Provider lewat aksi Uji (kirim pesan atau cek nomor).'),
+                        TextInput::make('name')
+                            ->label('Nama')
+                            ->required()
+                            ->maxLength(120)
+                            ->live(onBlur: true)
+                            ->afterStateUpdated(SyncsSlugFromName::afterStateUpdated()),
+                        TextInput::make('slug')
+                            ->label('ID provider')
+                            ->placeholder('whatsapp-utama')
+                            ->alphaDash()
+                            ->maxLength(80)
+                            ->unique(
+                                ignoreRecord: true,
+                                modifyRuleUsing: fn (Unique $rule): Unique => $rule->withoutTrashed(),
+                            )
+                            ->validationMessages([
+                                'unique' => 'ID provider ini sudah dipakai.',
+                                'alpha_dash' => 'Gunakan huruf kecil, angka, dan tanda hubung.',
+                            ]),
+                        Select::make('driver')
+                            ->label('Provider')
+                            ->options([
+                                'wag_hub' => 'WAG Hub (bawaan)',
+                                'waha' => 'WAHA',
+                                'fonnte' => 'Fonnte',
+                                'gowa' => 'GOWA',
+                                'waba' => 'WABA (Meta Cloud API)',
+                            ])
+                            ->default('wag_hub')
+                            ->required()
+                            ->native(false)
+                            ->live(),
+                        TextInput::make('timeout_seconds')
+                            ->label('Timeout (detik)')
+                            ->numeric()
+                            ->required()
+                            ->minValue(1)
+                            ->maxValue(60)
+                            ->default(15),
+                        Toggle::make('is_active')
+                            ->label('Provider aktif')
+                            ->default(true)
+                            ->required(),
                     ])
-                    ->columnSpan([
-                        'default' => 'full',
-                        'lg' => 1,
+                    ->columns(['md' => 2]),
+                Section::make('Koneksi WAHA')
+                    ->schema([
+                        TextInput::make('configuration.base_url')
+                            ->label('Base URL')
+                            ->url()
+                            ->required(fn (Get $get): bool => $get('driver') === 'waha')
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.session')
+                            ->label('Session')
+                            ->required(fn (Get $get): bool => $get('driver') === 'waha')
+                            ->maxLength(120)
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.api_key')
+                            ->label('API key')
+                            ->password()
+                            ->revealable()
+                            ->helperText('Kosongkan jika tidak diubah.')
+                            ->required(fn (string $operation): bool => $operation === 'create')
+                            ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                            ->dehydrated(fn (?string $state): bool => filled($state))
+                            ->dehydratedWhenHidden(false),
+                    ])
+                    ->visible(fn (Get $get): bool => $get('driver') === 'waha')
+                    ->columns(['md' => 2]),
+                Section::make('Koneksi Fonnte')
+                    ->schema([
+                        TextInput::make('configuration.endpoint')
+                            ->label('Endpoint')
+                            ->url()
+                            ->required(fn (Get $get): bool => $get('driver') === 'fonnte')
+                            ->default('https://api.fonnte.com/send')
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.validate_endpoint')
+                            ->label('Endpoint validasi nomor')
+                            ->url()
+                            ->required(fn (Get $get): bool => $get('driver') === 'fonnte')
+                            ->default('https://api.fonnte.com/validate')
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.token')
+                            ->label('Token')
+                            ->password()
+                            ->revealable()
+                            ->helperText('Kosongkan jika tidak diubah.')
+                            ->required(fn (string $operation): bool => $operation === 'create')
+                            ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                            ->dehydrated(fn (?string $state): bool => filled($state))
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.attachment_max_bytes')
+                            ->label('Batas attachment (byte)')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(16777216)
+                            ->default(4 * 1024 * 1024)
+                            ->dehydratedWhenHidden(false),
+                    ])
+                    ->visible(fn (Get $get): bool => $get('driver') === 'fonnte')
+                    ->columns(['md' => 2]),
+                Section::make('Koneksi GOWA')
+                    ->schema([
+                        TextInput::make('configuration.base_url')
+                            ->label('Base URL')
+                            ->url()
+                            ->required(fn (Get $get): bool => $get('driver') === 'gowa')
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.username')
+                            ->label('Username Basic Auth')
+                            ->required(fn (Get $get): bool => $get('driver') === 'gowa')
+                            ->maxLength(120)
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.password')
+                            ->label('Password Basic Auth')
+                            ->password()
+                            ->revealable()
+                            ->helperText('Kosongkan jika tidak diubah.')
+                            ->required(fn (string $operation): bool => $operation === 'create')
+                            ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                            ->dehydrated(fn (?string $state): bool => filled($state))
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.device_id')
+                            ->label('Device ID')
+                            ->maxLength(255)
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.version')
+                            ->label('Versi GOWA')
+                            ->placeholder('8.10.0')
+                            ->helperText('Minimal 8.10.0 untuk dokumen URL.')
+                            ->maxLength(32)
+                            ->dehydratedWhenHidden(false),
+                    ])
+                    ->visible(fn (Get $get): bool => $get('driver') === 'gowa')
+                    ->columns(['md' => 2]),
+                Section::make('Koneksi WABA')
+                    ->schema([
+                        TextInput::make('configuration.base_url')
+                            ->label('Graph API Base URL')
+                            ->url()
+                            ->default('https://graph.facebook.com')
+                            ->required(fn (Get $get): bool => $get('driver') === 'waba')
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.api_version')
+                            ->label('Graph API Version')
+                            ->default('v25.0')
+                            ->regex('/^v\d+\.\d+$/')
+                            ->required(fn (Get $get): bool => $get('driver') === 'waba')
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.phone_number_id')
+                            ->label('Phone Number ID')
+                            ->regex('/^\d+$/')
+                            ->required(fn (Get $get): bool => $get('driver') === 'waba')
+                            ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.access_token')
+                            ->label('System User Access Token')
+                            ->password()
+                            ->revealable()
+                            ->helperText('Kosongkan jika tidak diubah.')
+                            ->required(fn (string $operation): bool => $operation === 'create')
+                            ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                            ->dehydrated(fn (?string $state): bool => filled($state))
+                            ->dehydratedWhenHidden(false),
+                    ])
+                    ->visible(fn (Get $get): bool => $get('driver') === 'waba')
+                    ->columns(['md' => 2]),
+                Section::make('Webhook pesan masuk')
+                    ->schema([
+                        Placeholder::make('inbox_webhook_url')
+                            ->label('URL webhook')
+                            ->content(function (?ProviderAccount $record): string {
+                                if ($record === null || blank($record->uuid)) {
+                                    return 'Tersedia setelah akun disimpan.';
+                                }
+
+                                return url('/webhooks/whatsapp/'.$record->uuid);
+                            }),
+                        TextInput::make('configuration.webhook_secret')
+                            ->label('Token webhook (opsional)')
+                            ->password()
+                            ->revealable()
+                            ->helperText('Kosongkan jika tidak diubah.')
+                            ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                            ->dehydrated(fn (?string $state): bool => filled($state)),
                     ]),
             ]);
     }
 
     public static function table(Table $table): Table
     {
-        $isCards = ConfigurationListLayout::isCards($table);
-
         return $table
-            ->columns($isCards ? static::cardColumns() : static::tableColumns())
-            ->contentGrid(ConfigurationListLayout::contentGrid($table))
+            ->columns(static::tableColumns())
             ->paginated([10, 25, 50])
-            ->searchPlaceholder('Cari nama atau ID provider')
             ->filters([
                 SelectFilter::make('driver')
                     ->label('Provider')
@@ -349,9 +297,6 @@ class ProviderAccountResource extends Resource
                     static::deleteBulkAction(),
                 ]),
             ])
-            ->emptyStateHeading('Belum ada akun provider')
-            ->emptyStateDescription('Tambah koneksi WAHA, Fonnte, GOWA, atau WABA, lalu uji sebelum dipakai di aturan rute.')
-            ->emptyStateIcon(Heroicon::OutlinedServerStack)
             ->emptyStateActions([
                 Action::make('create')
                     ->label('Tambah akun provider')
@@ -370,8 +315,11 @@ class ProviderAccountResource extends Resource
             TextColumn::make('name')
                 ->label('Nama')
                 ->searchable()
-                ->sortable()
-                ->description(fn (ProviderAccount $record): string => $record->slug),
+                ->sortable(),
+            TextColumn::make('slug')
+                ->label('ID provider')
+                ->searchable()
+                ->copyable(),
             TextColumn::make('driver')
                 ->label('Provider')
                 ->badge()
@@ -413,76 +361,6 @@ class ProviderAccountResource extends Resource
         ];
     }
 
-    /**
-     * @return array<int, Component>
-     */
-    public static function cardColumns(): array
-    {
-        return [
-            Stack::make([
-                Split::make([
-                    TextColumn::make('name')
-                        ->weight(FontWeight::SemiBold)
-                        ->size(TextSize::Large)
-                        ->searchable()
-                        ->sortable()
-                        ->grow(),
-                    TextColumn::make('is_active')
-                        ->badge()
-                        ->formatStateUsing(fn (mixed $state): string => $state ? 'Aktif' : 'Nonaktif')
-                        ->color(fn (mixed $state): string => $state ? 'success' : 'gray'),
-                ]),
-                Split::make([
-                    TextColumn::make('driver')
-                        ->badge()
-                        ->formatStateUsing(fn (string $state): string => strtoupper($state)),
-                    TextColumn::make('health_status')
-                        ->badge()
-                        ->formatStateUsing(fn (string $state): string => match ($state) {
-                            'unknown' => 'Belum diuji',
-                            'healthy' => 'Sehat',
-                            'degraded' => 'Menurun',
-                            'unavailable' => 'Tidak tersedia',
-                            default => $state,
-                        })
-                        ->color(fn (string $state): string => match ($state) {
-                            'healthy' => 'success',
-                            'degraded' => 'warning',
-                            'unavailable' => 'danger',
-                            default => 'gray',
-                        }),
-                ]),
-                TextColumn::make('slug')
-                    ->copyable()
-                    ->color('gray')
-                    ->searchable(),
-                TextColumn::make('consecutive_failures')
-                    ->numeric()
-                    ->sortable()
-                    ->formatStateUsing(function (mixed $state, ProviderAccount $record): string {
-                        if ($record->circuit_open_until?->isFuture()) {
-                            return 'Istirahat sampai '.$record->circuit_open_until
-                                ->timezone(config('app.timezone'))
-                                ->format('H.i');
-                        }
-
-                        $failures = (int) $state;
-
-                        return $failures > 0
-                            ? $failures.' gagal beruntun'
-                            : 'Siap dikirim';
-                    })
-                    ->color(function (mixed $state, ProviderAccount $record): string {
-                        if ($record->circuit_open_until?->isFuture()) {
-                            return 'warning';
-                        }
-
-                        return ((int) $state) > 0 ? 'danger' : 'gray';
-                    }),
-            ])->space(3),
-        ];
-    }
-
     public static function inboxAction(): Action
     {
         return Action::make('inbox')
@@ -501,7 +379,6 @@ class ProviderAccountResource extends Resource
             ->slideOver()
             ->modalWidth(Width::Large)
             ->modalHeading(fn (ProviderAccount $record): string => "Uji provider {$record->name}")
-            ->modalDescription('Panggil driver akun ini langsung, termasuk lampiran. Hasil disimpan sebagai jejak uji admin dan memperbarui kesehatan provider.')
             ->modalSubmitActionLabel('Jalankan uji')
             ->schema(fn (ProviderAccount $record): array => [
                 Select::make('type')
@@ -523,7 +400,6 @@ class ProviderAccountResource extends Resource
                     ->tel()
                     ->required()
                     ->maxLength(32)
-                    ->helperText('Contoh: 081234567890 atau 6281234567890')
                     ->rule(function (): \Closure {
                         return function (string $attribute, mixed $value, \Closure $fail): void {
                             try {
@@ -541,7 +417,6 @@ class ProviderAccountResource extends Resource
                     ->maxLength(fn (Get $get): int => static::testHasAttachment($get)
                         ? StoreMessageRequest::CAPTION_MAX_LENGTH
                         : 10000)
-                    ->helperText('Untuk lampiran, kolom ini menjadi caption (maks. 1.024 karakter). Audio tidak memakai caption.')
                     ->visible(fn (Get $get): bool => $get('type') === 'send' && $get('attachment_kind') !== 'audio')
                     ->required(fn (Get $get): bool => $get('type') === 'send' && ! static::testHasAttachment($get))
                     ->columnSpanFull(),
@@ -551,7 +426,6 @@ class ProviderAccountResource extends Resource
                     ->maxFiles(1)
                     ->maxSize(16384)
                     ->acceptedFileTypes(AttachmentService::acceptedMimeTypes())
-                    ->helperText('Satu file, maksimal 16 MB. Kosongkan jika memakai URL publik.')
                     ->visible(fn (Get $get): bool => $get('type') === 'send')
                     ->live()
                     ->afterStateUpdated(function (mixed $state, Set $set): void {
@@ -573,7 +447,6 @@ class ProviderAccountResource extends Resource
                     ->label('URL lampiran publik')
                     ->url()
                     ->maxLength(2048)
-                    ->helperText('Alternatif unggah: URL HTTP(S) yang dapat diunduh provider.')
                     ->visible(fn (Get $get): bool => $get('type') === 'send')
                     ->live(onBlur: true)
                     ->afterStateUpdated(function (?string $state, Set $set): void {
@@ -719,17 +592,10 @@ class ProviderAccountResource extends Resource
             ->using(fn (ProviderAccount $record): bool => static::deleteProvider($record))
             ->label('Hapus')
             ->modalHeading('Hapus akun provider?')
-            ->modalDescription(function (ProviderAccount $record): string {
+            ->modalDescription(function (ProviderAccount $record): ?string {
                 $stepCount = $record->routingSteps()->count();
-                $parts = ['Akun akan dinonaktifkan dan tidak dipakai pengiriman. Riwayat pesan tetap tersimpan.'];
 
-                if ($stepCount > 0) {
-                    $parts[] = "Akun ini dipakai di {$stepCount} langkah rute; langkah tersebut akan dilewati.";
-                }
-
-                $parts[] = 'ID provider dapat dipakai ulang.';
-
-                return implode(' ', $parts);
+                return $stepCount > 0 ? "Dipakai di {$stepCount} langkah rute." : null;
             })
             ->modalSubmitActionLabel('Hapus akun')
             ->successNotificationTitle('Akun provider dihapus');
@@ -747,7 +613,6 @@ class ProviderAccountResource extends Resource
             })
             ->label('Hapus yang dipilih')
             ->modalHeading('Hapus akun provider yang dipilih?')
-            ->modalDescription('Akun yang dipilih akan dinonaktifkan dan dilewati saat pengiriman. Riwayat pesan tetap tersimpan.')
             ->modalSubmitActionLabel('Hapus')
             ->successNotificationTitle('Akun provider dihapus');
     }

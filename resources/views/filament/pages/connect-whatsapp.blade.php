@@ -5,8 +5,7 @@
 
 <div class="space-y-6">
     <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-gray-900">
-        <p class="text-sm text-gray-500">Alur sukses pertama</p>
-        <h2 class="mt-1 text-xl font-semibold">Buat aplikasi → Hubungkan WhatsApp → Uji → Salin konfigurasi</h2>
+        <h2 class="text-xl font-semibold">Buat aplikasi → Hubungkan WhatsApp → Uji → Salin konfigurasi</h2>
         <ol class="mt-4 flex flex-wrap gap-3 text-sm">
             @foreach (['Aplikasi', 'Jenis koneksi', 'Siapkan', 'Pesan uji', 'Integrasi'] as $index => $label)
                 <li @class([
@@ -21,7 +20,6 @@
     @if ($this->step === 1)
         <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Pilih aplikasi</h3>
-            <p class="mt-1 text-sm text-gray-500">Aplikasi hanya perlu memahami koneksi WhatsApp, bukan engine atau rute.</p>
             <div class="mt-4 grid gap-3 md:grid-cols-2">
                 <label class="text-sm font-medium">Aplikasi
                     <select wire:model="applicationId" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950">
@@ -53,7 +51,6 @@
                     'border-gray-200 dark:border-white/10' => $this->type !== 'managed_number',
                 ])>
                     <strong>Pakai nomor WhatsApp saya</strong>
-                    <p class="mt-1 text-sm text-gray-500">Scan QR atau masukkan pairing code. Memakai satu slot sesi WhatsApp aplikasi.</p>
                 </button>
                 <button type="button" wire:click="$set('type', 'provider_route')" @class([
                     'rounded-xl border p-4 text-start',
@@ -61,7 +58,6 @@
                     'border-gray-200 dark:border-white/10' => $this->type !== 'provider_route',
                 ])>
                     <strong>Pakai provider</strong>
-                    <p class="mt-1 text-sm text-gray-500">WAHA, GOWA, Fonnte, atau WABA. Fallback bisa ditambah nanti.</p>
                 </button>
             </div>
 
@@ -177,7 +173,6 @@
     @if ($this->step === 5)
         <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Salin konfigurasi integrasi</h3>
-            <p class="mt-1 text-sm text-gray-500">Aplikasi klien hanya butuh URL, token, dan satu pemanggilan kirim.</p>
             <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">{{ $this->issuedEnv }}</pre>
             <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">wag.connections.send('{{ $this->connectionUuid ?? 'CONNECTION_ID' }}', '6281234567890', 'Halo', 'order-1')
 # POST /api/v2/connections/{id}/messages</pre>

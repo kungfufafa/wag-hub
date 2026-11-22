@@ -76,7 +76,6 @@ class AutoReplyRulesTable
                     DeleteBulkAction::make(),
                 ]),
             ])
-            ->emptyStateHeading('Belum ada balasan otomatis')
-            ->emptyStateDescription('Tambah aturan untuk membalas pesan masuk secara otomatis: sapaan, kata kunci, atau cadangan.');
+            ->emptyStateHeading('Belum ada balasan otomatis');
     }
 }

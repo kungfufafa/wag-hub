@@ -12,11 +12,6 @@ class EditRoutingPolicy extends EditRecord
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
-    public function getSubheading(): ?string
-    {
-        return 'Ubah cakupan rute, urutan cadangan, atau hapus aturan yang tidak dipakai.';
-    }
-
     protected function getHeaderActions(): array
     {
         return [

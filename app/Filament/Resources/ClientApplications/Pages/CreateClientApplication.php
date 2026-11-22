@@ -19,7 +19,7 @@ class CreateClientApplication extends CreateRecord
         return Notification::make()
             ->success()
             ->title('Aplikasi klien dibuat')
-            ->body('Lanjutkan dengan Hubungkan WhatsApp, kirim uji, lalu salin konfigurasi.');
+            ->body('Lanjutkan dengan menghubungkan WhatsApp.');
     }
 
     protected function getRedirectUrl(): string

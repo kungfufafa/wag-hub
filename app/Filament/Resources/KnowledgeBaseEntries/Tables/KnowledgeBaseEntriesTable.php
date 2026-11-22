@@ -49,7 +49,6 @@ class KnowledgeBaseEntriesTable
                     DeleteBulkAction::make(),
                 ]),
             ])
-            ->emptyStateHeading('Belum ada knowledge base')
-            ->emptyStateDescription('Tambahkan info bisnis (jam buka, ongkir, cara pesan) agar agen AI bisa menjawab pertanyaan bebas pelanggan.');
+            ->emptyStateHeading('Belum ada knowledge base');
     }
 }

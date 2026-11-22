@@ -25,7 +25,6 @@ class CreateProviderAccount extends CreateRecord
     {
         return Notification::make()
             ->success()
-            ->title('Akun provider dibuat')
-            ->body('Uji koneksi dari tombol Uji, lalu masukkan akun ini ke aturan rute.');
+            ->title('Akun provider dibuat');
     }
 }

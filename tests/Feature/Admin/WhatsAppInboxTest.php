@@ -44,7 +44,6 @@ class WhatsAppInboxTest extends TestCase
             ->assertSee('Belum ada akun wrapping')
             ->assertSee('Obrolan baru')
             ->assertSee('Muat ulang')
-            ->assertSee('Baca dan balas percakapan dari akun wrapping.')
             ->assertDontSee('>Kanal<', false)
             ->assertDontSee('Pilih percakapan di kiri', false)
             ->assertDontSee('Mulai obrolan baru, atau tunggu', false)

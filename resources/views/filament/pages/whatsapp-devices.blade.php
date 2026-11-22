@@ -14,9 +14,6 @@
         <div class="wa-devices-empty">
             <x-filament::icon icon="heroicon-o-device-phone-mobile" class="wa-devices-empty-icon" />
             <h3 class="wa-devices-empty-title">Belum ada nomor WhatsApp</h3>
-            <p class="wa-devices-empty-text">
-                Buka <strong>Akun Provider</strong>, pilih <strong>WAG Hub (bawaan)</strong>, lalu hubungkan nomor.
-            </p>
             <x-filament::button tag="a" icon="heroicon-o-plus"
                 :href="\App\Filament\Resources\ProviderAccounts\ProviderAccountResource::getUrl('create')">
                 Tambah nomor WhatsApp
@@ -27,7 +24,6 @@
             <aside class="wa-devices-col wa-devices-list">
                 <div class="wa-devices-head">
                     <h2 class="wa-devices-heading">Perangkat</h2>
-                    <p class="wa-devices-sub">Kelola nomor dan perangkat tertaut.</p>
                 </div>
                 <div class="wa-devices-scroll">
                     @if ($hosts->isNotEmpty())
@@ -113,7 +109,6 @@
                                         <li>Ketuk <strong>Tautkan perangkat</strong>.</li>
                                         <li>Arahkan kamera ke QR ini.</li>
                                     </ol>
-                                    <p class="wa-devices-hint">QR menyegar otomatis.</p>
                                 </div>
                             </div>
                         @else
@@ -205,7 +200,6 @@
     }
 
     .dark .wa-devices-heading { color: white; }
-    .wa-devices-sub { font-size: 0.8rem; color: var(--wa-muted); }
 
     .wa-devices-scroll { flex: 1; min-height: 0; overflow: auto; }
     .wa-devices-group {
@@ -314,7 +308,6 @@
     .wa-devices-qr-spinner { width: 1.5rem; height: 1.5rem; }
     .wa-devices-qr-steps { min-width: 14rem; max-width: 20rem; }
     .wa-devices-qr-steps ol { margin-top: 0.5rem; margin-left: 1.1rem; list-style: decimal; line-height: 1.8; }
-    .wa-devices-hint { margin-top: 0.75rem; font-size: 0.78rem; color: var(--wa-muted); }
 
     .wa-devices-meta { margin-top: 0.35rem; font-size: 0.78rem; color: var(--wa-muted); }
     .wa-devices code {
@@ -327,5 +320,4 @@
     .wa-devices-empty-icon { width: 3rem; height: 3rem; color: var(--primary-600); }
     .wa-devices-empty-title { font-size: 1.05rem; font-weight: 700; color: var(--gray-950); }
     .dark .wa-devices-empty-title { color: white; }
-    .wa-devices-empty-text { color: var(--wa-muted); line-height: 1.7; margin-bottom: 0.5rem; }
 </style>

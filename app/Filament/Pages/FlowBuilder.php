@@ -144,9 +144,4 @@ class FlowBuilder extends Page
 
         $this->newGraph();
     }
-
-    public function getSubheading(): ?string
-    {
-        return 'Bangun logika bot secara visual (ala n8n): tarik hubungkan node Pemicu → Kondisi → Pesan → Menu → AI → Agen.';
-    }
 }

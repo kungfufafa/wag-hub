@@ -79,7 +79,6 @@
                 <template x-if="selected === null">
                     <div class="fb-insp-empty">
                         <div class="fb-insp-empty-ic">⚙️</div>
-                        <p>Klik sebuah node untuk mengedit propertinya di sini.</p>
                     </div>
                 </template>
 
@@ -108,7 +107,6 @@
                         <label class="fb-insp-field"><span>Kata kunci — jika cocok, ambil jalur 1</span>
                             <input type="text" x-model="insp.keywords" @input="apply()" class="fb-input" placeholder="beli, pesan, order">
                         </label>
-                        <p class="fb-insp-note">Jalur <b>1 · cocok</b> dan <b>2 · tidak</b> ada di sisi kanan node.</p>
                     </div>
 
                     <div x-show="inspType === 'menu'" class="fb-insp-body">
@@ -139,7 +137,7 @@
                     </div>
 
                     <div x-show="inspType === 'ai'" class="fb-insp-body">
-                        <p class="fb-insp-note">Node ini menjawab pertanyaan bebas pelanggan dari <b>Knowledge Base</b> akun ini. Kelola isinya di menu <b>Knowledge Base (AI)</b>.</p>
+                        <p class="fb-insp-note">Menjawab dari <b>Knowledge Base</b>.</p>
                     </div>
 
                     <div x-show="inspType === 'handoff'" class="fb-insp-body">
@@ -150,8 +148,6 @@
                 </div>
             </aside>
         </div>
-
-        <p class="fb-hint">Seret dari titik <b>output</b> (kanan) sebuah node ke titik <b>input</b> (kiri) node lain untuk menyambungkan. Klik node untuk mengeditnya, lalu <b>Simpan</b>.</p>
     </div>
 </x-filament::section>
 
@@ -212,8 +208,6 @@
     .fb-opt-add { margin-top: 0.1rem; padding: 0.45rem 0.7rem; border-radius: 0.5rem; border: 1px dashed var(--gray-300); background: transparent; font-size: 0.8rem; font-weight: 600; cursor: pointer; color: var(--primary-600); }
     .dark .fb-opt-add { border-color: var(--gray-600); }
 
-    .fb-hint { padding: 0.6rem 0.85rem; font-size: 0.75rem; color: var(--gray-500); border-top: 1px solid var(--gray-100); }
-    .dark .fb-hint { border-top-color: rgb(255 255 255 / 0.08); }
 
     .fb-loading { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--gray-500); }
     .fb-loading-ic { width: 0.9rem; height: 0.9rem; }

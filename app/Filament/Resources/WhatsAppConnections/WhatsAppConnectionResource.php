@@ -88,7 +88,6 @@ class WhatsAppConnectionResource extends Resource
                 ViewAction::make(),
             ])
             ->emptyStateHeading('Belum ada koneksi WhatsApp')
-            ->emptyStateDescription('Hubungkan nomor WhatsApp atau provider, kirim uji, lalu salin WAG_URL dan WAG_TOKEN.')
             ->emptyStateIcon(Heroicon::OutlinedSignal)
             ->emptyStateActions([
                 Action::make('connect')

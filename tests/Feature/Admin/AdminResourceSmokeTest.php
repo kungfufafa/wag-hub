@@ -123,7 +123,7 @@ class AdminResourceSmokeTest extends TestCase
     }
 
     #[DataProvider('configurationCreatePages')]
-    public function test_configuration_create_pages_show_a_next_step_sidebar(
+    public function test_configuration_create_pages_render_full_width(
         string $path,
         string $heading,
         string $resourceLabel,
@@ -147,8 +147,8 @@ class AdminResourceSmokeTest extends TestCase
     public static function configurationCreatePages(): array
     {
         return [
-            'client application' => ['/panel/client-applications/create', 'Langkah berikutnya', 'Aplikasi Klien'],
-            'provider account' => ['/panel/provider-accounts/create', 'Sebelum menyimpan', 'Akun Provider'],
+            'client application' => ['/panel/client-applications/create', 'Pengaturan', 'Aplikasi Klien'],
+            'provider account' => ['/panel/provider-accounts/create', 'Akun provider', 'Akun Provider'],
             'routing policy' => ['/panel/routing-policies/create', 'Ringkasan', 'Aturan Rute'],
         ];
     }
@@ -172,7 +172,6 @@ class AdminResourceSmokeTest extends TestCase
     {
         return [
             'client application' => ['Filament/Resources/ClientApplications/ClientApplicationResource.php'],
-            'provider account' => ['Filament/Resources/ProviderAccounts/ProviderAccountResource.php'],
             'routing policy' => ['Filament/Resources/RoutingPolicies/RoutingPolicyResource.php'],
         ];
     }

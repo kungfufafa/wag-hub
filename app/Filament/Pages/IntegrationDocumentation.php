@@ -30,7 +30,7 @@ class IntegrationDocumentation extends Page
 
     protected static ?int $navigationSort = 30;
 
-    protected static bool $shouldRegisterNavigation = true;
+    protected static bool $shouldRegisterNavigation = false;
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
@@ -43,21 +43,20 @@ class IntegrationDocumentation extends Page
             ])
             ->components([
                 Section::make('Setup')
-                    ->description('Alur terpendek: aplikasi, koneksi WhatsApp, uji, salin WAG_URL dan WAG_TOKEN.')
                     ->icon(Heroicon::OutlinedQueueList)
                     ->schema([
                         Placeholder::make('step_1')
                             ->label('1. Aplikasi Klien')
-                            ->content('Buat satu aplikasi per repo, lalu buka Hubungkan WhatsApp.'),
+                            ->content('Satu aplikasi per repo.'),
                         Placeholder::make('step_2')
                             ->label('2. Hubungkan WhatsApp')
-                            ->content('Pakai nomor sendiri (QR/pairing, menjadi sesi engine v2) atau provider. Buat WAG_TOKEN dari Hubungkan aplikasi.'),
+                            ->content('QR/pairing atau provider. Buat WAG_TOKEN.'),
                         Placeholder::make('step_3')
                             ->label('3. Kirim pesan uji')
-                            ->content('Dari koneksi yang siap. Aplikasi klien memanggil POST /api/v2/connections/{id}/messages tanpa route_key.'),
+                            ->content('POST /api/v2/connections/{id}/messages'),
                         Placeholder::make('step_4')
                             ->label('4. Integrasi')
-                            ->content('Salin WAG_URL dan WAG_TOKEN. Detail engine, provider, dan fallback ada di bagian lanjutan.'),
+                            ->content('Salin WAG_URL dan WAG_TOKEN.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -65,30 +64,29 @@ class IntegrationDocumentation extends Page
                     ]),
 
                 Section::make('Endpoint cepat')
-                    ->description('Base URL diganti sesuai host Hub Anda.')
                     ->icon(Heroicon::OutlinedGlobeAlt)
                     ->schema([
                         Placeholder::make('endpoint_connections')
                             ->label('Koneksi WhatsApp (v2)')
-                            ->content(new HtmlString('<code class="text-xs">GET/POST /api/v2/connections</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Status, QR, connect, retry: /api/v2/connections/{id}</div>')),
+                            ->content(new HtmlString('<code class="text-xs">GET/POST /api/v2/connections</code>')),
                         Placeholder::make('endpoint_connection_send')
                             ->label('Kirim lewat koneksi')
-                            ->content(new HtmlString('<code class="text-xs">POST /api/v2/connections/{id}/messages</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Idempotency-Key wajib. 202 nomor terkelola, 201 rute provider.</div>')),
+                            ->content(new HtmlString('<code class="text-xs">POST /api/v2/connections/{id}/messages</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Idempotency-Key wajib. 202 nomor terkelola, 201 provider.</div>')),
                         Placeholder::make('endpoint_send')
                             ->label('Kirim pesan (legacy v1)')
                             ->content(new HtmlString('<code class="text-xs">POST /api/v1/messages</code>')),
                         Placeholder::make('endpoint_attachment')
                             ->label('Upload attachment')
-                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/attachments</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">multipart file, maksimum 16 MB</div>')),
+                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/attachments</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Maks. 16 MB</div>')),
                         Placeholder::make('endpoint_status')
                             ->label('Status pesan')
                             ->content(new HtmlString('<code class="text-xs">GET /api/v1/messages/{uuid}</code>')),
                         Placeholder::make('endpoint_check')
                             ->label('Cek nomor')
-                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/number-checks</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Butuh ability numbers:check</div>')),
+                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/number-checks</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Ability numbers:check</div>')),
                         Placeholder::make('endpoint_engine')
                             ->label('/engine')
-                            ->content(new HtmlString('<code class="text-xs">GET/POST /engine/t/{token}/sessions</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Ability engine:use. WhatsAppEngineClient tidak mengirim Authorization.</div>')),
+                            ->content(new HtmlString('<code class="text-xs">GET/POST /engine/t/{token}/sessions</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Ability engine:use</div>')),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -96,7 +94,6 @@ class IntegrationDocumentation extends Page
                     ]),
 
                 Section::make('Header wajib')
-                    ->description('Setiap request pesan memakai header berikut.')
                     ->icon(Heroicon::OutlinedKey)
                     ->schema([
                         Placeholder::make('headers')
@@ -104,7 +101,7 @@ class IntegrationDocumentation extends Page
                             ->content(new HtmlString(<<<'HTML'
                                 <ul class="list-disc space-y-1.5 ps-5 text-sm">
                                     <li><code>Authorization: Bearer &lt;token&gt;</code></li>
-                                    <li><code>Idempotency-Key: &lt;kunci-unik-bisnis&gt;</code> — stabil per event, jangan UUID acak tiap retry</li>
+                                    <li><code>Idempotency-Key: &lt;kunci-unik-bisnis&gt;</code></li>
                                     <li><code>Accept: application/json</code></li>
                                     <li><code>Content-Type: application/json</code></li>
                                 </ul>
@@ -116,18 +113,16 @@ class IntegrationDocumentation extends Page
                     ]),
 
                 Section::make('Checklist')
-                    ->description('Sebelum go-live aplikasi baru.')
                     ->icon(Heroicon::OutlinedClipboardDocumentCheck)
                     ->schema([
                         Placeholder::make('checklist')
                             ->hiddenLabel()
                             ->content(new HtmlString(<<<'HTML'
                                 <ul class="list-disc space-y-1.5 ps-5 text-sm">
-                                    <li>Token hanya di secret store — jangan di-commit</li>
-                                    <li><code>route_key</code> &amp; <code>purpose</code> cocok dengan Aturan Rute</li>
-                                    <li>Pantau ledger Pesan bila pengiriman gagal</li>
-                                    <li>Health provider &amp; alert Telegram/email sudah aktif</li>
-                                    <li>Produksi: <code>GATEWAY_DISPATCH=async</code> + <code>queue:work</code>. <code>sync</code> hanya untuk lokal/dev (intake async menunggu sampai selesai di request HTTP)</li>
+                                    <li>Token di secret store</li>
+                                    <li><code>route_key</code> &amp; <code>purpose</code> sesuai Aturan Rute</li>
+                                    <li>Alert Telegram/email aktif</li>
+                                    <li>Produksi: <code>GATEWAY_DISPATCH=async</code> + <code>queue:work</code></li>
                                 </ul>
                             HTML)),
                     ])
@@ -137,7 +132,6 @@ class IntegrationDocumentation extends Page
                     ]),
 
                 Section::make('Contoh: kirim OTP (sync)')
-                    ->description('Mode sync menunggu provider menerima. Untuk notifikasi, ganti mode menjadi async dan purpose menjadi notification.')
                     ->icon(Heroicon::OutlinedCodeBracket)
                     ->schema([
                         Placeholder::make('curl_send')
@@ -166,7 +160,7 @@ BASH).
                     ->columnSpanFull(),
 
                 Section::make('Contoh: kirim lampiran (async)')
-                    ->description('Upload file ke POST /api/v1/attachments lalu gunakan data.id, atau gunakan attachment.url publik. Satu pesan memiliki satu lampiran; caption maksimal 1.024 karakter dan audio tanpa caption.')
+                    ->description('Satu lampiran per pesan, caption maks. 1.024 karakter.')
                     ->icon(Heroicon::OutlinedPaperClip)
                     ->schema([
                         Placeholder::make('curl_send_attachment')
@@ -202,7 +196,6 @@ BASH).
                     ->columnSpanFull(),
 
                 Section::make('Contoh: cek nomor WhatsApp')
-                    ->description('Pakai Aturan Rute berjenis Cek nomor WhatsApp (terpisah dari rute kirim pesan).')
                     ->icon(Heroicon::OutlinedDevicePhoneMobile)
                     ->schema([
                         Placeholder::make('curl_check')
@@ -225,7 +218,6 @@ BASH).
                     ->columnSpanFull(),
 
                 Section::make('Arti status pesan')
-                    ->description('Status di ledger dan response API.')
                     ->icon(Heroicon::OutlinedInformationCircle)
                     ->schema([
                         Placeholder::make('statuses')
@@ -236,16 +228,16 @@ BASH).
                                         <thead>
                                             <tr class="bg-gray-50 dark:bg-white/5">
                                                 <th class="px-3 py-2 font-medium">Status</th>
-                                                <th class="px-3 py-2 font-medium">Makna untuk operator</th>
+                                                <th class="px-3 py-2 font-medium">Arti</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-100 dark:divide-white/5">
-                                            <tr><td class="px-3 py-2 font-medium">queued</td><td class="px-3 py-2">Tersimpan; menunggu worker bila <code>GATEWAY_DISPATCH=async</code>, atau segera diproses inline bila <code>sync</code></td></tr>
-                                            <tr><td class="px-3 py-2 font-medium">processing</td><td class="px-3 py-2">Sedang diproses routing</td></tr>
-                                            <tr><td class="px-3 py-2 font-medium">provider_accepted</td><td class="px-3 py-2">Provider menerima request — bukan klaim delivered/read</td></tr>
-                                            <tr><td class="px-3 py-2 font-medium">failed</td><td class="px-3 py-2">Gagal definitif; boleh ditinjau untuk retry manual</td></tr>
-                                            <tr><td class="px-3 py-2 font-medium">outcome_unknown</td><td class="px-3 py-2">Hasil tidak pasti; jangan kirim ulang otomatis</td></tr>
-                                            <tr><td class="px-3 py-2 font-medium">expired</td><td class="px-3 py-2">Melewati batas waktu sebelum diterima provider</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">queued</td><td class="px-3 py-2">Menunggu worker</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">processing</td><td class="px-3 py-2">Sedang diproses</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">provider_accepted</td><td class="px-3 py-2">Diterima provider (bukan delivered/read)</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">failed</td><td class="px-3 py-2">Gagal</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">outcome_unknown</td><td class="px-3 py-2">Hasil tidak pasti; jangan kirim ulang</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">expired</td><td class="px-3 py-2">Kedaluwarsa</td></tr>
                                         </tbody>
                                     </table>
                                 </div>

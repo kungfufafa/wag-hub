@@ -42,7 +42,7 @@ class ConfigurationResourceManagementTest extends TestCase
         ]));
     }
 
-    public function test_configuration_lists_show_summary_cards_and_record_cards(): void
+    public function test_configuration_lists_show_summary_stats_and_records(): void
     {
         $application = $this->createClient('card-app');
         $provider = $this->createProvider('card-provider');
@@ -55,13 +55,7 @@ class ConfigurationResourceManagementTest extends TestCase
 
         Livewire::test(ListClientApplications::class)
             ->assertSee($application->name)
-            ->assertSee('Nama')
-            ->assertActionVisible('tableView')
-            ->assertActionVisible('cardView')
-            ->callAction('cardView')
-            ->assertSet('viewMode', 'cards')
-            ->assertSee('token')
-            ->assertSee('rute');
+            ->assertSee('Nama');
 
         Livewire::test(ProviderAccountStats::class)
             ->assertSee('Akun provider')
@@ -70,10 +64,7 @@ class ConfigurationResourceManagementTest extends TestCase
 
         Livewire::test(ListProviderAccounts::class)
             ->assertSee($provider->name)
-            ->assertSee('WAHA')
-            ->callAction('cardView')
-            ->assertSet('viewMode', 'cards')
-            ->assertSee('Siap dikirim');
+            ->assertSee('WAHA');
 
         Livewire::test(RoutingPolicyStats::class)
             ->assertSee('Aturan rute')
@@ -81,10 +72,7 @@ class ConfigurationResourceManagementTest extends TestCase
 
         Livewire::test(ListRoutingPolicies::class)
             ->assertSee($policy->name)
-            ->assertSee('Kirim pesan')
-            ->callAction('cardView')
-            ->assertSet('viewMode', 'cards')
-            ->assertSee($policy->name);
+            ->assertSee('Kirim pesan');
     }
 
     public function test_creating_a_client_application_generates_a_slug_from_the_name(): void
@@ -350,7 +338,6 @@ class ConfigurationResourceManagementTest extends TestCase
     {
         $this->get('/panel/routing-policies/create')
             ->assertOk()
-            ->assertSee('Nama, aplikasi, lalu urutan provider')
             ->assertSee('Ringkasan')
             ->assertSee('Opsi lanjutan')
             ->assertSee('Semua aplikasi')

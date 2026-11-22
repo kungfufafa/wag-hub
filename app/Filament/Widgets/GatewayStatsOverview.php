@@ -26,19 +26,16 @@ class GatewayStatsOverview extends StatsOverviewWidget
 
         return [
             Stat::make('Antrian', GatewayMessage::query()->where('status', 'queued')->count())
-                ->description('Menunggu worker')
                 ->color('warning'),
             Stat::make(
                 'Diterima provider',
                 GatewayMessage::query()->where('status', 'provider_accepted')->count(),
             )
-                ->description('Penerimaan eksplisit dari provider')
                 ->color('success'),
             Stat::make('Gagal', GatewayMessage::query()->where('status', 'failed')->count())
-                ->description('Kegagalan aman yang perlu perhatian')
                 ->color('danger'),
             Stat::make('Rasio cadangan', number_format($fallbackRate, 1).'%')
-                ->description("{$fallbackMessageCount} pesan memakai jalur cadangan")
+                ->description("{$fallbackMessageCount} pesan")
                 ->color($fallbackRate > 10 ? 'warning' : 'info'),
         ];
     }

@@ -423,11 +423,6 @@ class WhatsAppInbox extends Page
             && $this->providerId === ($chat['provider_id'] ?? null);
     }
 
-    public function getSubheading(): ?string
-    {
-        return 'Baca dan balas percakapan dari akun wrapping.';
-    }
-
     public function clearAttachment(): void
     {
         $this->attachmentFile = null;
