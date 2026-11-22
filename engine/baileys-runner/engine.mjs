@@ -25,7 +25,7 @@ async function withTimeout(promise, milliseconds, message) {
     }
 }
 
-export function formatPhone(phone) {
+function formatPhone(phone) {
     let digits = String(phone || '').replace(/[^\d]/g, '');
 
     if (digits.startsWith('0')) {
