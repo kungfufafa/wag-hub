@@ -49,6 +49,9 @@
     @if ($this->step === 2)
         <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Pilih cara menghubungkan</h3>
+            @if ($this->connectionUuid !== null)
+                <p class="mt-1 text-sm text-gray-500">Jenis koneksi dan provider tidak dapat diubah. Pilih Koneksi lain untuk membuat koneksi baru.</p>
+            @endif
             <div class="mt-4 grid gap-4 md:grid-cols-2">
                 <button type="button" wire:click="$set('type', 'managed_number')" @disabled($this->connectionUuid !== null) @class([
                     'rounded-xl border p-4 text-start',

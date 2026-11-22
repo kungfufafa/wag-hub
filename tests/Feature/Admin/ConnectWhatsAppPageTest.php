@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Exceptions\WhatsAppEngineException;
 use App\Filament\Pages\ConnectWhatsApp;
 use App\Filament\Resources\WhatsAppConnections\Pages\ViewWhatsAppConnection;
 use App\Jobs\ProcessEngineOperation;
@@ -14,6 +15,7 @@ use App\Models\User;
 use App\Models\WhatsAppConnection;
 use App\Services\Engine\SessionService;
 use App\Services\IntegrationPack;
+use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
@@ -371,6 +373,95 @@ class ConnectWhatsAppPageTest extends TestCase
             ->assertSet('connectionUuid', $connection->uuid);
         $this->assertSame(1, WhatsAppConnection::query()->count());
         $this->assertNotNull($connection->fresh()->provider_account_id);
+    }
+
+    public function test_invalid_test_recipients_keep_the_specific_indonesian_error(): void
+    {
+        $page = Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('type', 'provider_route')
+            ->set('token', 'secret')
+            ->call('createConnection');
+        WhatsAppConnection::query()->sole()->providerAccount->update(['health_status' => 'healthy']);
+
+        foreach (['', 'abc'] as $recipient) {
+            $page->set('step', 4)
+                ->set('testRecipient', $recipient)
+                ->call('sendTest')
+                ->assertSet('step', 4)
+                ->assertNotified(Notification::make()
+                    ->title('Uji kirim gagal')
+                    ->body('Nomor WhatsApp tidak valid.')
+                    ->danger());
+        }
+        $this->assertSame(0, DB::table('gateway_messages')->count());
+        Http::assertNothingSent();
+    }
+
+    public function test_exception_notifications_translate_known_errors_and_hide_unknown_raw_messages(): void
+    {
+        $page = new ConnectWhatsApp;
+        $message = new \ReflectionMethod($page, 'exceptionMessage');
+        foreach ([
+            ['capacity_exceeded', 'Kuota nomor WhatsApp aplikasi ini sudah penuh. Hapus nomor yang tidak digunakan atau hubungi administrator.'],
+            ['idempotency_conflict', 'Pengaturan berbeda dari percobaan sebelumnya. Mulai percobaan baru melalui Koneksi lain.'],
+            ['provider_configuration_invalid', 'Pengaturan provider belum lengkap atau tidak valid. Pilih Ubah pengaturan untuk memperbaikinya.'],
+        ] as [$code, $expected]) {
+            $this->assertSame($expected, $message->invoke($page, new WhatsAppEngineException('Raw English detail', 422, $code)));
+        }
+        $this->assertSame('Panjang nomor WhatsApp tidak valid.', $message->invoke($page, new \InvalidArgumentException('Panjang nomor WhatsApp tidak valid.')));
+        foreach ([
+            new \RuntimeException('Raw English exception'),
+            new WhatsAppEngineException('Raw unknown error', 500, 'unknown'),
+        ] as $exception) {
+            $this->assertSame('Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.', $message->invoke($page, $exception));
+        }
+    }
+
+    public function test_editing_locks_provider_identity_until_a_new_attempt(): void
+    {
+        $page = Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('type', 'provider_route')
+            ->set('token', 'secret')
+            ->call('createConnection')
+            ->call('editSettings')
+            ->assertSee('Jenis koneksi dan provider tidak dapat diubah.');
+        $connection = WhatsAppConnection::query()->sole();
+        $attemptKey = $page->get('attemptKey');
+        $dom = new \DOMDocument;
+        @$dom->loadHTML($page->html());
+        $lockedControls = 0;
+        foreach ($dom->getElementsByTagName('*') as $element) {
+            if ($element->getAttribute('wire:model.live') === 'driver'
+                || str_contains($element->getAttribute('wire:click'), "'type'")) {
+                $this->assertTrue($element->hasAttribute('disabled'));
+                $lockedControls++;
+            }
+        }
+        $this->assertSame(3, $lockedControls);
+        $page->set('type', 'managed_number')
+            ->call('createConnection')
+            ->assertHasErrors(['type'])
+            ->assertSet('step', 2)
+            ->set('type', 'provider_route')
+            ->set('driver', 'waba')
+            ->set('phoneNumberId', '123')
+            ->set('accessToken', 'secret')
+            ->call('createConnection')
+            ->assertHasErrors(['driver'])
+            ->assertSet('step', 2);
+        $this->assertSame('fonnte', $connection->fresh()->providerAccount->driver);
+        $page->call('startNewAttempt')
+            ->assertSet('connectionUuid', null)
+            ->assertHasNoErrors()
+            ->assertDontSee('Jenis koneksi dan provider tidak dapat diubah.')
+            ->call('createConnection')
+            ->assertHasNoErrors()
+            ->assertSet('step', 3);
+        $this->assertNotSame($attemptKey, $page->get('attemptKey'));
+        $this->assertNotSame($connection->uuid, $page->get('connectionUuid'));
+        $this->assertSame(2, WhatsAppConnection::query()->count());
     }
 
     private function application(): ClientApplication
