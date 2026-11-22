@@ -10,22 +10,20 @@
 
 WAG Hub menyediakan provider WhatsApp sendiri melalui runner Baileys dan juga menjadi router untuk WAHA, GOWA, Fonnte, serta WABA. CESA, DND, dan aplikasi lain memakai API yang sama. UI login QR/pairing, status, dan logout dapat ditampilkan di aplikasi klien; socket, kredensial WhatsApp, dan riwayat pengiriman dikelola di WAG Hub.
 
-Untuk memakai WhatsApp dari **CESA, DND, atau aplikasi lain**, buat Aplikasi
-Klien, buka **Hubungkan WhatsApp**, lalu salin `WAG_URL` dan `WAG_TOKEN`.
-Aplikasi klien hanya memahami App → Koneksi WhatsApp → Pesan. WAG Hub
-menyediakan nomor terkelola (QR/pairing) atau rute provider, tanpa mewajibkan
-`route_key` pada jalur normal.
+Aplikasi klien (CESA, DND, Shelf, dan lainnya) cukup memakai dua variabel:
+
+```dotenv
+WAG_URL=https://gateway.example.com
+WAG_TOKEN=token-khusus-aplikasi
+```
+
+Salin keduanya dari panel: **Aplikasi Klien** → **Hubungkan WhatsApp** → langkah
+terakhir. Pesan dikirim ke `POST $WAG_URL/api/v2/messages` lewat koneksi default
+aplikasi, jadi klien tidak perlu tahu ID koneksi, provider, atau `route_key`.
+
 Lihat [panduan plug and play](docs/PLUG_AND_PLAY_GUIDE.md),
 [jaminan kompatibilitas](docs/COMPATIBILITY.md), dan
 [migrasi CESA](docs/CESA_WEB.md).
-
-Kelola koneksi di `GET/POST /api/v2/connections` dan kirim melalui
-`POST /api/v2/connections/{id}/messages`. Nomor terkelola adalah sesi engine v2
-(terlihat di `/api/v2/sessions`, memakai kapasitas v2); rute provider memakai
-routing dan fallback. Klien lama `/api/v1/messages` dengan `route_key` dan
-`/api/v1/engine` tetap berjalan sebagai API legacy.
-Provider **WAG Hub (bawaan)** dapat menjadi utama maupun fallback, bersama
-provider eksternal. Keduanya memakai ledger yang sama dan satu token aplikasi.
 
 Panduan deploy production dari `git clone`: [docs/DEPLOYMENT_ID.md](docs/DEPLOYMENT_ID.md).
 Untuk server 1Panel: [docs/DEPLOYMENT_1PANEL_ID.md](docs/DEPLOYMENT_1PANEL_ID.md).
@@ -123,9 +121,12 @@ GATEWAY_PROVIDER_CIRCUIT_SECONDS=300
 
 1. Masuk ke `/panel` memakai administrator yang dibuat lewat command.
 2. Buat **Aplikasi Klien**.
-3. Buka **Hubungkan WhatsApp**: pakai nomor sendiri atau provider. Routing default dibuat otomatis.
-4. Kirim pesan uji, lalu **Hubungkan aplikasi** untuk menyalin `WAG_URL` dan `WAG_TOKEN`.
-5. Pengiriman & fallback, akun provider, dan `route_key` tetap ada sebagai pengaturan lanjutan.
+3. Buka **Hubungkan WhatsApp**: pakai nomor sendiri (QR/pairing) atau provider.
+4. Kirim pesan uji.
+5. Salin `WAG_URL` dan `WAG_TOKEN` ke `.env` aplikasi klien.
+
+Akun provider, aturan rute, dan fallback adalah pengaturan lanjutan dan tidak
+perlu diketahui aplikasi klien.
 
 ## Seeder manajemen awal
 
@@ -154,125 +155,65 @@ Jangan menyalin credential lama dari source code. Credential provider yang perna
 
 ## Mengirim pesan
 
-Mode sinkron:
-
 ```bash
-curl -X POST http://localhost:8000/api/v1/messages \
-  -H 'Accept: application/json' \
-  -H 'Authorization: Bearer wgh_CONTOH_TOKEN' \
-  -H 'Idempotency-Key: otp-login-0001' \
+curl -X POST "$WAG_URL/api/v2/messages" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
+  -H 'Idempotency-Key: order-1001' \
   -H 'Content-Type: application/json' \
-  -d '{
-    "recipient": {"type": "phone", "value": "081234567890"},
-    "message": {"type": "text", "text": "Kode OTP Anda: 123456"},
-    "purpose": "otp",
-    "mode": "sync",
-    "route_key": "default",
-    "expires_at": "2030-01-01T12:05:00+07:00",
-    "client_reference": "otp-0001"
-  }'
+  -d '{"to": "081234567890", "text": "Pesanan Anda sudah dikirim."}'
 ```
 
-Untuk notifikasi asinkron, gunakan `"mode": "async"`. Hub mengembalikan HTTP 202 dengan status `queued`, lalu worker memprosesnya.
+- `to` boleh nomor lokal atau berformat (`0812-3456-7890`, `+62 812 …`).
+  Nomor `0…` otomatis diberi kode negara `GATEWAY_DEFAULT_COUNTRY_CODE` (default `62`).
+- `Idempotency-Key` wajib. Request ulang dengan key yang sama tidak pernah terkirim dua kali.
+- Respons selalu `202` dengan `data.id` dan `data.status`.
+- `connection` (opsional) hanya perlu bila aplikasi punya beberapa nomor tanpa
+  default. Koneksi pertama otomatis menjadi default.
 
-### Mengirim lampiran
-
-Satu pesan boleh memiliki satu lampiran. Ada dua cara memasok file: upload ke
-storage privat Hub, atau URL eksternal yang dapat diakses publik. Upload dibatasi
-16 MB, diperiksa isi dan ekstensi, lalu dikembalikan sebagai UUID. File upload
-disimpan sampai 90 hari sejak referensi kiriman terakhir; file yang tidak pernah
-dipakai dibersihkan setelah 24 jam.
-
-Upload terlebih dahulu memakai multipart `file`:
+Kirim file lewat URL publik; `text` menjadi caption:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/attachments \
-  -H 'Accept: application/json' \
-  -H 'Authorization: Bearer wgh_CONTOH_TOKEN' \
-  -F 'file=@/path/INV-0001.pdf'
-```
-
-Gunakan `data.id` dari response upload pada `message.attachment.id`:
-
-```json
-{
-  "message": {
-    "type": "document",
-    "text": "Terlampir invoice Anda.",
-    "attachment": {"id": "UUID_ATTACHMENT"}
-  }
-}
-```
-
-Sebagai alternatif, ganti `message.type` menjadi `image`, `document`, `video`,
-atau `audio`, lalu isi `message.attachment.url` dengan URL HTTP(S) publik.
-`message.text` menjadi caption (opsional, maks 1.024 karakter; `audio` tidak
-mendukung caption). `filename` dan `mime_type` opsional; bila kosong Hub
-menurunkannya dari URL. `attachment.id` dan `attachment.url` wajib tepat salah
-satu.
-
-```bash
-curl -X POST http://localhost:8000/api/v1/messages \
-  -H 'Accept: application/json' \
-  -H 'Authorization: Bearer wgh_CONTOH_TOKEN' \
-  -H 'Idempotency-Key: invoice-0001' \
+curl -X POST "$WAG_URL/api/v2/messages" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
+  -H 'Idempotency-Key: invoice-1001' \
   -H 'Content-Type: application/json' \
-  -d '{
-    "recipient": {"type": "phone", "value": "081234567890"},
-    "message": {
-      "type": "document",
-      "text": "Terlampir invoice Anda.",
-      "attachment": {
-        "url": "https://cdn.example.com/invoices/INV-0001.pdf",
-        "filename": "INV-0001.pdf",
-        "mime_type": "application/pdf"
-      }
-    },
-    "purpose": "transactional",
-    "mode": "async",
-    "route_key": "default",
-    "client_reference": "invoice-0001"
-  }'
+  -d '{"to": "081234567890", "document": "https://cdn.example.com/INV-1001.pdf", "text": "Invoice Anda"}'
 ```
 
-Lampiran berjalan lewat rute dan fallback yang sama dengan pesan teks. Pemetaan per provider:
+Kunci file: `image`, `document`, atau `voice` (khusus nomor terkelola). Batas 16 MB.
 
-| Jenis | WAHA | Fonnte | GOWA | WABA |
-|---|---|---|---|---|
-| `image` | `POST /api/sendImage` | `/send` + `url` | `POST /send/image` (`image_url`) | `type: image` + `link` |
-| `document` | `POST /api/sendFile` | `/send` + `url`, `filename` | `POST /send/file` (`file_url`) | `type: document` + `link`, `filename` |
-| `video` | `POST /api/sendVideo` | `/send` + `url` | `POST /send/video` (`video_url`) | `type: video` + `link` |
-| `audio` | `POST /api/sendVoice` | `/send` + `url` | `POST /send/audio` (`audio_url`) | `type: audio` + `link` |
-
-Batas Hub adalah 16 MB. Batas provider tetap berlaku: kebijakan awal Fonnte
-4 MB (dapat dikonfigurasi per akun), WABA image 5 MB, WABA audio/video 16 MB,
-dan WABA document 100 MB. WAHA audio harus OGG/Opus. URL dokumen GOWA
-membutuhkan GOWA v8.10.0 atau lebih baru. Respons API menyertakan
-`data.message_type` dan referensi attachment.
-
-Status pesan milik aplikasi dapat dibaca melalui:
+Cek status pesan:
 
 ```bash
-curl http://localhost:8000/api/v1/messages/UUID_PESAN \
-  -H 'Accept: application/json' \
-  -H 'Authorization: Bearer wgh_CONTOH_TOKEN'
+curl "$WAG_URL/api/v2/messages/ID_PESAN" \
+  -H "Authorization: Bearer $WAG_TOKEN"
 ```
+
+| Status | Makna |
+|---|---|
+| `queued` | Menunggu dikirim. |
+| `sent` | Terkirim. |
+| `delivered` | Sampai di perangkat penerima. |
+| `read` | Dibaca. |
+| `failed` | Gagal. |
+| `expired` | Batas waktu lewat sebelum terkirim. |
+| `unknown` | Hasil tidak pasti; ulangi dengan `Idempotency-Key` yang sama. |
+
+Contoh klien: [PHP](docs/examples/php/WagClient.php),
+[JavaScript](docs/examples/javascript/wag.js),
+[Python](docs/examples/python/wag.py).
 
 ## Mengecek nomor WhatsApp
 
-Terbitkan credential dengan ability `numbers:check`. Buat **Aturan Rute** dengan
-jenis alur **Cek nomor WhatsApp**. Rute ini terpisah dari rute **Kirim pesan**;
+`WAG_TOKEN` dari panel sudah memiliki ability `numbers:check`. Pengecekan memakai
+**Aturan Rute** berjenis **Cek nomor WhatsApp** (terpisah dari rute kirim pesan);
 provider diperiksa berurutan dan berhenti ketika hasilnya sudah definitif.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/number-checks \
-  -H 'Accept: application/json' \
-  -H 'Authorization: Bearer wgh_CONTOH_TOKEN' \
+curl -X POST "$WAG_URL/api/v1/number-checks" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{
-    "recipient": {"type": "phone", "value": "081234567890"},
-    "route_key": "default"
-  }'
+  -d '{"recipient": {"type": "phone", "value": "081234567890"}}'
 ```
 
 Hasil agregat:
@@ -301,35 +242,47 @@ di **WhatsApp → Pengecekan Nomor** (`/panel/number-checks`) dan mencatat:
 Audit pengecekan disimpan pada ledger tersendiri dan tidak membuat
 `gateway_messages`, `message_attempts`, atau `message_events`.
 
-## Arti status
+## API legacy v1
 
-| Status | Makna |
-|---|---|
-| `queued` | Sudah tersimpan dan menunggu worker. |
-| `processing` | Sedang diproses oleh routing engine. |
-| `provider_accepted` | Provider secara eksplisit menerima/menjadwalkan request; bukan klaim delivered/read. |
-| `failed` | Gagal definitif dan aman ditinjau untuk retry manual jika belum kedaluwarsa. |
-| `outcome_unknown` | Request mungkin sudah diterima provider; tidak boleh dikirim ulang otomatis. |
-| `expired` | Batas waktu lewat sebelum provider dapat menerima. |
+`POST /api/v1/messages` (dengan `route_key`, `purpose`, `mode`), `POST /api/v1/attachments`,
+`GET /api/v1/messages/{uuid}`, dan `/api/v1/engine` tetap berjalan untuk klien lama.
+Kontraknya tidak berubah; lihat [COMPATIBILITY.md](docs/COMPATIBILITY.md).
+Integrasi baru memakai `POST /api/v2/messages`.
 
-Kegagalan definitif dapat berpindah ke provider berikutnya. Timeout, HTTP 5xx, atau respons ambigu menjadi `outcome_unknown` dan tidak memicu fallback untuk pesan tersebut. Kegagalan berulang tetap menurunkan health provider dan membuka circuit agar pesan baru dapat melewati provider yang sedang bermasalah.
+Status ledger v1: `queued`, `processing`, `provider_accepted`, `failed`,
+`outcome_unknown`, dan `expired`. Kegagalan definitif dapat berpindah ke provider
+berikutnya. Timeout, HTTP 5xx, atau respons ambigu menjadi `outcome_unknown` dan
+tidak memicu fallback untuk pesan tersebut.
+
+Pemetaan lampiran per provider:
+
+| Jenis | WAHA | Fonnte | GOWA | WABA |
+|---|---|---|---|---|
+| `image` | `POST /api/sendImage` | `/send` + `url` | `POST /send/image` (`image_url`) | `type: image` + `link` |
+| `document` | `POST /api/sendFile` | `/send` + `url`, `filename` | `POST /send/file` (`file_url`) | `type: document` + `link`, `filename` |
+| `video` | `POST /api/sendVideo` | `/send` + `url` | `POST /send/video` (`video_url`) | `type: video` + `link` |
+| `audio` | `POST /api/sendVoice` | `/send` + `url` | `POST /send/audio` (`audio_url`) | `type: audio` + `link` |
+
+Batas provider tetap berlaku: Fonnte 4 MB (dapat diatur per akun), WABA image 5 MB,
+WABA audio/video 16 MB, WABA document 100 MB. WAHA audio harus OGG/Opus. URL
+dokumen GOWA membutuhkan GOWA v8.10.0 atau lebih baru.
 
 ## Mengaktifkan pilot web-shelf
 
 Isi environment pada host Shelf, lalu recache konfigurasi:
 
 ```dotenv
-WHATSAPP_HUB_BASE_URL=https://gateway.example.com
-WHATSAPP_HUB_TOKEN=token-khusus-web-shelf
-WHATSAPP_HUB_PURPOSE=notification
-WHATSAPP_HUB_ROUTE_KEY=shelf-notifications
+WAG_URL=https://gateway.example.com
+WAG_TOKEN=token-khusus-web-shelf
 ```
 
 ```bash
 php artisan config:cache
 ```
 
-Token Shelf cukup diberi ability `messages:send` (`messages:read` hanya bila Shelf perlu membaca status). Shelf tidak membutuhkan credential provider. Reminder terjadwal menurunkan idempotency key dari identitas business event, sehingga timeout dan retry menggunakan pesan Hub yang sama.
+Shelf tidak membutuhkan credential provider. Reminder terjadwal menurunkan
+`Idempotency-Key` dari identitas business event, sehingga timeout dan retry
+memakai pesan Hub yang sama.
 
 ## Checklist pilot
 
@@ -338,7 +291,7 @@ Token Shelf cukup diberi ability `messages:send` (`messages:read` hanya bila She
 - Worker telah direstart setelah perubahan konfigurasi.
 - Credential lama yang pernah tertanam di aplikasi/Apps Script sudah dirotasi.
 - Satu smoke test nyata untuk setiap provider aktif diverifikasi dari ledger sebelum trafik aplikasi dialihkan.
-- Adapter Shelf sudah masuk branch deployment (`staging`/`main`) dan environment Shelf telah direcache.
+- Adapter Shelf memakai `WAG_URL`/`WAG_TOKEN` dan `POST /api/v2/messages`, sudah masuk branch deployment (`staging`/`main`), dan environment Shelf telah direcache.
 
 Cleanup attachment otomatis berjalan melalui scheduler: upload yang tidak pernah dipakai dihapus setelah 24 jam dan file terpakai setelah 90 hari sejak referensi terakhir. Webhook inbound/delivered/read belum termasuk MVP; jaga endpoint inbound aplikasi lama tetap di jaringan tepercaya sampai fase autentikasi inbound dikerjakan.
 

@@ -65,7 +65,7 @@ class AdminResourceSmokeTest extends TestCase
             ->assertSee('Setup')
             ->assertSee('Buat WAG_TOKEN')
             ->assertSee('Endpoint cepat')
-            ->assertSee('POST /api/v1/messages')
+            ->assertSee('POST /api/v2/messages')
             ->assertSee('Checklist')
             ->assertSee('GATEWAY_DISPATCH=async');
     }

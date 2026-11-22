@@ -17,7 +17,7 @@ class IntegrationPackTest extends TestCase
         foreach (['web-cesa', 'cesa-web', 'dnd-web'] as $slug) {
             $env = app(IntegrationPack::class)->envSnippet(new ClientApplication(['slug' => $slug]), 'https://hub.test/', 'wgh_token');
 
-            $this->assertSame("# {$slug}\nWAG_URL=https://hub.test\nWAG_TOKEN=wgh_token\n# Koneksi: GET \$WAG_URL/api/v2/connections; kirim: POST \$WAG_URL/api/v2/connections/{id}/messages", $env);
+            $this->assertSame("WAG_URL=https://hub.test\nWAG_TOKEN=wgh_token", $env);
         }
     }
 

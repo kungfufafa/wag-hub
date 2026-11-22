@@ -216,7 +216,7 @@ class ViewWhatsAppConnection extends ViewRecord
                         Notification::make()
                             ->title($delivery->accepted() ? 'Uji kirim diterima' : 'Uji kirim gagal')
                             ->body($delivery->accepted()
-                                ? 'Pesan diterima melalui POST /api/v2/connections/{id}/messages.'
+                                ? null
                                 : (string) ($delivery->message ?? 'Provider menolak atau gagal menerima pesan.'))
                             ->{$delivery->accepted() ? 'success' : 'danger'}()
                             ->send();

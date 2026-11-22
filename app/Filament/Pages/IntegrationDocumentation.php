@@ -53,10 +53,10 @@ class IntegrationDocumentation extends Page
                             ->content('QR/pairing atau provider. Buat WAG_TOKEN.'),
                         Placeholder::make('step_3')
                             ->label('3. Kirim pesan uji')
-                            ->content('POST /api/v2/connections/{id}/messages'),
+                            ->content('Dari halaman koneksi.'),
                         Placeholder::make('step_4')
                             ->label('4. Integrasi')
-                            ->content('Salin WAG_URL dan WAG_TOKEN.'),
+                            ->content('Isi WAG_URL dan WAG_TOKEN di .env aplikasi.'),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -66,27 +66,18 @@ class IntegrationDocumentation extends Page
                 Section::make('Endpoint cepat')
                     ->icon(Heroicon::OutlinedGlobeAlt)
                     ->schema([
-                        Placeholder::make('endpoint_connections')
-                            ->label('Koneksi WhatsApp (v2)')
-                            ->content(new HtmlString('<code class="text-xs">GET/POST /api/v2/connections</code>')),
-                        Placeholder::make('endpoint_connection_send')
-                            ->label('Kirim lewat koneksi')
-                            ->content(new HtmlString('<code class="text-xs">POST /api/v2/connections/{id}/messages</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Idempotency-Key wajib. 202 nomor terkelola, 201 provider.</div>')),
                         Placeholder::make('endpoint_send')
-                            ->label('Kirim pesan (legacy v1)')
-                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/messages</code>')),
-                        Placeholder::make('endpoint_attachment')
-                            ->label('Upload attachment')
-                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/attachments</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Maks. 16 MB</div>')),
+                            ->label('Kirim pesan')
+                            ->content(new HtmlString('<code class="text-xs">POST /api/v2/messages</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Pakai koneksi default aplikasi.</div>')),
                         Placeholder::make('endpoint_status')
                             ->label('Status pesan')
-                            ->content(new HtmlString('<code class="text-xs">GET /api/v1/messages/{uuid}</code>')),
+                            ->content(new HtmlString('<code class="text-xs">GET /api/v2/messages/{id}</code>')),
                         Placeholder::make('endpoint_check')
                             ->label('Cek nomor')
-                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/number-checks</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Ability numbers:check</div>')),
-                        Placeholder::make('endpoint_engine')
-                            ->label('/engine')
-                            ->content(new HtmlString('<code class="text-xs">GET/POST /engine/t/{token}/sessions</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Ability engine:use</div>')),
+                            ->content(new HtmlString('<code class="text-xs">POST /api/v1/number-checks</code>')),
+                        Placeholder::make('endpoint_connections')
+                            ->label('Daftar koneksi')
+                            ->content(new HtmlString('<code class="text-xs">GET /api/v2/connections</code><div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Hanya jika punya lebih dari satu nomor.</div>')),
                     ])
                     ->columnSpan([
                         'default' => 'full',
@@ -101,7 +92,7 @@ class IntegrationDocumentation extends Page
                             ->content(new HtmlString(<<<'HTML'
                                 <ul class="list-disc space-y-1.5 ps-5 text-sm">
                                     <li><code>Authorization: Bearer &lt;token&gt;</code></li>
-                                    <li><code>Idempotency-Key: &lt;kunci-unik-bisnis&gt;</code></li>
+                                    <li><code>Idempotency-Key: &lt;kunci-unik&gt;</code> (wajib untuk kirim pesan)</li>
                                     <li><code>Accept: application/json</code></li>
                                     <li><code>Content-Type: application/json</code></li>
                                 </ul>
@@ -119,8 +110,7 @@ class IntegrationDocumentation extends Page
                             ->hiddenLabel()
                             ->content(new HtmlString(<<<'HTML'
                                 <ul class="list-disc space-y-1.5 ps-5 text-sm">
-                                    <li>Token di secret store</li>
-                                    <li><code>route_key</code> &amp; <code>purpose</code> sesuai Aturan Rute</li>
+                                    <li><code>WAG_URL</code> &amp; <code>WAG_TOKEN</code> di secret store</li>
                                     <li>Alert Telegram/email aktif</li>
                                     <li>Produksi: <code>GATEWAY_DISPATCH=async</code> + <code>queue:work</code></li>
                                 </ul>
@@ -131,7 +121,7 @@ class IntegrationDocumentation extends Page
                         'lg' => 1,
                     ]),
 
-                Section::make('Contoh: kirim OTP (sync)')
+                Section::make('Contoh: kirim pesan')
                     ->icon(Heroicon::OutlinedCodeBracket)
                     ->schema([
                         Placeholder::make('curl_send')
@@ -139,28 +129,18 @@ class IntegrationDocumentation extends Page
                             ->content(new HtmlString(
                                 '<pre class="overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs leading-5 text-gray-100 dark:bg-black/40">'.
                                 e(<<<'BASH'
-curl -X POST https://gateway.example.com/api/v1/messages \
-  -H 'Accept: application/json' \
-  -H 'Authorization: Bearer wgh_TOKEN_ANDA' \
-  -H 'Idempotency-Key: otp-login-0001' \
+curl -X POST "$WAG_URL/api/v2/messages" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
+  -H 'Idempotency-Key: order-1001' \
   -H 'Content-Type: application/json' \
-  -d '{
-    "recipient": {"type": "phone", "value": "081234567890"},
-    "message": {"type": "text", "text": "Kode OTP Anda: 123456"},
-    "purpose": "otp",
-    "mode": "sync",
-    "route_key": "default",
-    "expires_at": "2030-01-01T12:05:00+07:00",
-    "client_reference": "otp-0001"
-  }'
+  -d '{"to": "081234567890", "text": "Pesanan Anda sudah dikirim."}'
 BASH).
                                 '</pre>'
                             )),
                     ])
                     ->columnSpanFull(),
 
-                Section::make('Contoh: kirim lampiran (async)')
-                    ->description('Satu lampiran per pesan, caption maks. 1.024 karakter.')
+                Section::make('Contoh: kirim file')
                     ->icon(Heroicon::OutlinedPaperClip)
                     ->schema([
                         Placeholder::make('curl_send_attachment')
@@ -168,27 +148,11 @@ BASH).
                             ->content(new HtmlString(
                                 '<pre class="overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs leading-5 text-gray-100 dark:bg-black/40">'.
                                 e(<<<'BASH'
-curl -X POST https://gateway.example.com/api/v1/messages \
-  -H 'Accept: application/json' \
-  -H 'Authorization: Bearer wgh_TOKEN_ANDA' \
-  -H 'Idempotency-Key: invoice-0001' \
+curl -X POST "$WAG_URL/api/v2/messages" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
+  -H 'Idempotency-Key: invoice-1001' \
   -H 'Content-Type: application/json' \
-  -d '{
-    "recipient": {"type": "phone", "value": "081234567890"},
-    "message": {
-      "type": "document",
-      "text": "Terlampir invoice Anda.",
-      "attachment": {
-        "url": "https://cdn.example.com/invoices/INV-0001.pdf",
-        "filename": "INV-0001.pdf",
-        "mime_type": "application/pdf"
-      }
-    },
-    "purpose": "transactional",
-    "mode": "async",
-    "route_key": "default",
-    "client_reference": "invoice-0001"
-  }'
+  -d '{"to": "081234567890", "document": "https://cdn.example.com/INV-1001.pdf", "text": "Invoice Anda"}'
 BASH).
                                 '</pre>'
                             )),
@@ -203,14 +167,10 @@ BASH).
                             ->content(new HtmlString(
                                 '<pre class="overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs leading-5 text-gray-100 dark:bg-black/40">'.
                                 e(<<<'BASH'
-curl -X POST https://gateway.example.com/api/v1/number-checks \
-  -H 'Accept: application/json' \
-  -H 'Authorization: Bearer wgh_TOKEN_ANDA' \
+curl -X POST "$WAG_URL/api/v1/number-checks" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{
-    "recipient": {"type": "phone", "value": "081234567890"},
-    "route_key": "default"
-  }'
+  -d '{"recipient": {"type": "phone", "value": "081234567890"}}'
 BASH).
                                 '</pre>'
                             )),
@@ -232,12 +192,13 @@ BASH).
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-100 dark:divide-white/5">
-                                            <tr><td class="px-3 py-2 font-medium">queued</td><td class="px-3 py-2">Menunggu worker</td></tr>
-                                            <tr><td class="px-3 py-2 font-medium">processing</td><td class="px-3 py-2">Sedang diproses</td></tr>
-                                            <tr><td class="px-3 py-2 font-medium">provider_accepted</td><td class="px-3 py-2">Diterima provider (bukan delivered/read)</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">queued</td><td class="px-3 py-2">Menunggu dikirim</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">sent</td><td class="px-3 py-2">Terkirim</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">delivered</td><td class="px-3 py-2">Sampai di perangkat</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">read</td><td class="px-3 py-2">Dibaca</td></tr>
                                             <tr><td class="px-3 py-2 font-medium">failed</td><td class="px-3 py-2">Gagal</td></tr>
-                                            <tr><td class="px-3 py-2 font-medium">outcome_unknown</td><td class="px-3 py-2">Hasil tidak pasti; jangan kirim ulang</td></tr>
                                             <tr><td class="px-3 py-2 font-medium">expired</td><td class="px-3 py-2">Kedaluwarsa</td></tr>
+                                            <tr><td class="px-3 py-2 font-medium">unknown</td><td class="px-3 py-2">Hasil tidak pasti; kirim ulang dengan Idempotency-Key yang sama</td></tr>
                                         </tbody>
                                     </table>
                                 </div>

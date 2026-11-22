@@ -159,15 +159,12 @@ Tambahkan satu cron job untuk memulihkan pesan stale dan menjalankan jadwal Lara
 Setiap aplikasi sumber memakai tokennya sendiri:
 
 ```dotenv
-WHATSAPP_HUB_BASE_URL=https://gateway.example.com
-WHATSAPP_HUB_TOKEN=wgh_TOKEN_KHUSUS_APLIKASI
-WHATSAPP_HUB_PURPOSE=notification
-WHATSAPP_HUB_MODE=async
-WHATSAPP_HUB_ROUTE_KEY=default
+WAG_URL=https://gateway.example.com
+WAG_TOKEN=wgh_TOKEN_KHUSUS_APLIKASI
 ```
 
-- OTP: gunakan `purpose=otp`, `mode=sync`, dan sertakan `expires_at` pada request.
-- Notifikasi: gunakan `mode=async`; worker Hub harus aktif.
+- Salin keduanya dari panel: **Hubungkan WhatsApp** → langkah terakhir.
+- Kirim pesan ke `POST $WAG_URL/api/v2/messages`; Hub memakai koneksi default aplikasi.
 - Aplikasi sumber tidak lagi menyimpan credential provider WhatsApp.
 - Setelah mengubah `.env` aplikasi sumber, jalankan `php artisan config:cache` pada aplikasi tersebut.
 
