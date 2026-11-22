@@ -512,16 +512,6 @@ class GatewayMessageResource extends Resource
         };
     }
 
-    public static function retryDispositionColor(?string $disposition): string
-    {
-        return match ($disposition) {
-            'fallback_allowed' => 'warning',
-            'do_not_retry' => 'gray',
-            'reconcile_only' => 'info',
-            default => 'gray',
-        };
-    }
-
     public static function eventLabel(?string $event): string
     {
         return match ($event) {
