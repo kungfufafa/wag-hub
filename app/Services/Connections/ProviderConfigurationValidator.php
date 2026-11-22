@@ -73,7 +73,7 @@ final class ProviderConfigurationValidator
             throw new WhatsAppConnectionException(
                 'Provider credentials are incomplete: '.($secret ?? 'credentials').' is required.',
                 422,
-                'connection_not_ready',
+                'provider_configuration_invalid',
             );
         }
 
@@ -88,7 +88,7 @@ final class ProviderConfigurationValidator
                 throw new WhatsAppConnectionException(
                     'Provider endpoint is not allowed.',
                     422,
-                    'connection_not_ready',
+                    'provider_endpoint_not_allowed',
                 );
             }
         }
@@ -97,7 +97,7 @@ final class ProviderConfigurationValidator
             throw new WhatsAppConnectionException(
                 'WAHA session name is required.',
                 422,
-                'connection_not_ready',
+                'provider_configuration_invalid',
             );
         }
 
@@ -105,7 +105,7 @@ final class ProviderConfigurationValidator
             throw new WhatsAppConnectionException(
                 'WABA phone number ID is required.',
                 422,
-                'connection_not_ready',
+                'provider_configuration_invalid',
             );
         }
 
@@ -113,7 +113,7 @@ final class ProviderConfigurationValidator
             throw new WhatsAppConnectionException(
                 'GOWA username is required.',
                 422,
-                'connection_not_ready',
+                'provider_configuration_invalid',
             );
         }
 

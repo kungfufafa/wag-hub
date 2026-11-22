@@ -666,9 +666,11 @@ final class ConnectionProvisioner
                     : ConnectionStatus::Error->value,
                 'last_error_code' => $code,
                 'last_error_message' => $message,
-                'recommended_action' => $code === 'connection_not_ready'
-                    ? 'Start WAG Hub runner'
-                    : 'Fix credentials',
+                'recommended_action' => match ($code) {
+                    'connection_not_ready' => 'Start WAG Hub runner',
+                    'provider_configuration_invalid', 'provider_endpoint_not_allowed' => 'Fix provider settings',
+                    default => 'Fix credentials',
+                },
                 'setup_state' => array_merge($connection->setup_state ?? [], [
                     'last_step' => 'failed',
                     'error' => $code,

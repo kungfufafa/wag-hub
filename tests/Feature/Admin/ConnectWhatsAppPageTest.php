@@ -248,6 +248,23 @@ class ConnectWhatsAppPageTest extends TestCase
         $this->assertSame(EngineSession::query()->sole()->id, WhatsAppConnection::query()->sole()->engine_session_id);
     }
 
+    public function test_connection_view_lists_each_capability_once(): void
+    {
+        Queue::fake();
+        $application = $this->application();
+        Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $application->getKey())
+            ->set('type', 'managed_number')
+            ->call('createConnection');
+        $connection = WhatsAppConnection::query()->sole();
+        $capabilities = implode(', ', $connection->capabilities);
+        $this->assertNotSame('', $capabilities);
+
+        $html = Livewire::test(ViewWhatsAppConnection::class, ['record' => $connection->getRouteKey()])->html();
+
+        $this->assertSame(1, substr_count($html, e($capabilities)));
+    }
+
     private function application(): ClientApplication
     {
         return ClientApplication::query()->create([

@@ -82,6 +82,12 @@ final class ConnectionHealthProjector
             $connection->loadMissing(['providerAccount', 'routingPolicy.steps.providerAccount']);
             $status = $this->projectRouteStatus($connection);
             $action = $this->statuses->recommendedRouteAction($status, $connection->isConfigured());
+
+            if (! $connection->isConfigured()
+                && in_array($connection->last_error_code, ['provider_configuration_invalid', 'provider_endpoint_not_allowed'], true)) {
+                // Rejected settings are fixed by the caller, not by restarting anything.
+                $action = 'Fix provider settings';
+            }
         }
 
         $connection->forceFill([

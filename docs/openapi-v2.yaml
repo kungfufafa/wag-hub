@@ -1775,7 +1775,7 @@
           "properties":
             "code":
               "type": "string"
-              "description": "connection_not_found, connection_not_ready, capability_not_supported, capacity_exceeded, idempotency_conflict, connection_removed, invalid_idempotency_key, invalid_phone, providers_failed, provider_outcome_unknown, message_expired, ..."
+              "description": "connection_not_found, connection_not_ready, provider_configuration_invalid, provider_endpoint_not_allowed, capability_not_supported, capacity_exceeded, idempotency_conflict, connection_removed, invalid_idempotency_key, invalid_phone, providers_failed, provider_outcome_unknown, message_expired, ..."
             "retryable":
               "type": "boolean"
             "internal_code":

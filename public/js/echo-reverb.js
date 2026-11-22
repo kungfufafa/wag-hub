@@ -8,7 +8,11 @@
 
     function boot() {
         const c = cfg();
-        if (!c || !c.key) return;
+        if (!c || !c.key) {
+            // Never leave the bare Echo class behind: Livewire would call socketId() on it.
+            if (typeof window.Echo === 'function' && !window.__echoBooted) window.Echo = undefined;
+            return;
+        }
         if (typeof window.Pusher === 'undefined' || typeof window.Echo === 'undefined') return;
         if (window.__echoBooted) return;
 
@@ -27,7 +31,7 @@
             });
             window.__echoBooted = true;
         } catch (e) {
-            window.Echo = EchoClass;
+            window.Echo = undefined;
         }
     }
 

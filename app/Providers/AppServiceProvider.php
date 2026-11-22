@@ -36,11 +36,18 @@ class AppServiceProvider extends ServiceProvider
         // navigation (the Drawflow lib itself is lazy-loaded on demand).
         FilamentAsset::register([
             Js::make('flow-builder', asset('js/flow-builder.js')),
-            // Realtime (Reverb) for the panel. Pusher + Echo, then our init.
-            Js::make('pusher', 'https://js.pusher.com/8.2/pusher.min.js'),
-            Js::make('laravel-echo', 'https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js'),
-            Js::make('echo-reverb', asset('js/echo-reverb.js')),
         ]);
+
+        // Realtime (Reverb) for the panel: Pusher + Echo, then our init. Only when Reverb is
+        // configured; otherwise window.Echo would stay an unconfigured class and every Livewire
+        // request would fail on Echo.socketId().
+        if (config('broadcasting.default') === 'reverb' && filled(config('broadcasting.connections.reverb.key'))) {
+            FilamentAsset::register([
+                Js::make('pusher', 'https://js.pusher.com/8.2/pusher.min.js'),
+                Js::make('laravel-echo', 'https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js'),
+                Js::make('echo-reverb', asset('js/echo-reverb.js')),
+            ]);
+        }
 
         FilamentAsset::registerScriptData([
             'reverb' => [

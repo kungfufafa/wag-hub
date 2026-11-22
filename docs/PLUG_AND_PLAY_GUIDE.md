@@ -146,6 +146,8 @@ Capabilities (not provider names): `send_text`, `send_image`, `send_document`,
 Error codes: `connection_not_found` (404, also for another application's
 connection), `connection_not_ready` (retryable; `error.internal_code` keeps the
 engine cause such as `engine_unreachable` or `session_not_working`),
+`provider_configuration_invalid` and `provider_endpoint_not_allowed` (422, not
+retryable; fix the provider settings and call `/retry` with them),
 `capability_not_supported`, `capacity_exceeded`, `idempotency_conflict`,
 `invalid_idempotency_key`, `invalid_phone`, `providers_failed`,
 `provider_outcome_unknown`, `message_expired`.
