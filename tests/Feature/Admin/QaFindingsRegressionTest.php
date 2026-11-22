@@ -10,6 +10,7 @@ use App\Filament\Support\ConnectionLabels;
 use App\Models\AutoReplyRule;
 use App\Models\BotFlow;
 use App\Models\KnowledgeBaseEntry;
+use App\Models\ProviderAccount;
 use App\Models\User;
 use App\Models\WhatsAppConnection;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
@@ -37,6 +38,26 @@ class QaFindingsRegressionTest extends TestCase
         Livewire::test(CreateProviderAccount::class)
             ->fillForm(['driver' => 'waha'])
             ->assertSchemaStateSet(['configuration.base_url' => null]);
+    }
+
+    public function test_waba_account_saved_without_graph_url_uses_the_default(): void
+    {
+        Livewire::test(CreateProviderAccount::class)
+            ->fillForm([
+                'name' => 'QA WABA',
+                'slug' => 'qa-waba',
+                'driver' => 'waba',
+                'configuration.api_version' => 'v21.0',
+                'configuration.phone_number_id' => '123456',
+                'configuration.access_token' => 'secret-token',
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(
+            'https://graph.facebook.com',
+            ProviderAccount::query()->where('slug', 'qa-waba')->sole()->configuration['base_url'],
+        );
     }
 
     public function test_auto_reply_list_shows_saved_keywords(): void

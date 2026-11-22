@@ -636,4 +636,17 @@ class ProviderAccountResource extends Resource
             'edit' => EditProviderAccount::route('/{record}/edit'),
         ];
     }
+
+    /**
+     * @param  array<string, mixed>  $configuration
+     * @return array<string, mixed>
+     */
+    public static function withDriverDefaults(?string $driver, array $configuration): array
+    {
+        if ($driver === 'waba' && blank($configuration['base_url'] ?? null)) {
+            $configuration['base_url'] = 'https://graph.facebook.com';
+        }
+
+        return $configuration;
+    }
 }

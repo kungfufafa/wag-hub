@@ -15,6 +15,7 @@ class CreateProviderAccount extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        $data['configuration'] = ProviderAccountResource::withDriverDefaults($data['driver'] ?? null, $data['configuration'] ?? []);
         $data['health_status'] = 'unknown';
         $data['consecutive_failures'] = 0;
 
