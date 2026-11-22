@@ -42,11 +42,6 @@ enum ConnectionStatus: string
         };
     }
 
-    public function isReady(): bool
-    {
-        return $this === self::Ready;
-    }
-
     public function canAttemptSend(): bool
     {
         return in_array($this, [self::Ready, self::Degraded], true);
