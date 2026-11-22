@@ -52,7 +52,6 @@ return [
         'driver' => env('GATEWAY_ENGINE_DRIVER', 'wag_hub'),
         'baileys_url' => env('WAG_BAILEYS_URL', 'http://127.0.0.1:3318'),
         'baileys_token' => env('WAG_BAILEYS_TOKEN'),
-        'timeout' => (int) env('GATEWAY_ENGINE_TIMEOUT', 20),
         'host_provider_slug' => env('GATEWAY_ENGINE_WAHA_SLUG', env('GATEWAY_CESA_WAHA_SLUG', 'waha-primary')),
     ],
 
