@@ -154,14 +154,6 @@ final class AttachmentService
         }
     }
 
-    public function forClient(string $uuid, int $clientApplicationId): Attachment
-    {
-        return Attachment::query()
-            ->where('uuid', $uuid)
-            ->where('client_application_id', $clientApplicationId)
-            ->firstOrFail();
-    }
-
     public function forUser(string $uuid, int $userId): Attachment
     {
         return Attachment::query()
