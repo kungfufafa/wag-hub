@@ -69,6 +69,7 @@ npm ci
 touch database/database.sqlite
 php artisan key:generate
 php artisan migrate
+php artisan storage:link
 npm run build
 php artisan db:seed
 ```

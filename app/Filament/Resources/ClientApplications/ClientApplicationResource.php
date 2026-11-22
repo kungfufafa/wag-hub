@@ -17,6 +17,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -27,6 +28,7 @@ use Filament\Support\Enums\FontWeight;
 use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\Column;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\Layout\Component;
 use Filament\Tables\Columns\Layout\Split;
 use Filament\Tables\Columns\Layout\Stack;
@@ -86,6 +88,29 @@ class ClientApplicationResource extends Resource
                                 'unique' => 'ID aplikasi ini sudah dipakai.',
                                 'alpha_dash' => 'Gunakan huruf kecil, angka, dan tanda hubung.',
                             ]),
+                        TextInput::make('website_url')
+                            ->label('URL aplikasi')
+                            ->placeholder('https://shelf.example.com')
+                            ->helperText('Opsional. Alamat aplikasi sumber, untuk memudahkan admin mengenali aplikasi.')
+                            ->url()
+                            ->rule('starts_with:http://,https://')
+                            ->maxLength(2048)
+                            ->nullable()
+                            ->validationMessages([
+                                'url' => 'Masukkan URL lengkap, misalnya https://shelf.example.com.',
+                                'starts_with' => 'URL harus diawali http:// atau https://.',
+                            ]),
+                        FileUpload::make('logo_path')
+                            ->label('Logo aplikasi')
+                            ->helperText('Opsional. PNG, JPG, atau WebP, maksimal 1 MB.')
+                            ->image()
+                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/webp'])
+                            ->maxSize(1024)
+                            ->disk(ClientApplication::LOGO_DISK)
+                            ->directory(ClientApplication::LOGO_DIRECTORY)
+                            ->visibility('public')
+                            ->imagePreviewHeight('96')
+                            ->nullable(),
                         TextInput::make('rate_limit_per_minute')
                             ->label('Batas kirim per menit')
                             ->helperText('Batas request API per menit untuk aplikasi ini. Nilai umum 30–120.')
@@ -166,11 +191,18 @@ class ClientApplicationResource extends Resource
     public static function tableColumns(): array
     {
         return [
+            static::logoColumn(),
             TextColumn::make('name')
                 ->label('Nama')
                 ->searchable()
                 ->sortable()
                 ->description(fn (ClientApplication $record): string => $record->slug),
+            TextColumn::make('website_url')
+                ->label('URL')
+                ->url(fn (ClientApplication $record): ?string => $record->website_url, shouldOpenInNewTab: true)
+                ->limit(40)
+                ->placeholder('—')
+                ->toggleable(),
             TextColumn::make('slug')
                 ->label('ID aplikasi')
                 ->copyable()
@@ -207,6 +239,7 @@ class ClientApplicationResource extends Resource
         return [
             Stack::make([
                 Split::make([
+                    static::logoColumn()->grow(false),
                     TextColumn::make('name')
                         ->weight(FontWeight::SemiBold)
                         ->size(TextSize::Large)
@@ -222,6 +255,11 @@ class ClientApplicationResource extends Resource
                     ->copyable()
                     ->color('gray')
                     ->searchable(),
+                TextColumn::make('website_url')
+                    ->url(fn (ClientApplication $record): ?string => $record->website_url, shouldOpenInNewTab: true)
+                    ->icon(Heroicon::OutlinedGlobeAlt)
+                    ->limit(40)
+                    ->color('primary'),
                 Split::make([
                     TextColumn::make('api_credentials_count')
                         ->counts('apiCredentials')
@@ -239,6 +277,33 @@ class ClientApplicationResource extends Resource
                 ]),
             ])->space(3),
         ];
+    }
+
+    public static function logoColumn(): ImageColumn
+    {
+        return ImageColumn::make('logo_path')
+            ->label('Logo')
+            ->disk(ClientApplication::LOGO_DISK)
+            ->visibility('public')
+            ->circular()
+            ->imageSize(36)
+            ->defaultImageUrl(fn (ClientApplication $record): string => static::initialsAvatar($record->name));
+    }
+
+    /**
+     * A local SVG with the application's initial, so applications without a logo stay recognisable
+     * without calling an external avatar service.
+     */
+    public static function initialsAvatar(string $name): string
+    {
+        $initial = mb_strtoupper(mb_substr(trim($name) !== '' ? trim($name) : '?', 0, 1));
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
+            .'<rect width="64" height="64" fill="#0f766e"/>'
+            .'<text x="50%" y="50%" dy=".35em" text-anchor="middle" font-family="sans-serif" font-size="30" fill="#ffffff">'
+            .htmlspecialchars($initial, ENT_QUOTES | ENT_XML1)
+            .'</text></svg>';
+
+        return 'data:image/svg+xml;base64,'.base64_encode($svg);
     }
 
     public static function deleteAction(): DeleteAction

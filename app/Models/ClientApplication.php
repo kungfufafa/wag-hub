@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 class ClientApplication extends Model
 {
@@ -22,6 +23,8 @@ class ClientApplication extends Model
         'uuid',
         'name',
         'slug',
+        'website_url',
+        'logo_path',
         'is_active',
         'rate_limit_per_minute',
     ];
@@ -31,8 +34,31 @@ class ClientApplication extends Model
         return ['uuid'];
     }
 
+    /**
+     * Disk and folder for uploaded application logos.
+     */
+    public const LOGO_DISK = 'public';
+
+    public const LOGO_DIRECTORY = 'client-applications/logos';
+
     protected static function booted(): void
     {
+        // A replaced or cleared logo leaves no orphaned file behind.
+        static::updated(function (ClientApplication $application): void {
+            $previous = $application->getOriginal('logo_path');
+
+            if ($application->wasChanged('logo_path') && filled($previous)) {
+                Storage::disk(self::LOGO_DISK)->delete($previous);
+            }
+        });
+
+        // Soft-deleted applications keep their logo for history; only a force delete removes it.
+        static::forceDeleted(function (ClientApplication $application): void {
+            if (filled($application->logo_path)) {
+                Storage::disk(self::LOGO_DISK)->delete($application->logo_path);
+            }
+        });
+
         static::deleting(function (ClientApplication $application): void {
             if ($application->isForceDeleting()) {
                 return;
@@ -61,6 +87,13 @@ class ClientApplication extends Model
             'is_active' => 'boolean',
             'rate_limit_per_minute' => 'integer',
         ];
+    }
+
+    public function logoUrl(): ?string
+    {
+        return filled($this->logo_path)
+            ? Storage::disk(self::LOGO_DISK)->url($this->logo_path)
+            : null;
     }
 
     public function apiCredentials(): HasMany
