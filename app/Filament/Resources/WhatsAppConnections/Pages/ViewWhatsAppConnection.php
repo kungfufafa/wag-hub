@@ -2,9 +2,11 @@
 
 namespace App\Filament\Resources\WhatsAppConnections\Pages;
 
+use App\Domain\Connections\ConnectionCapability;
 use App\Exceptions\WhatsAppConnectionException;
 use App\Exceptions\WhatsAppEngineException;
 use App\Filament\Resources\WhatsAppConnections\WhatsAppConnectionResource;
+use App\Filament\Support\ConnectionLabels;
 use App\Filament\Support\CopiesToClipboard;
 use App\Services\Connections\ConnectionHealthProjector;
 use App\Services\Connections\ConnectionPresenter;
@@ -42,7 +44,7 @@ class ViewWhatsAppConnection extends ViewRecord
         return collect([
             $record->clientApplication?->name,
             $record->typeEnum()->label(),
-            $record->recommended_action ?: 'Siap dipakai',
+            ConnectionLabels::recommendedAction($record->recommended_action, $record) ?? 'Siap dipakai',
         ])->filter()->implode(' · ');
     }
 
@@ -56,20 +58,23 @@ class ViewWhatsAppConnection extends ViewRecord
                         ->label('Status')
                         ->badge()
                         ->color(fn (): string => $this->getRecord()->statusEnum()->color())
-                        ->formatStateUsing(fn (): string => $this->getRecord()->statusEnum()->label()),
+                        ->formatStateUsing(fn (): string => ConnectionLabels::status($this->getRecord()->statusEnum())),
                     TextEntry::make('type')
                         ->label('Jenis')
                         ->formatStateUsing(fn (): string => $this->getRecord()->typeEnum()->label()),
                     TextEntry::make('health.operational_status')
                         ->label('Operasional')
-                        ->state(fn (): string => app(ConnectionHealthProjector::class)->summarize($this->getRecord())['operational_status']),
+                        ->state(fn (): string => ConnectionLabels::operationalStatus(app(ConnectionHealthProjector::class)->summarize($this->getRecord())['operational_status'])),
                     TextEntry::make('recommended_action')
                         ->label('Langkah berikutnya')
+                        ->formatStateUsing(fn (string $state): ?string => ConnectionLabels::recommendedAction($state, $this->getRecord()))
                         ->placeholder('Tidak ada'),
                     TextEntry::make('capabilities')
                         ->label('Kemampuan')
                         // An array state renders once per item; a single joined state renders once.
-                        ->state(fn (): string => implode(', ', $this->getRecord()->capabilities ?? []))
+                        ->state(fn (): string => collect($this->getRecord()->capabilities ?? [])
+                            ->map(fn (string $capability): string => ConnectionCapability::tryFrom($capability)?->label() ?? 'Kemampuan lainnya')
+                            ->implode(', '))
                         ->placeholder('Tidak ada'),
                 ])
                 ->columns(2),
@@ -89,7 +94,7 @@ class ViewWhatsAppConnection extends ViewRecord
                                 return new HtmlString('<p class="font-mono text-2xl">'.e((string) $presentation['pairing_code']).'</p>');
                             }
 
-                            return new HtmlString('<p class="text-sm text-gray-500">'.e($presentation['recommended_action'] ?? 'Tidak ada tantangan autentikasi.').'</p>');
+                            return new HtmlString('<p class="text-sm text-gray-500">'.e(ConnectionLabels::recommendedAction($presentation['recommended_action'], $this->getRecord()) ?? 'Tidak ada tantangan autentikasi.').'</p>');
                         }),
                 ]),
             Section::make('Kesehatan')
@@ -178,7 +183,7 @@ class ViewWhatsAppConnection extends ViewRecord
                             ->title($exception->errorCode === 'capacity_exceeded'
                                 ? 'Kuota nomor WhatsApp aplikasi ini sudah penuh'
                                 : 'Gagal menghubungkan ulang')
-                            ->body($exception->getMessage())
+                            ->body(ConnectionLabels::exceptionMessage($exception))
                             ->danger()
                             ->send();
                     }
@@ -217,11 +222,11 @@ class ViewWhatsAppConnection extends ViewRecord
                             ->title($delivery->accepted() ? 'Uji kirim diterima' : 'Uji kirim gagal')
                             ->body($delivery->accepted()
                                 ? null
-                                : (string) ($delivery->message ?? 'Provider menolak atau gagal menerima pesan.'))
+                                : ConnectionLabels::errorMessage($delivery->error['code'] ?? null))
                             ->{$delivery->accepted() ? 'success' : 'danger'}()
                             ->send();
                     } catch (Throwable $exception) {
-                        Notification::make()->title('Uji kirim gagal')->body($exception->getMessage())->danger()->send();
+                        Notification::make()->title('Uji kirim gagal')->body(ConnectionLabels::exceptionMessage($exception))->danger()->send();
                     }
 
                     $this->refreshRecord();

@@ -384,7 +384,9 @@ class WhatsAppConnectionApiTest extends TestCase
         $this->assertSame('Fix provider settings', $connection->recommended_action);
         $this->withToken($client['token'])->getJson('/api/v2/connections/'.$connection->uuid)
             ->assertOk()
-            ->assertJsonPath('data.recommended_action', 'Fix provider settings');
+            ->assertJsonPath('data.recommended_action', 'Fix provider settings')
+            ->assertJsonPath('data.status', 'setup_required')
+            ->assertJsonPath('data.health.operational_status', 'down');
 
         $this->withToken($client['token'])->postJson('/api/v2/connections/'.$connection->uuid.'/retry')
             ->assertUnprocessable()

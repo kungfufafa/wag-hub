@@ -7,6 +7,7 @@ use App\Domain\Connections\ConnectionType;
 use App\Filament\Pages\ConnectWhatsApp;
 use App\Filament\Resources\WhatsAppConnections\Pages\ListWhatsAppConnections;
 use App\Filament\Resources\WhatsAppConnections\Pages\ViewWhatsAppConnection;
+use App\Filament\Support\ConnectionLabels;
 use App\Filament\Support\PanelNavigation;
 use App\Models\WhatsAppConnection;
 use App\Services\Connections\ConnectionHealthProjector;
@@ -57,14 +58,15 @@ class WhatsAppConnectionResource extends Resource
                     ->label('Status')
                     ->badge()
                     ->color(fn (string $state): string => ConnectionStatus::from($state)->color())
-                    ->formatStateUsing(fn (string $state): string => ConnectionStatus::from($state)->label()),
+                    ->formatStateUsing(fn (string $state): string => ConnectionLabels::status(ConnectionStatus::from($state))),
                 TextColumn::make('is_default')
-                    ->label('Default')
+                    ->label('Utama')
                     ->badge()
                     ->formatStateUsing(fn (mixed $state): string => $state ? 'Ya' : 'Tidak')
                     ->color(fn (mixed $state): string => $state ? 'success' : 'gray'),
                 TextColumn::make('recommended_action')
                     ->label('Langkah berikutnya')
+                    ->formatStateUsing(fn (string $state, WhatsAppConnection $record): ?string => ConnectionLabels::recommendedAction($state, $record))
                     ->placeholder('Siap dipakai'),
                 TextColumn::make('updated_at')
                     ->label('Diperbarui')
@@ -81,7 +83,7 @@ class WhatsAppConnectionResource extends Resource
                 SelectFilter::make('status')
                     ->label('Status')
                     ->options(collect(ConnectionStatus::cases())->mapWithKeys(
-                        fn (ConnectionStatus $status): array => [$status->value => $status->label()],
+                        fn (ConnectionStatus $status): array => [$status->value => ConnectionLabels::status($status)],
                     )->all()),
             ])
             ->recordActions([

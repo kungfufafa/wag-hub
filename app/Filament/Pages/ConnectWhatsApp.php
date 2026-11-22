@@ -3,8 +3,8 @@
 namespace App\Filament\Pages;
 
 use App\Domain\Connections\ConnectionType;
-use App\Exceptions\WhatsAppConnectionException;
 use App\Exceptions\WhatsAppEngineException;
+use App\Filament\Support\ConnectionLabels;
 use App\Filament\Support\CopiesToClipboard;
 use App\Filament\Support\PanelNavigation;
 use App\Models\ClientApplication;
@@ -24,7 +24,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use InvalidArgumentException;
 use Throwable;
 use UnitEnum;
 
@@ -151,21 +150,8 @@ class ConnectWhatsApp extends Page
         }
 
         $presentation = app(ConnectionPresenter::class)->toArray($connection, true);
-        if ($connection->isManaged() && $presentation['status'] === 'connecting'
-            && ($connection->setup_state['auth_method'] ?? null) === 'pairing') {
-            $presentation['recommended_action'] = 'Enter pairing code';
-        }
-        $presentation['status_label'] = $connection->statusEnum()->label();
-        $presentation['recommended_action'] = match ($presentation['recommended_action']) {
-            'Enter pairing code' => 'Masukkan kode pairing di WhatsApp pada HP Anda.',
-            'Scan QR' => 'Pindai kode QR melalui menu Perangkat tertaut di WhatsApp.',
-            'Fix provider settings', 'Fix credentials' => 'Perbaiki pengaturan provider.',
-            'Reconnect' => 'Hubungkan kembali WhatsApp.',
-            'Start WAG Hub runner' => 'Jalankan layanan WAG Hub runner.',
-            'Provider temporarily unavailable' => 'Provider sementara tidak tersedia.',
-            'Send a test message' => 'Kirim pesan uji untuk memeriksa koneksi.',
-            default => 'Menunggu kesiapan koneksi.',
-        };
+        $presentation['status_label'] = ConnectionLabels::status($connection->statusEnum());
+        $presentation['recommended_action'] = ConnectionLabels::recommendedAction($presentation['recommended_action'], $connection);
 
         return $presentation;
     }
@@ -214,7 +200,7 @@ class ConnectWhatsApp extends Page
                     'idempotency_conflict' => 'Pengaturan berubah: mulai percobaan baru',
                     default => 'Koneksi belum bisa disiapkan',
                 })
-                ->body($this->exceptionMessage($exception))
+                ->body(ConnectionLabels::exceptionMessage($exception))
                 ->danger()
                 ->send();
 
@@ -229,7 +215,7 @@ class ConnectWhatsApp extends Page
                 ->first();
             $this->connectionUuid = $connection?->uuid;
             $this->step = $connection === null ? $this->step : 3;
-            Notification::make()->title('Koneksi perlu ditindaklanjuti')->body($this->exceptionMessage($exception))->warning()->send();
+            Notification::make()->title('Koneksi perlu ditindaklanjuti')->body(ConnectionLabels::exceptionMessage($exception))->warning()->send();
         }
     }
 
@@ -302,36 +288,6 @@ class ConnectWhatsApp extends Page
         }
     }
 
-    private function exceptionMessage(Throwable $exception): string
-    {
-        if ($exception instanceof InvalidArgumentException && in_array($exception->getMessage(), [
-            'Nomor WhatsApp tidak valid.',
-            'Kode negara WhatsApp tidak didukung.',
-            'Panjang nomor WhatsApp tidak valid.',
-        ], true)) {
-            return $exception->getMessage();
-        }
-
-        $code = $exception instanceof WhatsAppConnectionException || $exception instanceof WhatsAppEngineException
-            ? $exception->errorCode
-            : null;
-
-        return match ($code) {
-            'capacity_exceeded' => 'Kuota nomor WhatsApp aplikasi ini sudah penuh. Hapus nomor yang tidak digunakan atau hubungi administrator.',
-            'idempotency_conflict' => 'Pengaturan berbeda dari percobaan sebelumnya. Mulai percobaan baru melalui Koneksi lain.',
-            'connection_removed', 'session_removed', 'session_not_found' => 'Koneksi atau sesi sudah dihapus. Mulai percobaan baru melalui Koneksi lain.',
-            'provider_configuration_invalid' => 'Pengaturan provider belum lengkap atau tidak valid. Pilih Ubah pengaturan untuk memperbaikinya.',
-            'provider_endpoint_not_allowed' => 'URL provider tidak diizinkan. Gunakan alamat HTTPS publik yang diizinkan.',
-            'invalid_phone', 'recipient_invalid' => 'Nomor WhatsApp tidak valid.',
-            'invalid_message' => 'Pesan tidak valid. Isi teks pesan sebelum mengirim.',
-            'connection_not_ready', 'session_not_working' => 'Koneksi WhatsApp belum siap. Hubungkan kembali sebelum mengirim pesan.',
-            'operation_pending', 'operation_incomplete' => 'Proses koneksi masih berlangsung. Tunggu sebentar lalu coba lagi.',
-            'engine_unavailable', 'engine_unconfigured', 'engine_unreachable' => 'Layanan WhatsApp belum tersedia. Periksa WAG Hub runner lalu coba lagi.',
-            'capability_not_supported' => 'Operasi ini tidak didukung oleh koneksi. Periksa pengaturan provider atau hubungi administrator.',
-            default => 'Periksa pengaturan koneksi dan ketersediaan layanan, lalu coba lagi.',
-        };
-    }
-
     private function creationKey(): string
     {
         return 'panel:'.$this->attemptKey;
@@ -359,11 +315,11 @@ class ConnectWhatsApp extends Page
                 ->title($exception->errorCode === 'capacity_exceeded'
                     ? 'Kuota nomor WhatsApp aplikasi ini sudah penuh'
                     : 'Setup belum selesai')
-                ->body($this->exceptionMessage($exception))
+                ->body(ConnectionLabels::exceptionMessage($exception))
                 ->danger()
                 ->send();
         } catch (Throwable $exception) {
-            Notification::make()->title('Setup belum selesai')->body($this->exceptionMessage($exception))->warning()->send();
+            Notification::make()->title('Setup belum selesai')->body(ConnectionLabels::exceptionMessage($exception))->warning()->send();
         }
     }
 
@@ -383,7 +339,7 @@ class ConnectWhatsApp extends Page
                 ->title($delivery->accepted() ? 'Uji kirim diterima' : 'Uji kirim gagal')
                 ->body($delivery->accepted()
                     ? 'Pesan diterima.'
-                    : (string) ($delivery->message ?? 'Provider menolak atau gagal menerima pesan.'))
+                    : ConnectionLabels::errorMessage($delivery->error['code'] ?? null))
                 ->{$delivery->accepted() ? 'success' : 'danger'}()
                 ->send();
 
@@ -391,7 +347,7 @@ class ConnectWhatsApp extends Page
                 $this->step = 5;
             }
         } catch (Throwable $exception) {
-            Notification::make()->title('Uji kirim gagal')->body($this->exceptionMessage($exception))->danger()->send();
+            Notification::make()->title('Uji kirim gagal')->body(ConnectionLabels::exceptionMessage($exception))->danger()->send();
         }
     }
 
