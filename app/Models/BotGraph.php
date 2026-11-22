@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\BotGraphEngine;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * A node-based bot logic graph built in the visual Flow Builder. The
- * {@see $definition} is the canvas export consumed by {@see \App\Services\BotGraphEngine}.
+ * {@see $definition} is the canvas export consumed by {@see BotGraphEngine}.
  */
 class BotGraph extends Model
 {

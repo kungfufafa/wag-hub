@@ -96,7 +96,6 @@ class RoutingPolicyResource extends Resource
                                 ->orderColumn('position')
                                 ->compact()
                                 ->itemNumbers()
-                                ->itemHeaders(false)
                                 ->defaultItems(1)
                                 ->saveRelationshipsUsing(function (Repeater $component): void {
                                     // Filament rewrites order one row at a time. Free the unique

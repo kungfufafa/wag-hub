@@ -20,6 +20,7 @@ use Throwable;
 final readonly class BotGraphEngine
 {
     private const MENU_WORDS = ['menu', '0', 'kembali', 'back'];
+
     private const MAX_STEPS = 25;
 
     public function __construct(

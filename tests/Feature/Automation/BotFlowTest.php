@@ -2,11 +2,11 @@
 
 namespace Tests\Feature\Automation;
 
-use App\Models\BotConversationState;
 use App\Models\BotFlow;
 use App\Models\GatewayMessage;
 use App\Models\ProviderAccount;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -81,7 +81,7 @@ class BotFlowTest extends TestCase
             'priority' => 0,
             'trigger_type' => 'keyword',
             'keywords' => ['menu', 'halo'],
-            'header' => "Selamat datang! Silakan pilih:",
+            'header' => 'Selamat datang! Silakan pilih:',
             'options' => [
                 ['key' => '1', 'label' => 'Jam operasional', 'action' => 'reply', 'reply' => 'Kami buka Senin-Jumat 08.00-17.00.'],
                 ['key' => '2', 'label' => 'Alamat toko', 'action' => 'reply', 'reply' => 'Jl. Merdeka No. 1.'],
@@ -109,7 +109,7 @@ class BotFlowTest extends TestCase
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, GatewayMessage>
+     * @return Collection<int, GatewayMessage>
      */
     private function botReplies(ProviderAccount $provider)
     {

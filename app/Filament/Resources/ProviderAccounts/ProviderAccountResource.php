@@ -213,8 +213,8 @@ class ProviderAccountResource extends Resource
                         TextInput::make('configuration.base_url')
                             ->label('Graph API Base URL')
                             ->url()
-                            ->default('https://graph.facebook.com')
-                            ->required(fn (Get $get): bool => $get('driver') === 'waba')
+                            ->placeholder('https://graph.facebook.com')
+                            ->helperText('Kosongkan untuk memakai https://graph.facebook.com.')
                             ->dehydratedWhenHidden(false),
                         TextInput::make('configuration.api_version')
                             ->label('Graph API Version')

@@ -8,6 +8,7 @@ use App\Models\ProviderAccount;
 use App\Models\User;
 use App\Services\WhatsAppInbox;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -123,7 +124,7 @@ class AutoReplyTest extends TestCase
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, GatewayMessage>
+     * @return Collection<int, GatewayMessage>
      */
     private function botReplies(ProviderAccount $provider)
     {
