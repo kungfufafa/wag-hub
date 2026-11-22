@@ -23,6 +23,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Throwable;
 use UnitEnum;
@@ -179,7 +180,17 @@ class ConnectWhatsApp extends Page
             return;
         }
 
-        $this->validateSettings();
+        try {
+            $this->validateSettings();
+        } catch (ValidationException $exception) {
+            Notification::make()
+                ->title('Periksa pengaturan koneksi')
+                ->body(collect($exception->errors())->flatten()->first())
+                ->danger()
+                ->send();
+
+            throw $exception;
+        }
 
         try {
             $existing = $this->connection();
@@ -227,7 +238,14 @@ class ConnectWhatsApp extends Page
         $this->resetValidation();
         $this->attemptKey = (string) Str::uuid();
         $this->connectionUuid = null;
+        $this->mode = 'qr';
         $this->step = 2;
+    }
+
+    public function updatedType(): void
+    {
+        $this->mode = 'qr';
+        $this->resetValidation();
     }
 
     public function editSettings(): void
@@ -241,8 +259,10 @@ class ConnectWhatsApp extends Page
     {
         $rules = [
             'type' => 'required|in:managed_number,provider_route',
-            'mode' => 'required|in:qr,pairing',
         ];
+        if ($this->type === 'managed_number') {
+            $rules['mode'] = 'required|in:qr,pairing';
+        }
         if ($this->type === 'managed_number' && $this->mode === 'pairing') {
             $this->phone = trim($this->phone);
             $rules['phone'] = ['required', 'regex:/^\+?[0-9]{8,15}$/'];
@@ -272,6 +292,7 @@ class ConnectWhatsApp extends Page
             'url' => ':attribute harus berupa URL yang valid.',
             'phone.regex' => 'Nomor HP harus terdiri dari 8–15 digit dengan tanda + opsional di awal.',
         ], [
+            'type' => 'Jenis koneksi', 'mode' => 'Mode koneksi', 'driver' => 'Provider',
             'phone' => 'Nomor HP', 'token' => 'Token / kunci API', 'baseUrl' => 'URL dasar',
             'session' => 'Sesi', 'username' => 'Nama pengguna', 'password' => 'Kata sandi',
             'phoneNumberId' => 'ID nomor telepon', 'accessToken' => 'Token akses',

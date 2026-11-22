@@ -464,6 +464,77 @@ class ConnectWhatsAppPageTest extends TestCase
         $this->assertSame(2, WhatsAppConnection::query()->count());
     }
 
+    public function test_provider_setup_after_pairing_and_driver_cycling_ignores_stale_mode(): void
+    {
+        Queue::fake();
+        $page = Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('step', 2)
+            ->set('mode', 'pairing')
+            ->set('phone', '+6281234567890')
+            ->assertSeeHtml('wire:key="managed-settings"')
+            ->assertSeeHtml('wire:key="managed-mode"')
+            ->call('createConnection')
+            ->assertSet('step', 3)
+            ->call('startNewAttempt')
+            ->assertSet('step', 2)
+            ->assertSet('connectionUuid', null)
+            ->assertSet('mode', 'qr')
+            ->set('mode', 'pairing')
+            ->set('type', 'provider_route')
+            ->assertSet('mode', 'qr')
+            ->assertSeeHtml('wire:key="provider-driver"')
+            ->assertDontSeeHtml('wire:key="managed-mode"');
+
+        foreach (['fonnte', 'waha', 'gowa', 'waba', 'waha'] as $driver) {
+            $page->set('driver', $driver)
+                ->assertSeeHtml('wire:key="provider-settings-'.$driver.'"');
+        }
+
+        $page->set('mode', 'waba')
+            ->set('baseUrl', 'https://waha.example.com')
+            ->set('session', 'default')
+            ->set('token', 'secret')
+            ->call('createConnection')
+            ->assertHasNoErrors()
+            ->assertSet('step', 3);
+
+        $this->assertSame(2, WhatsAppConnection::query()->count());
+        $this->assertSame('waha', WhatsAppConnection::query()->where('uuid', $page->get('connectionUuid'))->sole()->providerAccount->driver);
+        $page->call('startNewAttempt')
+            ->set('mode', 'waba')
+            ->set('type', 'managed_number')
+            ->assertSet('mode', 'qr')
+            ->assertSeeHtml('wire:key="managed-mode"')
+            ->assertDontSeeHtml('wire:key="provider-driver"');
+    }
+
+    public function test_validation_errors_without_inline_messages_are_shown_in_notifications(): void
+    {
+        $page = Livewire::test(ConnectWhatsApp::class)
+            ->set('applicationId', $this->application()->id)
+            ->set('step', 2)
+            ->set('mode', 'waba')
+            ->call('createConnection')
+            ->assertSet('step', 2)
+            ->assertHasErrors(['mode'])
+            ->assertNotified(Notification::make()
+                ->title('Periksa pengaturan koneksi')
+                ->body('Pilihan Mode koneksi tidak valid.')
+                ->danger());
+
+        $page->set('type', 'provider_route')
+            ->set('driver', 'unknown')
+            ->call('createConnection')
+            ->assertSet('step', 2)
+            ->assertHasErrors(['driver'])
+            ->assertNotified(Notification::make()
+                ->title('Periksa pengaturan koneksi')
+                ->body('Pilihan Provider tidak valid.')
+                ->danger());
+        $this->assertSame(0, WhatsAppConnection::query()->count());
+    }
+
     private function application(): ClientApplication
     {
         return ClientApplication::query()->create([
