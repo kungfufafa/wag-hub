@@ -131,6 +131,7 @@ class RoutingPolicyResource extends Resource
                                 ->minItems(1)
                                 ->required()
                                 ->reorderable()
+                                ->deletable(fn (?array $state): bool => count($state ?? []) > 1)
                                 ->addActionLabel('Tambah cadangan'),
                         ]),
                     Section::make('Opsi lanjutan')

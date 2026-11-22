@@ -62,7 +62,8 @@ class BotFlowForm
                             ->default(10)
                             ->required(),
                     ])
-                    ->columns(['md' => 2]),
+                    ->columns(['md' => 2])
+                    ->columnSpanFull(),
                 Section::make('Isi menu')
                     ->schema([
                         Textarea::make('header')
@@ -114,7 +115,8 @@ class BotFlowForm
                             ->label('Balasan bila pilihan tidak dikenali (opsional)')
                             ->rows(2)
                             ->columnSpanFull(),
-                    ]),
+                    ])
+                    ->columnSpanFull(),
             ]);
     }
 }
