@@ -22,17 +22,22 @@
             <h3 class="text-lg font-semibold">Pilih aplikasi</h3>
             <div class="mt-4 grid gap-3 md:grid-cols-2">
                 <label class="text-sm font-medium">Aplikasi
-                    <select wire:model="applicationId" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950">
+                    <x-filament::input.wrapper class="mt-1">
+                        <x-filament::input.select wire:model="applicationId">
                         @foreach ($this->applications() as $item)
                             <option value="{{ $item->id }}">{{ $item->name }}</option>
                         @endforeach
-                    </select>
+                        </x-filament::input.select>
+                    </x-filament::input.wrapper>
                 </label>
                 <label class="text-sm font-medium">Nama koneksi
-                    <input wire:model="name" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                    <x-filament::input.wrapper class="mt-1">
+                        <x-filament::input wire:model="name" />
+                    </x-filament::input.wrapper>
+                        @error('name') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                 </label>
             </div>
-            <div class="mt-4 flex gap-3">
+            <div class="mt-4 flex flex-wrap gap-3">
                 <x-filament::button tag="a" color="gray" :href="\App\Filament\Resources\ClientApplications\ClientApplicationResource::getUrl('create')">
                     Buat aplikasi baru
                 </x-filament::button>
@@ -44,15 +49,18 @@
     @if ($this->step === 2)
         <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Pilih cara menghubungkan</h3>
+            @if ($this->connectionUuid !== null)
+                <p class="mt-1 text-sm text-gray-500">Jenis koneksi dan provider tidak dapat diubah. Pilih Koneksi lain untuk membuat koneksi baru.</p>
+            @endif
             <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <button type="button" wire:click="$set('type', 'managed_number')" @class([
+                <button type="button" wire:click="$set('type', 'managed_number')" @disabled($this->connectionUuid !== null) @class([
                     'rounded-xl border p-4 text-start',
                     'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' => $this->type === 'managed_number',
                     'border-gray-200 dark:border-white/10' => $this->type !== 'managed_number',
                 ])>
                     <strong>Pakai nomor WhatsApp saya</strong>
                 </button>
-                <button type="button" wire:click="$set('type', 'provider_route')" @class([
+                <button type="button" wire:click="$set('type', 'provider_route')" @disabled($this->connectionUuid !== null) @class([
                     'rounded-xl border p-4 text-start',
                     'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' => $this->type === 'provider_route',
                     'border-gray-200 dark:border-white/10' => $this->type !== 'provider_route',
@@ -64,66 +72,100 @@
             @if ($this->type === 'managed_number')
                 <div class="mt-4 grid gap-3 md:grid-cols-2">
                     <label class="text-sm font-medium">Mode
-                        <select wire:model="mode" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950">
+                        <x-filament::input.wrapper class="mt-1">
+                            <x-filament::input.select wire:model.live="mode">
                             <option value="qr">Scan QR</option>
                             <option value="pairing">Kode pairing</option>
-                        </select>
+                            </x-filament::input.select>
+                        </x-filament::input.wrapper>
                     </label>
                     @if ($this->mode === 'pairing')
                         <label class="text-sm font-medium">Nomor HP
-                            <input wire:model="phone" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input wire:model="phone" />
+                            </x-filament::input.wrapper>
+                        @error('phone') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                     @endif
                 </div>
             @else
                 <div class="mt-4 grid gap-3 md:grid-cols-2">
                     <label class="text-sm font-medium">Provider
-                        <select wire:model.live="driver" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950">
+                        <x-filament::input.wrapper class="mt-1">
+                            <x-filament::input.select wire:model.live="driver" :disabled="$this->connectionUuid !== null">
                             <option value="fonnte">Fonnte</option>
                             <option value="waha">WAHA</option>
                             <option value="gowa">GOWA</option>
                             <option value="waba">WABA</option>
-                        </select>
+                            </x-filament::input.select>
+                        </x-filament::input.wrapper>
                     </label>
                     @if ($this->driver === 'fonnte')
                         <label class="text-sm font-medium">Token
-                            <input type="password" wire:model="token" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input type="password" wire:model="token" />
+                            </x-filament::input.wrapper>
+                        @error('token') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                     @endif
                     @if ($this->driver === 'waha')
                         <label class="text-sm font-medium">Base URL
-                            <input wire:model="baseUrl" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input wire:model="baseUrl" />
+                            </x-filament::input.wrapper>
+                        @error('baseUrl') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                         <label class="text-sm font-medium">Session
-                            <input wire:model="session" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input wire:model="session" />
+                            </x-filament::input.wrapper>
+                        @error('session') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                         <label class="text-sm font-medium">API key
-                            <input type="password" wire:model="token" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input type="password" wire:model="token" />
+                            </x-filament::input.wrapper>
+                        @error('token') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                     @endif
                     @if ($this->driver === 'gowa')
                         <label class="text-sm font-medium">Base URL
-                            <input wire:model="baseUrl" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input wire:model="baseUrl" />
+                            </x-filament::input.wrapper>
+                        @error('baseUrl') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                         <label class="text-sm font-medium">Username
-                            <input wire:model="username" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input wire:model="username" />
+                            </x-filament::input.wrapper>
+                        @error('username') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                         <label class="text-sm font-medium">Password
-                            <input type="password" wire:model="password" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input type="password" wire:model="password" />
+                            </x-filament::input.wrapper>
+                        @error('password') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                     @endif
                     @if ($this->driver === 'waba')
                         <label class="text-sm font-medium">Phone number ID
-                            <input wire:model="phoneNumberId" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input wire:model="phoneNumberId" />
+                            </x-filament::input.wrapper>
+                        @error('phoneNumberId') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                         <label class="text-sm font-medium">Access token
-                            <input type="password" wire:model="accessToken" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                            <x-filament::input.wrapper class="mt-1">
+                                <x-filament::input type="password" wire:model="accessToken" />
+                            </x-filament::input.wrapper>
+                        @error('accessToken') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                         </label>
                     @endif
                 </div>
             @endif
 
-            <div class="mt-4 flex gap-3">
+            <div class="mt-4 flex flex-wrap gap-3">
                 <x-filament::button color="gray" wire:click="$set('step', 1)">Kembali</x-filament::button>
                 <x-filament::button wire:click="createConnection">Siapkan koneksi</x-filament::button>
             </div>
@@ -134,15 +176,18 @@
         <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900" @if (($presentation['status'] ?? null) === 'connecting') wire:poll.3s @endif>
             <h3 class="text-lg font-semibold">Status koneksi</h3>
             <p class="mt-1 text-sm text-gray-500">{{ $presentation['recommended_action'] ?? 'Menunggu kesiapan koneksi.' }}</p>
-            <p class="mt-3 text-sm"><strong>Status:</strong> {{ $presentation['status'] ?? 'setup_required' }}</p>
+            <p class="mt-3 text-sm"><strong>Status:</strong> {{ $presentation['status_label'] ?? 'Perlu disiapkan' }}</p>
             @if (! empty($presentation['qr']))
                 <img src="{{ $presentation['qr'] }}" alt="QR WhatsApp" class="mt-4 h-56 w-56 rounded-lg border" />
             @endif
             @if (! empty($presentation['pairing_code']))
                 <p class="mt-4 font-mono text-2xl">{{ $presentation['pairing_code'] }}</p>
             @endif
-            <div class="mt-4 flex gap-3">
+            <div class="mt-4 flex flex-wrap gap-3">
                 <x-filament::button color="gray" wire:click="retrySetup">Coba lagi</x-filament::button>
+                @if ($this->connection()?->isManaged() === false)
+                    <x-filament::button color="gray" wire:click="editSettings">Ubah pengaturan</x-filament::button>
+                @endif
                 <x-filament::button color="gray" wire:click="startNewAttempt">Koneksi lain</x-filament::button>
                 @if ($this->canSendTest())
                     <x-filament::button wire:click="$set('step', 4)">Kirim pesan uji</x-filament::button>
@@ -156,13 +201,19 @@
             <h3 class="text-lg font-semibold">Kirim pesan uji</h3>
             <div class="mt-4 grid gap-3 md:grid-cols-2">
                 <label class="text-sm font-medium">Nomor tujuan
-                    <input wire:model="testRecipient" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                    <x-filament::input.wrapper class="mt-1">
+                        <x-filament::input wire:model="testRecipient" />
+                    </x-filament::input.wrapper>
+                        @error('testRecipient') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                 </label>
                 <label class="text-sm font-medium">Pesan
-                    <input wire:model="testText" class="mt-1 w-full rounded-lg border-gray-300 dark:border-white/10 dark:bg-gray-950" />
+                    <x-filament::input.wrapper class="mt-1">
+                        <x-filament::input wire:model="testText" />
+                    </x-filament::input.wrapper>
+                        @error('testText') <p class="mt-1 text-sm text-danger-600">{{ $message }}</p> @enderror
                 </label>
             </div>
-            <div class="mt-4 flex gap-3">
+            <div class="mt-4 flex flex-wrap gap-3">
                 <x-filament::button color="gray" wire:click="$set('step', 3)">Kembali</x-filament::button>
                 <x-filament::button wire:click="sendTest">Kirim uji</x-filament::button>
                 <x-filament::button color="gray" wire:click="issueIntegration">Lewati ke integrasi</x-filament::button>
@@ -176,7 +227,7 @@
             <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">{{ $this->issuedEnv }}</pre>
             <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">wag.sendMessage('081234567890', 'Halo', 'order-1')
 # POST $WAG_URL/api/v2/messages</pre>
-            <div class="mt-4 flex gap-3">
+            <div class="mt-4 flex flex-wrap gap-3">
                 <x-filament::button x-on:click="{!! $this->envCopyHandler() !!}">Salin WAG_URL dan WAG_TOKEN</x-filament::button>
                 <x-filament::button color="gray" tag="a" :href="\App\Filament\Resources\WhatsAppConnections\WhatsAppConnectionResource::getUrl('index')">
                     Selesai
