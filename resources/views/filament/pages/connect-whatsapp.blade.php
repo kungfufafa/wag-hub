@@ -174,8 +174,8 @@
         <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-white/10 dark:bg-gray-900">
             <h3 class="text-lg font-semibold">Salin konfigurasi integrasi</h3>
             <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">{{ $this->issuedEnv }}</pre>
-            <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">wag.connections.send('{{ $this->connectionUuid ?? 'CONNECTION_ID' }}', '6281234567890', 'Halo', 'order-1')
-# POST /api/v2/connections/{id}/messages</pre>
+            <pre class="mt-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">wag.sendMessage('081234567890', 'Halo', 'order-1')
+# POST $WAG_URL/api/v2/messages</pre>
             <div class="mt-4 flex gap-3">
                 <x-filament::button x-on:click="{!! $this->envCopyHandler() !!}">Salin WAG_URL dan WAG_TOKEN</x-filament::button>
                 <x-filament::button color="gray" tag="a" :href="\App\Filament\Resources\WhatsAppConnections\WhatsAppConnectionResource::getUrl('index')">

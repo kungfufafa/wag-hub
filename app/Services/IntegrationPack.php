@@ -88,10 +88,8 @@ final readonly class IntegrationPack
     public function envSnippet(ClientApplication $application, string $baseUrl, string $token): string
     {
         return implode("\n", [
-            '# '.$application->slug,
             'WAG_URL='.rtrim($baseUrl, '/'),
             'WAG_TOKEN='.$token,
-            '# Koneksi: GET $WAG_URL/api/v2/connections; kirim: POST $WAG_URL/api/v2/connections/{id}/messages',
         ]);
     }
 
