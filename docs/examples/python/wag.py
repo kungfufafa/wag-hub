@@ -12,6 +12,12 @@ class Wag:
         self.url = (url or os.environ["WAG_URL"]).rstrip("/")
         self.token = token or os.environ["WAG_TOKEN"]
 
+    def send_message(self, to: str, text: str, idempotency_key: str, **media: str) -> dict:
+        """Shortest send on the default connection. `to` may be local ("0812-3456-7890").
+        Pass image=url or document=url to send a file by URL. Always 202; retry with the SAME key."""
+        payload = {"to": to, "text": text, **{k: v for k, v in media.items() if v}}
+        return self._request("POST", "/api/v2/messages", payload, idempotency_key)
+
     def send(self, connection: str, to: str, text: str, idempotency_key: str) -> dict:
         """202 for a managed number, 201 for a provider route. Retry with the SAME key."""
         path = f"/api/v2/connections/{urllib.parse.quote(connection)}/messages"

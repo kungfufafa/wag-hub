@@ -15,6 +15,24 @@ final class WagClient
     ) {}
 
     /**
+     * The shortest send: POST /api/v2/messages on the application's default connection.
+     * $to may be local ("0812-3456-7890"). Pass $media as ['image' => url] or
+     * ['document' => url] to send a file by URL ($text becomes the caption).
+     * Always 202 with data.status = queued|sent|delivered|read|failed.
+     *
+     * @param  array{image?: string, document?: string, voice?: string, connection?: string}  $options
+     * @return array<string, mixed>
+     */
+    public function sendMessage(string $to, string $text, string $idempotencyKey, array $options = []): array
+    {
+        // Retry a timeout with the SAME key: the original message comes back, never a duplicate.
+        return $this->request('POST', '/api/v2/messages', array_filter(
+            ['to' => $to, 'text' => $text, ...$options],
+            static fn (mixed $value): bool => $value !== null && $value !== '',
+        ), ['Idempotency-Key: '.$idempotencyKey])['data'] ?? [];
+    }
+
+    /**
      * Send through a connection. A managed number answers 202 (queued on its v2 session);
      * a provider route answers 201 once a provider accepted the message.
      *

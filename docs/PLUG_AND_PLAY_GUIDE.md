@@ -22,8 +22,39 @@ WAG_URL=https://gateway.example.com
 WAG_TOKEN=wgh_token-aplikasi-ini
 ```
 
-Every request goes to the v2 Connection API with the same token. List the
-application's connections once and keep the `id` of the one to send from:
+Send a message with one call. The hub uses the application's default
+connection, so no connection id is needed:
+
+```bash
+curl -X POST "$WAG_URL/api/v2/messages" \
+  -H "Authorization: Bearer $WAG_TOKEN" \
+  -H "Idempotency-Key: order-1" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "0812-3456-7890", "text": "Halo"}'
+```
+
+```json
+{"data": {"status": "queued", "id": "…", "connection_id": "…", "transport_status": "queued", "…": "…"}}
+```
+
+- `to`: any common format. Spaces, dashes, dots, brackets, `+` and `00` are
+  removed and a local `0…` number gets the default country code
+  (`GATEWAY_DEFAULT_COUNTRY_CODE`, default `62`). Other countries keep their code.
+- Media by URL: `{"to": "…", "image": "https://…/a.jpg", "text": "caption"}`
+  or `"document": "https://…/invoice.pdf"` (`"voice"` on managed numbers).
+  The hub downloads the file (public http(s) hosts only, max 16 MiB); the long
+  form `{"type": "image", "media_url": "…"}` and `media_id` from
+  `POST /api/v2/media` also work. Provider routes pass the URL to the provider
+  and accept `image` and `document`.
+- `connection`: optional connection id when the application has more than one
+  number; without it the default connection is used (the first connection
+  becomes the default automatically).
+- Every accepted message answers `202` with the same shape. `data.status` is
+  `queued`, `sent`, `delivered`, `read`, `failed`, `expired` or `unknown`.
+- `Idempotency-Key` stays required: retrying with the same key never sends twice.
+
+The rest of this section is the explicit form. List the application's
+connections once and keep the `id` of the one to send from:
 
 ```bash
 curl "$WAG_URL/api/v2/connections" \
@@ -105,6 +136,7 @@ the v2 envelope `{"data": ...}`; errors are
 | Status (QR / pairing code with `sessions:manage`) | `GET /api/v2/connections/{id}` | `sessions:read` | 200 |
 | Pair / reconnect | `POST /api/v2/connections/{id}/connect` | `sessions:manage` | 202 managed, 200 provider |
 | Retry setup | `POST /api/v2/connections/{id}/retry` | `sessions:manage` | 202 managed, 200 provider |
+| Send (shortest, default connection) | `POST /api/v2/messages` (`Idempotency-Key` required) | `messages:send` | 202 |
 | Send | `POST /api/v2/connections/{id}/messages` (`Idempotency-Key` required) | `messages:send` | 202 managed, 201 provider |
 
 Create a managed number (QR by default, or `"auth_method": "pairing"` with
@@ -146,6 +178,8 @@ Capabilities (not provider names): `send_text`, `send_image`, `send_document`,
 Error codes: `connection_not_found` (404, also for another application's
 connection), `connection_not_ready` (retryable; `error.internal_code` keeps the
 engine cause such as `engine_unreachable` or `session_not_working`),
+`connection_required` (422, several connections and none is the default),
+`media_url_not_allowed`, `media_url_unreachable`, `media_too_large` (422),
 `provider_configuration_invalid` and `provider_endpoint_not_allowed` (422, not
 retryable; fix the provider settings and call `/retry` with them),
 `capability_not_supported`, `capacity_exceeded`, `idempotency_conflict`,

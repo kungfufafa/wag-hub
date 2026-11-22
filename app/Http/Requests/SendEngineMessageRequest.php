@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\PhoneNormalizer;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -16,6 +17,14 @@ class SendEngineMessageRequest extends FormRequest
     {
         if (! $this->has('type')) {
             $this->merge(['type' => 'text']);
+        }
+
+        if (is_string($this->input('to'))) {
+            // "0812-3456-7890" and "+62 812 3456 7890" both become "6281234567890".
+            $this->merge(['to' => PhoneNormalizer::international(
+                $this->input('to'),
+                (string) config('gateway.default_country_code', '62'),
+            )]);
         }
     }
 

@@ -12,6 +12,32 @@ final readonly class PhoneNormalizer
         private int $maxDigits = 15,
     ) {}
 
+    /**
+     * Forgiving cleanup for any country: drops spaces, dashes, dots, brackets and a leading
+     * "+" or "00", and turns a local "0..." number into the default country code. It never
+     * throws; callers still validate the result as an international number.
+     */
+    public static function international(string $value, string $defaultCountryCode = '62'): string
+    {
+        $value = trim($value);
+
+        if ($value === '' || preg_match('/[^0-9+\s().\-]/', $value) === 1) {
+            return $value;
+        }
+
+        $digits = (string) preg_replace('/\D+/', '', $value);
+
+        if (str_starts_with($digits, '00')) {
+            return substr($digits, 2);
+        }
+
+        if (! str_starts_with($value, '+') && str_starts_with($digits, '0')) {
+            return $defaultCountryCode.ltrim($digits, '0');
+        }
+
+        return $digits;
+    }
+
     public function normalize(string $value): string
     {
         $value = trim($value);

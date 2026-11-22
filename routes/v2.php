@@ -24,6 +24,7 @@ Route::prefix('api/v2')->middleware(['client.auth', 'client.rate:engine'])->name
     Route::post('sessions/{session}/auth/pairing-code', [SessionController::class, 'pairing'])->name('sessions.pairing')->middleware('client.ability:sessions:manage');
     Route::get('operations/{operation}', [SessionController::class, 'operation'])->middleware('client.ability:sessions:read');
     Route::post('sessions/{session}/messages', [TransportController::class, 'send'])->middleware('client.ability:messages:send');
+    Route::post('messages', [ConnectionController::class, 'sendDefault'])->name('messages.send')->middleware('client.ability:messages:send');
     Route::get('messages/{message}', [TransportController::class, 'message'])->middleware('client.ability:messages:read');
     Route::post('media', [TransportController::class, 'upload'])->middleware('client.ability:media:write');
     Route::get('media/{media}', [TransportController::class, 'download'])->middleware('client.ability:media:read');

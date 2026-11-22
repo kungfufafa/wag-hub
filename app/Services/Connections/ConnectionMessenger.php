@@ -2,13 +2,17 @@
 
 namespace App\Services\Connections;
 
+use App\Domain\Delivery\AttachmentKind;
+use App\Domain\Delivery\OutboundAttachment;
 use App\Exceptions\WhatsAppConnectionException;
 use App\Exceptions\WhatsAppEngineException;
+use App\Infrastructure\WhatsApp\ProviderEndpointGuard;
 use App\Models\EngineMessage;
 use App\Models\GatewayMessage;
 use App\Models\MessageEvent;
 use App\Models\RoutingPolicy;
 use App\Models\WhatsAppConnection;
+use App\Services\Engine\EngineMediaService;
 use App\Services\Engine\EngineTransportService;
 use App\Services\GatewayMessageDispatcher;
 use App\Support\PhoneNormalizer;
@@ -34,10 +38,12 @@ final class ConnectionMessenger
         private GatewayMessageDispatcher $dispatcher,
         private PhoneNormalizer $phones,
         private ApplicationErrorMapper $errors,
+        private EngineMediaService $media,
+        private ProviderEndpointGuard $endpoints,
     ) {}
 
     /**
-     * @param  array<string, mixed>  $payload  Validated SendEngineMessageRequest input: to, type, text, media_id, expires_at.
+     * @param  array<string, mixed>  $payload  Validated input: to, type, text, media_id or media_url, expires_at.
      */
     public function send(WhatsAppConnection $connection, array $payload, string $key): ConnectionDelivery
     {
@@ -60,6 +66,11 @@ final class ConnectionMessenger
             throw new WhatsAppConnectionException('WhatsApp connection is not ready.', 409, 'connection_not_ready', true);
         }
 
+        if (filled($payload['media_url'] ?? null)) {
+            $payload['media_id'] = $this->mediaFromUrl($connection, $payload, $key);
+        }
+        unset($payload['media_url']);
+
         try {
             // A removed session still answers replays: accept looks the key up before the session.
             $message = $this->transport->accept($connection->clientApplication, $sessionUuid, $payload, $key);
@@ -75,6 +86,36 @@ final class ConnectionMessenger
             ['connection_id' => (string) $connection->uuid, ...$this->transport->snapshot($message)],
             202,
         );
+    }
+
+    /**
+     * The engine media for a message sent with a media URL. A replay reuses the media fetched for
+     * the original message when the URL matches (no second download); a different URL under the
+     * same key yields an id that cannot match, so accept() reports idempotency_conflict.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function mediaFromUrl(WhatsAppConnection $connection, array $payload, string $key): string
+    {
+        $url = (string) $payload['media_url'];
+        $existing = $key === '' ? null : EngineMessage::query()
+            ->where('client_application_id', $connection->client_application_id)
+            ->where('idempotency_key', $key)
+            ->with('media')
+            ->first();
+
+        if ($existing !== null) {
+            return $existing->media !== null && $existing->media->source_url === $url
+                ? (string) $existing->media->uuid
+                : (string) Str::uuid();
+        }
+
+        if ($key === '') {
+            // Let accept() report the missing key before anything is downloaded.
+            return (string) Str::uuid();
+        }
+
+        return (string) $this->media->fromUrl($connection->clientApplication, $url, (string) ($payload['type'] ?? 'document'))->uuid;
     }
 
     /**
@@ -116,10 +157,18 @@ final class ConnectionMessenger
         $type = (string) ($payload['type'] ?? 'text');
         $text = (string) ($payload['text'] ?? '');
         $expiresAt = isset($payload['expires_at']) ? CarbonImmutable::parse((string) $payload['expires_at']) : null;
-        $hash = hash('sha256', json_encode([
+        $mediaUrl = filled($payload['media_url'] ?? null) ? (string) $payload['media_url'] : null;
+        $hashInput = [
             'v2-connection', (string) $connection->uuid, $type, $recipient, $text,
             $payload['media_id'] ?? null, $expiresAt?->utc()->toISOString(),
-        ], JSON_THROW_ON_ERROR));
+        ];
+
+        if ($mediaUrl !== null) {
+            // Appended only for URL media so text hashes stay identical to earlier releases.
+            $hashInput[] = $mediaUrl;
+        }
+
+        $hash = hash('sha256', json_encode($hashInput, JSON_THROW_ON_ERROR));
 
         // Replay precedes readiness and capability checks: a retry is a read even after an outage.
         $existing = $this->existing($connection, $key);
@@ -128,15 +177,28 @@ final class ConnectionMessenger
             return $this->routedResult($connection, $existing, $hash);
         }
 
+        $attachment = null;
+
         if ($type !== 'text') {
-            throw new WhatsAppConnectionException(
-                'Provider-route connections send text through the Connection API; use a managed number for media.',
-                422,
-                'capability_not_supported',
-            );
+            if (! in_array($type, ['image', 'document'], true) || $mediaUrl === null) {
+                throw new WhatsAppConnectionException(
+                    'Provider-route connections send text, or an image or document by media_url.',
+                    422,
+                    'capability_not_supported',
+                );
+            }
+
+            try {
+                // The provider fetches the file; still refuse internal and metadata addresses.
+                $this->endpoints->assertPublic($mediaUrl);
+            } catch (InvalidArgumentException) {
+                throw new WhatsAppEngineException('Media URL is not allowed. Use a public http(s) address.', 422, 'media_url_not_allowed');
+            }
+
+            $attachment = new OutboundAttachment(AttachmentKind::from($type), $mediaUrl);
         }
 
-        if (trim($text) === '') {
+        if ($type === 'text' && trim($text) === '') {
             throw new WhatsAppEngineException('Message type or text is invalid.', 422, 'invalid_message');
         }
 
@@ -149,8 +211,8 @@ final class ConnectionMessenger
         }
 
         try {
-            $message = DB::transaction(function () use ($connection, $key, $hash, $recipient, $text, $expiresAt): GatewayMessage {
-                $message = $this->createMessage($connection, $key, $hash, $recipient, $text, $expiresAt);
+            $message = DB::transaction(function () use ($connection, $key, $hash, $recipient, $text, $expiresAt, $type, $attachment): GatewayMessage {
+                $message = $this->createMessage($connection, $key, $hash, $recipient, $text, $expiresAt, $type, $attachment);
                 $event = new MessageEvent;
                 $event->forceFill([
                     'gateway_message_id' => $message->getKey(),
@@ -206,6 +268,8 @@ final class ConnectionMessenger
         string $recipient,
         string $text,
         ?CarbonImmutable $expiresAt,
+        string $type = 'text',
+        ?OutboundAttachment $attachment = null,
     ): GatewayMessage {
         $now = now();
         $message = new GatewayMessage;
@@ -223,8 +287,8 @@ final class ConnectionMessenger
             'recipient_hash' => hash_hmac('sha256', $recipient, (string) config('app.key')),
             'recipient_last4' => substr($recipient, -4),
             'body' => $text,
-            'message_type' => 'text',
-            'attachment' => null,
+            'message_type' => $type,
+            'attachment' => $attachment?->toArray(),
             'purpose' => 'notification',
             'route_key' => (string) ($connection->routingPolicy?->key ?? 'default'),
             'mode' => 'sync',
