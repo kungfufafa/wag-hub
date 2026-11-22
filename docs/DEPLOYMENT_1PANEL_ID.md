@@ -142,14 +142,12 @@ cd <DIREKTORI_APP> && php artisan schedule:run
 Di environment setiap aplikasi sumber:
 
 ```dotenv
-WHATSAPP_HUB_BASE_URL=https://gateway.example.com
-WHATSAPP_HUB_TOKEN=wgh_TOKEN_KHUSUS_APLIKASI
-WHATSAPP_HUB_PURPOSE=notification
-WHATSAPP_HUB_MODE=async
-WHATSAPP_HUB_ROUTE_KEY=default
+WAG_URL=https://gateway.example.com
+WAG_TOKEN=wgh_TOKEN_KHUSUS_APLIKASI
 ```
 
-- Untuk OTP, gunakan `purpose=otp`, `mode=sync`, dan sertakan `expires_at`.
+- Salin keduanya dari panel: **Hubungkan WhatsApp** → langkah terakhir.
+- Kirim pesan ke `POST $WAG_URL/api/v2/messages`; Hub memakai koneksi default aplikasi.
 - Aplikasi sumber tidak lagi memakai credential provider WhatsApp secara langsung.
 - Setelah mengubah environment aplikasi sumber: `php artisan config:cache`.
 
