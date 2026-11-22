@@ -34,6 +34,16 @@ export function createWag({ url, token }) {
   }
 
   return {
+    // Shortest send: POST /api/v2/messages on the default connection. `to` may be local
+    // ("0812-3456-7890"); add { image: url } or { document: url } to send a file by URL.
+    // Always 202 with data.status. Retry a timeout with the SAME idempotencyKey.
+    sendMessage(to, text, idempotencyKey, options = {}) {
+      return request('/api/v2/messages', {
+        method: 'POST',
+        body: { to, text, ...options },
+        idempotencyKey,
+      });
+    },
     connections: {
       list() {
         return request('/api/v2/connections');

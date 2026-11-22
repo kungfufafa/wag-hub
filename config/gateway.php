@@ -1,6 +1,9 @@
 <?php
 
 return [
+    // Country code used when a recipient is written as a local number such as 0812...
+    'default_country_code' => (string) env('GATEWAY_DEFAULT_COUNTRY_CODE', '62'),
+
     'provider_health' => [
         'failure_threshold' => (int) env('GATEWAY_PROVIDER_FAILURE_THRESHOLD', 3),
         'circuit_open_seconds' => (int) env('GATEWAY_PROVIDER_CIRCUIT_SECONDS', 300),

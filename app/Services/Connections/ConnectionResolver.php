@@ -36,6 +36,45 @@ final class ConnectionResolver
     }
 
     /**
+     * The connection POST /api/v2/messages sends from: the requested one, else the application's
+     * default, else its only connection. Several connections without a default must be named.
+     */
+    public function forSend(ClientApplication $application, ?string $connectionId): WhatsAppConnection
+    {
+        if (filled($connectionId)) {
+            return $this->resolve($application, (string) $connectionId);
+        }
+
+        $this->synchronizer->syncApplication($application);
+        $connections = WhatsAppConnection::query()
+            ->where('client_application_id', $application->getKey())
+            ->orderByDesc('is_default')
+            ->orderBy('id')
+            ->get();
+
+        $default = $connections->firstWhere('is_default', true)
+            ?? ($connections->count() === 1 ? $connections->first() : null);
+
+        if ($default !== null) {
+            return $this->health->hydrate($default);
+        }
+
+        if ($connections->isEmpty()) {
+            throw new WhatsAppConnectionException(
+                'This application has no WhatsApp connection yet. Connect one first.',
+                404,
+                'connection_not_found',
+            );
+        }
+
+        throw new WhatsAppConnectionException(
+            'This application has several WhatsApp connections and no default. Send "connection" with the connection id, or mark one as default.',
+            422,
+            'connection_required',
+        );
+    }
+
+    /**
      * @return list<WhatsAppConnection>
      */
     public function list(ClientApplication $application): array

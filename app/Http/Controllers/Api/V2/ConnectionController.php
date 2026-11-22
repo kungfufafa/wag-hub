@@ -6,7 +6,7 @@ use App\Exceptions\WhatsAppConnectionException;
 use App\Exceptions\WhatsAppEngineException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ConnectConnectionRequest;
-use App\Http\Requests\SendEngineMessageRequest;
+use App\Http\Requests\SendMessageRequest;
 use App\Http\Requests\StoreConnectionRequest;
 use App\Models\ApiCredential;
 use App\Models\ClientApplication;
@@ -94,13 +94,64 @@ class ConnectionController extends Controller
         });
     }
 
-    public function send(SendEngineMessageRequest $request, string $uuid): JsonResponse
+    /**
+     * POST /api/v2/messages: the shortest send. The connection is optional (the application's
+     * default is used), the recipient may be a local number, media may be a URL, and every
+     * accepted message answers 202 with the same shape whatever the connection type.
+     */
+    public function sendDefault(SendMessageRequest $request): JsonResponse
+    {
+        return $this->attempt(function () use ($request): JsonResponse {
+            $connection = $this->resolver->forSend($this->application($request), $request->validated('connection'));
+            $delivery = $this->messenger->send(
+                $connection,
+                $request->payload(),
+                (string) $request->header('Idempotency-Key', ''),
+            );
+            $data = ['status' => self::simpleStatus($delivery->data), ...$delivery->data];
+
+            if ($delivery->accepted()) {
+                return response()->json(['data' => $data], 202);
+            }
+
+            return response()->json([
+                'message' => $delivery->message,
+                'error' => $delivery->error,
+                'data' => $data,
+            ], $delivery->status);
+        });
+    }
+
+    /**
+     * One status a client can act on: queued (in flight), sent (handed to WhatsApp or the
+     * provider), delivered/read once a receipt arrives, or the terminal failure state.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function simpleStatus(array $data): string
+    {
+        $receipt = $data['receipt_status'] ?? null;
+
+        if (in_array($receipt, ['delivered', 'read', 'played'], true)) {
+            return $receipt === 'played' ? 'read' : (string) $receipt;
+        }
+
+        return match ((string) ($data['transport_status'] ?? '')) {
+            'queued', 'processing' => 'queued',
+            'accepted', 'sent' => 'sent',
+            'expired' => 'expired',
+            'outcome_unknown' => 'unknown',
+            default => 'failed',
+        };
+    }
+
+    public function send(SendMessageRequest $request, string $uuid): JsonResponse
     {
         return $this->attempt(function () use ($request, $uuid): JsonResponse {
             $connection = $this->resolver->resolve($this->application($request), $uuid);
             $delivery = $this->messenger->send(
                 $connection,
-                $request->validated(),
+                $request->payload(),
                 (string) $request->header('Idempotency-Key', ''),
             );
 

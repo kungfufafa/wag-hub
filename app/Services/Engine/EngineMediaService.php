@@ -3,11 +3,15 @@
 namespace App\Services\Engine;
 
 use App\Exceptions\WhatsAppEngineException;
+use App\Infrastructure\WhatsApp\ProviderEndpointGuard;
 use App\Models\ClientApplication;
 use App\Models\EngineMedia;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Symfony\Component\Process\Process;
 use Throwable;
 
@@ -24,6 +28,54 @@ class EngineMediaService
         }
 
         return $this->storeBytes($application, $bytes, $type, $file->getClientOriginalName(), true);
+    }
+
+    /**
+     * Download a file the client referenced by URL and store it like an upload. The URL must be a
+     * public http(s) host (same SSRF guard as tenant provider endpoints, pinned to the checked IP,
+     * no redirects) and the body is capped at the media size limit while streaming.
+     */
+    public function fromUrl(ClientApplication $application, string $url, string $type): EngineMedia
+    {
+        try {
+            $options = app(ProviderEndpointGuard::class)->assertPublic($url);
+        } catch (InvalidArgumentException) {
+            throw new WhatsAppEngineException('Media URL is not allowed. Use a public http(s) address.', 422, 'media_url_not_allowed');
+        }
+
+        $maximum = $this->maximumBytes();
+        $options['progress'] = static function (int $expected, int $received) use ($maximum): void {
+            if ($expected > $maximum || $received > $maximum) {
+                throw new WhatsAppEngineException('Media must be at most 16 MiB.', 422, 'media_too_large');
+            }
+        };
+
+        try {
+            $response = Http::withOptions($options)->timeout(20)->connectTimeout(5)->get($url);
+        } catch (WhatsAppEngineException $exception) {
+            throw $exception;
+        } catch (ConnectionException $exception) {
+            if ($exception->getPrevious() instanceof WhatsAppEngineException) {
+                throw $exception->getPrevious();
+            }
+
+            throw new WhatsAppEngineException('Media URL could not be downloaded.', 422, 'media_url_unreachable', true);
+        }
+
+        if (! $response->successful()) {
+            throw new WhatsAppEngineException('Media URL returned HTTP '.$response->status().'.', 422, 'media_url_unreachable', $response->serverError());
+        }
+
+        $bytes = $response->body();
+        if (strlen($bytes) > $maximum) {
+            throw new WhatsAppEngineException('Media must be at most 16 MiB.', 422, 'media_too_large');
+        }
+
+        $filename = basename((string) parse_url($url, PHP_URL_PATH)) ?: 'attachment';
+        $media = $this->storeBytes($application, $bytes, $type, $filename, true);
+        $media->forceFill(['source_url' => $url])->save();
+
+        return $media;
     }
 
     public function incoming(ClientApplication $application, array $data): ?EngineMedia

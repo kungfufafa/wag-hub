@@ -655,6 +655,111 @@
             "minLength": 1
             "maxLength": 160
           "description": "Installation-scoped key retained for retries. Same payload returns the original record; changed payload returns 409."
+  "/api/v2/messages":
+    "post":
+      "summary": "Send a message (shortest form)"
+      "operationId": "post_api_v2_messages"
+      "x-required-scope": "messages:send"
+      "description": "Sends through the application's default connection unless `connection` names one. `to` accepts local and formatted numbers (spaces, dashes, dots, brackets, + and 00 are removed; a leading 0 gets the default country code). Media may be given by URL with the shortcut keys image, document or voice, or as type + media_url; the hub downloads it from a public http(s) host (max 16 MiB) for managed numbers and passes it to the provider for provider routes (image and document). Every accepted message answers 202 with the same shape and a simple data.status."
+      "responses":
+        "202":
+          "description": "Accepted"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "properties":
+                  "data":
+                    "allOf":
+                      -
+                        "$ref": "#/components/schemas/ConnectionMessage"
+                      -
+                        "type": "object"
+                        "properties":
+                          "status":
+                            "type": "string"
+                            "enum":
+                              - "queued"
+                              - "sent"
+                              - "delivered"
+                              - "read"
+                              - "failed"
+                              - "expired"
+                              - "unknown"
+                        "required":
+                          - "status"
+                "required":
+                  - "data"
+        "default":
+          "description": "Authentication, authorization, validation or availability error: connection_not_found, connection_required, connection_not_ready, media_url_not_allowed, media_url_unreachable, media_too_large, capability_not_supported, idempotency_conflict, invalid_idempotency_key, invalid_phone, providers_failed, ..."
+          "content":
+            "application/json":
+              "schema":
+                "oneOf":
+                  -
+                    "$ref": "#/components/schemas/ConnectionError"
+                  -
+                    "$ref": "#/components/schemas/ValidationError"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "type": "object"
+              "properties":
+                "to":
+                  "type": "string"
+                  "example": "0812-3456-7890"
+                "text":
+                  "type": "string"
+                  "maxLength": 10000
+                  "description": "Message text, or the caption of a media message."
+                "image":
+                  "type": "string"
+                  "format": "uri"
+                  "description": "Shortcut for type=image with media_url."
+                "document":
+                  "type": "string"
+                  "format": "uri"
+                  "description": "Shortcut for type=document with media_url."
+                "voice":
+                  "type": "string"
+                  "format": "uri"
+                  "description": "Shortcut for type=voice with media_url (managed numbers)."
+                "type":
+                  "type": "string"
+                  "enum":
+                    - "text"
+                    - "image"
+                    - "document"
+                    - "voice"
+                  "default": "text"
+                "media_url":
+                  "type": "string"
+                  "format": "uri"
+                "media_id":
+                  "type": "string"
+                  "format": "uuid"
+                  "description": "Alternative to media_url: an id from POST /api/v2/media (managed numbers)."
+                "connection":
+                  "type": "string"
+                  "format": "uuid"
+                  "description": "Optional connection id; defaults to the application's default connection."
+                "expires_at":
+                  "type": "string"
+                  "format": "date-time"
+              "required":
+                - "to"
+      "parameters":
+        -
+          "name": "Idempotency-Key"
+          "in": "header"
+          "required": true
+          "schema":
+            "type": "string"
+            "minLength": 1
+            "maxLength": 160
+          "description": "Installation-scoped key retained for retries. Same payload returns the original message; changed payload returns 409."
   "/api/v2/messages/{message}":
     "get":
       "summary": "Read transport and recipient acknowledgement separately"
@@ -1111,7 +1216,7 @@
               "properties":
                 "to":
                   "type": "string"
-                  "pattern": "^\\+?[1-9][0-9]{7,14}$"
+                  "description": "International or local number; formatting characters are removed and a leading 0 gets the default country code."
                 "type":
                   "type": "string"
                   "enum":
@@ -1126,7 +1231,11 @@
                 "media_id":
                   "type": "string"
                   "format": "uuid"
-                  "description": "Managed numbers only; required for media types."
+                  "description": "Managed numbers only; or use media_url / the image, document, voice shortcuts."
+                "media_url":
+                  "type": "string"
+                  "format": "uri"
+                  "description": "Public http(s) file URL. Managed numbers: downloaded by the hub. Provider routes: image and document."
                 "expires_at":
                   "type": "string"
                   "format": "date-time"
@@ -1775,7 +1884,7 @@
           "properties":
             "code":
               "type": "string"
-              "description": "connection_not_found, connection_not_ready, provider_configuration_invalid, provider_endpoint_not_allowed, capability_not_supported, capacity_exceeded, idempotency_conflict, connection_removed, invalid_idempotency_key, invalid_phone, providers_failed, provider_outcome_unknown, message_expired, ..."
+              "description": "connection_not_found, connection_required, connection_not_ready, media_url_not_allowed, media_url_unreachable, media_too_large, provider_configuration_invalid, provider_endpoint_not_allowed, capability_not_supported, capacity_exceeded, idempotency_conflict, connection_removed, invalid_idempotency_key, invalid_phone, providers_failed, provider_outcome_unknown, message_expired, ..."
             "retryable":
               "type": "boolean"
             "internal_code":
