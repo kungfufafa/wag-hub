@@ -68,7 +68,9 @@ class ViewWhatsAppConnection extends ViewRecord
                         ->placeholder('Tidak ada'),
                     TextEntry::make('capabilities')
                         ->label('Kemampuan')
-                        ->formatStateUsing(fn (): string => implode(', ', $this->getRecord()->capabilities ?? [])),
+                        // An array state renders once per item; a single joined state renders once.
+                        ->state(fn (): string => implode(', ', $this->getRecord()->capabilities ?? []))
+                        ->placeholder('Tidak ada'),
                 ])
                 ->columns(2),
             Section::make('Autentikasi')

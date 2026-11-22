@@ -377,13 +377,18 @@ class WhatsAppConnectionApiTest extends TestCase
         $this->createProvider($client, 'fix-1', 'Fonnte', 'fonnte', ['token' => ''])
             ->assertUnprocessable()
             ->assertJsonPath('message', 'Provider credentials are incomplete: token is required.')
-            ->assertJsonPath('error.code', 'connection_not_ready');
+            ->assertJsonPath('error.code', 'provider_configuration_invalid')
+            ->assertJsonPath('error.retryable', false);
         $connection = WhatsAppConnection::query()->sole();
         $this->assertNull($connection->provider_account_id);
+        $this->assertSame('Fix provider settings', $connection->recommended_action);
+        $this->withToken($client['token'])->getJson('/api/v2/connections/'.$connection->uuid)
+            ->assertOk()
+            ->assertJsonPath('data.recommended_action', 'Fix provider settings');
 
         $this->withToken($client['token'])->postJson('/api/v2/connections/'.$connection->uuid.'/retry')
             ->assertUnprocessable()
-            ->assertJsonPath('error.code', 'connection_not_ready');
+            ->assertJsonPath('error.code', 'provider_configuration_invalid');
         $this->withToken($client['token'])->postJson('/api/v2/connections/'.$connection->uuid.'/retry', [
             'provider' => ['configuration' => ['token' => 'fixed-token']],
         ])->assertOk()->assertJsonPath('data.sender.driver', 'fonnte');
@@ -600,6 +605,20 @@ class WhatsAppConnectionApiTest extends TestCase
             ->assertConflict()
             ->assertJsonPath('error.code', 'idempotency_conflict');
         $this->assertSame(2, EngineMessage::query()->count());
+    }
+
+    public function test_validation_messages_are_translated_instead_of_raw_keys(): void
+    {
+        $client = $this->client();
+        app()->setLocale('id');
+        config(['app.fallback_locale' => 'id']);
+
+        $response = $this->withToken($client['token'])
+            ->postJson('/api/v2/connections', ['type' => 'managed_number'])
+            ->assertUnprocessable();
+
+        $this->assertStringNotContainsString('validation.', (string) $response->json('message'));
+        $this->assertStringContainsString('wajib diisi', (string) $response->json('message'));
     }
 
     public function test_a_pending_teardown_is_reported_as_disconnected(): void

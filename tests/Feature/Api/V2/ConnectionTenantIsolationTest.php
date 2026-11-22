@@ -199,9 +199,12 @@ class ConnectionTenantIsolationTest extends TestCase
             ],
         ], ['Idempotency-Key' => 'ssrf-1'])
             ->assertStatus(422)
-            ->assertJsonPath('message', 'Provider endpoint is not allowed.');
+            ->assertJsonPath('message', 'Provider endpoint is not allowed.')
+            ->assertJsonPath('error.code', 'provider_endpoint_not_allowed')
+            ->assertJsonPath('error.retryable', false);
 
         $this->assertSame(0, ProviderAccount::query()->count());
+        $this->assertSame('Fix provider settings', WhatsAppConnection::query()->sole()->recommended_action);
     }
 
     /**
