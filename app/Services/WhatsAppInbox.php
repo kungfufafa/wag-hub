@@ -43,11 +43,6 @@ final readonly class WhatsAppInbox
             ->get();
     }
 
-    public function webhookUrl(ProviderAccount $account): string
-    {
-        return url('/webhooks/whatsapp/'.$account->uuid);
-    }
-
     public function driverLabel(string $driver): string
     {
         return match ($driver) {
