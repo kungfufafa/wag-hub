@@ -105,31 +105,6 @@ class ProviderAccount extends Model
         return $this->hasMany(RoutingStep::class);
     }
 
-    public function messageAttempts(): HasMany
-    {
-        return $this->hasMany(MessageAttempt::class);
-    }
-
-    public function acceptedMessages(): HasMany
-    {
-        return $this->hasMany(GatewayMessage::class, 'accepted_provider_account_id');
-    }
-
-    public function numberCheckAttempts(): HasMany
-    {
-        return $this->hasMany(NumberCheckAttempt::class);
-    }
-
-    public function resolvedNumberCheckRequests(): HasMany
-    {
-        return $this->hasMany(NumberCheckRequest::class, 'resolved_provider_account_id');
-    }
-
-    public function inboxConversations(): HasMany
-    {
-        return $this->hasMany(InboxConversation::class);
-    }
-
     public function autoReplyRules(): HasMany
     {
         return $this->hasMany(AutoReplyRule::class);
