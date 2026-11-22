@@ -18,7 +18,6 @@ class KnowledgeBaseEntryForm
         return $schema
             ->components([
                 Section::make('Entri knowledge base')
-                    ->description('Sumber jawaban AI. Saat pelanggan bertanya bebas (bukan menu/kata kunci), agen AI mencari entri paling relevan lalu menjawab. Tanpa API key LLM, jawaban memakai isi entri; dengan API key, jawaban dirangkai natural berdasarkan entri ini.')
                     ->schema([
                         Select::make('provider_account_id')
                             ->label('Akun provider (nomor)')
@@ -28,12 +27,10 @@ class KnowledgeBaseEntryForm
                             ->native(false),
                         TextInput::make('title')
                             ->label('Judul / topik')
-                            ->placeholder('Contoh: Jam operasional, Ongkir, Cara pesan')
                             ->required()
                             ->maxLength(160),
                         TagsInput::make('keywords')
                             ->label('Kata kunci tambahan (opsional)')
-                            ->helperText('Sinonim/istilah lain agar lebih mudah ditemukan. Mis. "buka", "tutup", "operasional".')
                             ->columnSpanFull(),
                         Textarea::make('content')
                             ->label('Isi jawaban')

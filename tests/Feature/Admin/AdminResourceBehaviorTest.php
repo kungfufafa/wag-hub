@@ -66,7 +66,6 @@ class AdminResourceBehaviorTest extends TestCase
 
         Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
             ->assertSee('Diterima provider')
-            ->assertSee('Tidak perlu tindakan')
             ->assertDontSee('Belum dapat dipastikan')
             ->assertDontSee('Hasil tidak diketahui');
     }
@@ -84,7 +83,6 @@ class AdminResourceBehaviorTest extends TestCase
             ->assertSee('Tempel di WhatsApp')
             ->assertSee('Ringkasan')
             ->assertSee('Perjalanan')
-            ->assertSee('Langkah berikutnya')
             ->assertActionVisible('copyBody');
 
         $html = $page->html();
@@ -134,9 +132,7 @@ class AdminResourceBehaviorTest extends TestCase
 
         Livewire::test(ViewGatewayMessage::class, ['record' => $message->getKey()])
             ->assertSee('Gagal')
-            ->assertSee('Bisa dikirim ulang')
             ->assertSee('Coba kirim ulang')
-            ->assertSee('Langkah berikutnya')
             ->assertSee('Nomor tidak terdaftar di WhatsApp.')
             ->assertSee('Belum ada percobaan ke provider.')
             ->assertActionVisible('retry');

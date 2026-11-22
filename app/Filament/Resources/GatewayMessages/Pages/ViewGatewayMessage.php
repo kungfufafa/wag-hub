@@ -64,17 +64,9 @@ class ViewGatewayMessage extends ViewRecord
                 ->modalHeading($asyncDispatch
                     ? 'Masukkan pesan ini ke antrian ulang?'
                     : 'Kirim ulang pesan ini sekarang?')
-                ->modalDescription(function () use ($asyncDispatch): string {
-                    $risk = $this->getRecord()->status === 'outcome_unknown'
-                        ? 'Hasil kirim sebelumnya tidak pasti. Riwayat tetap disimpan dan rute dievaluasi ulang. Ada risiko penerima menerima pesan ganda.'
-                        : 'Riwayat percobaan tetap disimpan dan rute dievaluasi ulang.';
-
-                    if ($asyncDispatch) {
-                        return $risk;
-                    }
-
-                    return $risk.' Pengiriman dijalankan langsung (mode sync global).';
-                })
+                ->modalDescription(fn (): ?string => $this->getRecord()->status === 'outcome_unknown'
+                    ? 'Penerima bisa menerima pesan ganda.'
+                    : null)
                 ->visible(fn (): bool => $this->getRecord()->isSafeToRetry())
                 ->action(function () use ($asyncDispatch): void {
                     try {
@@ -96,7 +88,7 @@ class ViewGatewayMessage extends ViewRecord
                     } catch (DomainException) {
                         Notification::make()
                             ->title('Kirim ulang tidak lagi tersedia')
-                            ->body('Status pesan berubah atau sudah kedaluwarsa. Muat ulang dan periksa linimasa terbaru.')
+                            ->body('Status pesan sudah berubah.')
                             ->danger()
                             ->send();
 
@@ -113,8 +105,8 @@ class ViewGatewayMessage extends ViewRecord
                                 ? 'Kirim ulang disimpan, tetapi antrian tidak tersedia'
                                 : 'Kirim ulang gagal diproses')
                             ->body($asyncDispatch
-                                ? 'Pesan tetap berada di antrian dan pemulihan terjadwal akan mencoba lagi secara otomatis.'
-                                : 'Status saat ini: '.$status.'. Periksa koneksi provider lalu coba lagi.')
+                                ? 'Akan dicoba lagi otomatis.'
+                                : 'Status saat ini: '.$status.'.')
                             ->danger()
                             ->send();
 
@@ -142,7 +134,7 @@ class ViewGatewayMessage extends ViewRecord
                     if ($status === 'outcome_unknown') {
                         Notification::make()
                             ->title('Kirim ulang selesai dengan status outcome_unknown')
-                            ->body('Pengiriman langsung selesai, namun tidak dapat dipastikan apakah provider menerima pesan atau tidak.')
+                            ->body('Hasil pengiriman tidak pasti.')
                             ->warning()
                             ->send();
 
@@ -151,7 +143,7 @@ class ViewGatewayMessage extends ViewRecord
 
                     Notification::make()
                         ->title('Kirim ulang selesai dengan status '.$status)
-                        ->body('Pengiriman langsung selesai, tetapi pesan belum diterima provider.')
+                        ->body('Pesan belum diterima provider.')
                         ->danger()
                         ->send();
                 }),

@@ -13,11 +13,6 @@ class CreateRoutingPolicy extends CreateRecord
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
-    public function getSubheading(): ?string
-    {
-        return 'Nama, aplikasi, lalu urutan provider. Opsi lanjutan boleh dilewati.';
-    }
-
     protected function mutateFormDataBeforeCreate(array $data): array
     {
         if (($data['operation'] ?? 'message') === 'number_check') {
@@ -35,7 +30,6 @@ class CreateRoutingPolicy extends CreateRecord
     {
         return Notification::make()
             ->success()
-            ->title('Aturan rute dibuat')
-            ->body('Provider akan dicoba dari atas ke bawah sampai mendapat hasil definitif.');
+            ->title('Aturan rute dibuat');
     }
 }

@@ -5,7 +5,6 @@ namespace App\Filament\Resources\RoutingPolicies;
 use App\Filament\Resources\RoutingPolicies\Pages\CreateRoutingPolicy;
 use App\Filament\Resources\RoutingPolicies\Pages\EditRoutingPolicy;
 use App\Filament\Resources\RoutingPolicies\Pages\ListRoutingPolicies;
-use App\Filament\Support\ConfigurationListLayout;
 use App\Filament\Support\PanelNavigation;
 use App\Models\ClientApplication;
 use App\Models\ProviderAccount;
@@ -26,13 +25,8 @@ use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
-use Filament\Support\Enums\FontWeight;
-use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\Column;
-use Filament\Tables\Columns\Layout\Component;
-use Filament\Tables\Columns\Layout\Split;
-use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
@@ -72,7 +66,6 @@ class RoutingPolicyResource extends Resource
                         ->schema([
                             TextInput::make('name')
                                 ->label('Nama')
-                                ->placeholder('Contoh: Notifikasi Shelf')
                                 ->required()
                                 ->maxLength(120),
                             Select::make('client_application_id')
@@ -96,7 +89,6 @@ class RoutingPolicyResource extends Resource
                                 ->live(),
                         ]),
                     Section::make('Provider')
-                        ->description('Atas dicoba dulu. Tambah baris untuk cadangan.')
                         ->schema([
                             Repeater::make('steps')
                                 ->hiddenLabel()
@@ -143,7 +135,6 @@ class RoutingPolicyResource extends Resource
                                 ->addActionLabel('Tambah cadangan'),
                         ]),
                     Section::make('Opsi lanjutan')
-                        ->description('Boleh dilewati. Default: kunci default, semua tujuan.')
                         ->collapsed(fn (string $operation): bool => $operation === 'create')
                         ->schema([
                             TextInput::make('key')
@@ -183,7 +174,6 @@ class RoutingPolicyResource extends Resource
                                 ->dehydratedWhenHidden(false),
                             Toggle::make('is_default')
                                 ->label('Rute default')
-                                ->helperText('Dipakai jika route_key dari aplikasi tidak cocok.')
                                 ->default(false),
                             Toggle::make('is_active')
                                 ->label('Aturan aktif')
@@ -215,13 +205,9 @@ class RoutingPolicyResource extends Resource
 
     public static function table(Table $table): Table
     {
-        $isCards = ConfigurationListLayout::isCards($table);
-
         return $table
-            ->columns($isCards ? static::cardColumns() : static::tableColumns())
-            ->contentGrid(ConfigurationListLayout::contentGrid($table))
+            ->columns(static::tableColumns())
             ->paginated([10, 25, 50])
-            ->searchPlaceholder('Cari nama, aplikasi, atau kunci rute')
             ->filters([
                 SelectFilter::make('client_application_id')
                     ->label('Aplikasi')
@@ -252,8 +238,6 @@ class RoutingPolicyResource extends Resource
                     static::deleteBulkAction(),
                 ]),
             ])
-            ->emptyStateHeading('Belum ada aturan rute')
-            ->emptyStateDescription('Buat rute untuk aplikasi, kunci rute, dan urutan provider cadangan.')
             ->emptyStateIcon(Heroicon::OutlinedQueueList)
             ->emptyStateActions([
                 Action::make('create')
@@ -315,80 +299,14 @@ class RoutingPolicyResource extends Resource
         ];
     }
 
-    /**
-     * @return array<int, Component>
-     */
-    public static function cardColumns(): array
-    {
-        return [
-            Stack::make([
-                Split::make([
-                    TextColumn::make('name')
-                        ->weight(FontWeight::SemiBold)
-                        ->size(TextSize::Large)
-                        ->searchable()
-                        ->sortable()
-                        ->grow(),
-                    TextColumn::make('is_active')
-                        ->badge()
-                        ->formatStateUsing(fn (mixed $state): string => $state ? 'Aktif' : 'Nonaktif')
-                        ->color(fn (mixed $state): string => $state ? 'success' : 'gray'),
-                ]),
-                TextColumn::make('clientApplication.name')
-                    ->placeholder('Rute global')
-                    ->icon(Heroicon::OutlinedGlobeAlt)
-                    ->searchable(),
-                Split::make([
-                    TextColumn::make('operation')
-                        ->badge()
-                        ->formatStateUsing(fn (string $state): string => match ($state) {
-                            'message' => 'Kirim pesan',
-                            'number_check' => 'Cek nomor',
-                            default => $state,
-                        }),
-                    TextColumn::make('key')
-                        ->badge()
-                        ->color('gray'),
-                    TextColumn::make('purpose')
-                        ->badge()
-                        ->formatStateUsing(fn (?string $state): string => match ($state) {
-                            'otp' => 'OTP',
-                            'transactional' => 'Transaksional',
-                            'notification' => 'Notifikasi',
-                            default => $state ?? 'Semua tujuan',
-                        })
-                        ->placeholder('Semua tujuan'),
-                ]),
-                Split::make([
-                    TextColumn::make('steps_count')
-                        ->counts('steps')
-                        ->icon(Heroicon::OutlinedServerStack)
-                        ->formatStateUsing(fn (mixed $state): string => $state.' provider'),
-                    TextColumn::make('is_default')
-                        ->badge()
-                        ->formatStateUsing(fn (mixed $state): string => $state ? 'Rute default' : 'Khusus')
-                        ->color(fn (mixed $state): string => $state ? 'info' : 'gray'),
-                ]),
-            ])->space(3),
-        ];
-    }
-
     public static function deleteAction(): DeleteAction
     {
         return DeleteAction::make()
             ->label('Hapus')
             ->modalHeading('Hapus aturan rute?')
-            ->modalDescription(function (RoutingPolicy $record): string {
-                $parts = ['Rute ini tidak dipakai lagi saat pengiriman. Riwayat pesan tetap tersimpan.'];
-
-                if ($record->is_default) {
-                    $parts[] = 'Ini rute default; pastikan ada rute lain atau pengiriman bisa gagal.';
-                }
-
-                $parts[] = 'Kunci rute dapat dipakai ulang.';
-
-                return implode(' ', $parts);
-            })
+            ->modalDescription(fn (RoutingPolicy $record): ?string => $record->is_default
+                ? 'Ini rute default.'
+                : null)
             ->modalSubmitActionLabel('Hapus rute')
             ->successNotificationTitle('Aturan rute dihapus');
     }
@@ -398,7 +316,6 @@ class RoutingPolicyResource extends Resource
         return DeleteBulkAction::make()
             ->label('Hapus yang dipilih')
             ->modalHeading('Hapus aturan rute yang dipilih?')
-            ->modalDescription('Rute yang dipilih tidak dipakai lagi saat pengiriman. Riwayat pesan tetap tersimpan.')
             ->modalSubmitActionLabel('Hapus')
             ->successNotificationTitle('Aturan rute dihapus');
     }

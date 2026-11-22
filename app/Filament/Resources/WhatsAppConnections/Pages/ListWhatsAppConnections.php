@@ -15,11 +15,6 @@ class ListWhatsAppConnections extends ListRecords
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
-    public function getSubheading(): ?string
-    {
-        return 'Satu koneksi WhatsApp per kemampuan kirim. Detail provider dan rute ada di pengaturan lanjutan.';
-    }
-
     protected function getHeaderActions(): array
     {
         return [

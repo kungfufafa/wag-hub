@@ -20,7 +20,6 @@ class BotFlowForm
         return $schema
             ->components([
                 Section::make('Menu bot')
-                    ->description('Bot mengirim menu bernomor lalu menunggu pilihan pelanggan. Cocok untuk CS terpandu ala Fonnte/cekat.')
                     ->schema([
                         Select::make('provider_account_id')
                             ->label('Akun provider (nomor)')
@@ -30,7 +29,6 @@ class BotFlowForm
                             ->native(false),
                         TextInput::make('name')
                             ->label('Nama menu')
-                            ->placeholder('Contoh: Menu utama CS')
                             ->required()
                             ->maxLength(120),
                         Select::make('trigger_type')
@@ -45,12 +43,10 @@ class BotFlowForm
                             ->native(false),
                         TagsInput::make('keywords')
                             ->label('Kata kunci pemicu')
-                            ->helperText('Tekan Enter tiap kata. Mis. "menu", "halo", "mulai".')
                             ->visible(fn (Get $get): bool => $get('trigger_type') === 'keyword')
                             ->required(fn (Get $get): bool => $get('trigger_type') === 'keyword'),
                         TextInput::make('priority')
                             ->label('Prioritas')
-                            ->helperText('Angka kecil dievaluasi lebih dulu.')
                             ->numeric()
                             ->default(0)
                             ->required(),
@@ -60,7 +56,6 @@ class BotFlowForm
                             ->required(),
                         TextInput::make('session_ttl_minutes')
                             ->label('Kedaluwarsa sesi (menit)')
-                            ->helperText('Selama ini balasan pelanggan diperlakukan sebagai pilihan menu.')
                             ->numeric()
                             ->minValue(1)
                             ->maxValue(120)
@@ -74,14 +69,12 @@ class BotFlowForm
                             ->label('Teks pembuka')
                             ->rows(3)
                             ->required()
-                            ->placeholder("Selamat datang di Toko Kami! 👋\nSilakan pilih:")
                             ->columnSpanFull(),
                         Repeater::make('options')
                             ->label('Pilihan menu')
                             ->schema([
                                 TextInput::make('key')
                                     ->label('Kunci')
-                                    ->helperText('Angka/kode yang diketik pelanggan, mis. 1')
                                     ->required()
                                     ->maxLength(12),
                                 TextInput::make('label')
@@ -118,7 +111,6 @@ class BotFlowForm
                         Textarea::make('fallback_reply')
                             ->label('Balasan bila pilihan tidak dikenali (opsional)')
                             ->rows(2)
-                            ->helperText('Menu akan ditampilkan ulang setelah pesan ini.')
                             ->columnSpanFull(),
                     ]),
             ]);

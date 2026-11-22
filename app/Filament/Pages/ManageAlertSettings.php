@@ -79,23 +79,19 @@ class ManageAlertSettings extends Page
         return $schema
             ->components([
                 Section::make('Umum')
-                    ->description('Saklar utama dan jeda pengiriman ulang alert.')
                     ->schema([
                         Toggle::make('is_enabled')
                             ->label('Alert aktif')
-                            ->helperText('Uji kirim email/Telegram tetap bisa dijalankan meski saklar ini mati.')
                             ->required(),
                         TextInput::make('cooldown_seconds')
                             ->label('Cooldown (detik)')
                             ->numeric()
                             ->required()
                             ->minValue(0)
-                            ->maxValue(86400)
-                            ->helperText('Jeda minimum antar alert untuk provider yang sama (semua perubahan status).'),
+                            ->maxValue(86400),
                     ])
                     ->columns(['md' => 2]),
                 Section::make('SMTP')
-                    ->description('Konfigurasi pengiriman email alert. Secret kosong saat simpan = tidak diubah.')
                     ->schema([
                         TextInput::make('smtp_host')
                             ->label('Host SMTP')
@@ -112,7 +108,7 @@ class ManageAlertSettings extends Page
                             ->label('Password')
                             ->password()
                             ->revealable()
-                            ->helperText('Kosongkan bila ingin mempertahankan password yang ada.')
+                            ->helperText('Kosongkan jika tidak diubah.')
                             ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
                             ->dehydrated(fn (?string $state): bool => filled($state)),
                         Select::make('smtp_encryption')
@@ -132,13 +128,12 @@ class ManageAlertSettings extends Page
                     ])
                     ->columns(['md' => 2]),
                 Section::make('Telegram')
-                    ->description('Bot token untuk channel Telegram. Secret kosong saat simpan = tidak diubah.')
                     ->schema([
                         TextInput::make('telegram_bot_token')
                             ->label('Bot token')
                             ->password()
                             ->revealable()
-                            ->helperText('Kosongkan bila ingin mempertahankan token yang ada.')
+                            ->helperText('Kosongkan jika tidak diubah.')
                             ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
                             ->dehydrated(fn (?string $state): bool => filled($state)),
                     ]),

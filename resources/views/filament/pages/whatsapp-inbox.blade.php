@@ -734,7 +734,7 @@
             >
                 @if ($this->composingNew)
                     <div class="wa-inbox-newchat">
-                        <input type="text" wire:model="newRecipient" placeholder="Nomor tujuan, contoh 081234567890" aria-label="Nomor tujuan">
+                        <input type="text" wire:model="newRecipient" placeholder="081234567890" aria-label="Nomor tujuan">
                     </div>
                 @endif
                 <div

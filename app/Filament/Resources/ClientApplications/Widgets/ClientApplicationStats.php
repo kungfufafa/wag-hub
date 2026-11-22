@@ -19,13 +19,10 @@ class ClientApplicationStats extends StatsOverviewWidget
 
         return [
             Stat::make('Aplikasi', $total)
-                ->description('Semua aplikasi sumber')
                 ->color('gray'),
             Stat::make('Aktif', $active)
-                ->description('Boleh mengirim pesan')
                 ->color('success'),
             Stat::make('Nonaktif', $total - $active)
-                ->description('Pengiriman dihentikan')
                 ->color('warning'),
         ];
     }

@@ -16,7 +16,6 @@ use Filament\Infolists\Components\RepeatableEntry\TableColumn;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View as SchemaView;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -142,13 +141,9 @@ class GatewayMessageResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return $schema
-            ->columns([
-                'default' => 1,
-                'lg' => 3,
-            ])
+            ->columns(1)
             ->components([
                 Section::make('Ringkasan')
-                    ->description(fn (GatewayMessage $record): string => static::statusExplanation($record))
                     ->schema([
                         TextEntry::make('status')
                             ->label('Status')
@@ -203,22 +198,8 @@ class GatewayMessageResource extends Resource
                         'default' => 1,
                         'md' => 2,
                     ])
-                    ->columnSpan([
-                        'default' => 'full',
-                        'lg' => 2,
-                    ]),
-                Section::make('Langkah berikutnya')
-                    ->description(fn (GatewayMessage $record): string => static::guidanceHeading($record))
-                    ->schema([
-                        Text::make(fn (GatewayMessage $record): string => static::guidanceBody($record))
-                            ->columnSpanFull(),
-                    ])
-                    ->columnSpan([
-                        'default' => 'full',
-                        'lg' => 1,
-                    ]),
+                    ->columnSpanFull(),
                 Section::make('Isi pesan')
-                    ->description('Salin teks ini, lalu tempel di WhatsApp.')
                     ->headerActions([
                         Action::make('copyForWhatsApp')
                             ->label('Salin untuk WhatsApp')
@@ -234,7 +215,6 @@ class GatewayMessageResource extends Resource
                     ])
                     ->columnSpanFull(),
                 Section::make('Perjalanan')
-                    ->description('Tahap yang sudah terjadi, dari dibuat sampai hasil terakhir.')
                     ->schema([
                         RepeatableEntry::make('lifecycle')
                             ->hiddenLabel()
@@ -261,7 +241,6 @@ class GatewayMessageResource extends Resource
                     ])
                     ->columnSpanFull(),
                 Section::make('Percobaan')
-                    ->description('Urutan provider yang dicoba. Yang paling atas dicoba lebih dulu.')
                     ->schema([
                         RepeatableEntry::make('attempts')
                             ->hiddenLabel()
@@ -294,7 +273,6 @@ class GatewayMessageResource extends Resource
                     ])
                     ->columnSpanFull(),
                 Section::make('Detail teknis')
-                    ->description('ID pendukung dan jejak event untuk audit.')
                     ->collapsed()
                     ->schema([
                         TextEntry::make('correlation_id')
@@ -465,52 +443,6 @@ class GatewayMessageResource extends Resource
             'expired' => 'Kedaluwarsa',
             'dead_letter' => 'Dihentikan',
             default => (string) str($status)->replace('_', ' ')->title(),
-        };
-    }
-
-    public static function statusExplanation(GatewayMessage $record): string
-    {
-        return match ($record->status) {
-            'queued' => 'Pesan menunggu giliran untuk dikirim.',
-            'processing' => 'Hub sedang menghubungi provider WhatsApp.',
-            'provider_accepted' => 'Provider sudah menerima pesan ini.',
-            'failed' => 'Provider tidak berhasil mengirim pesan.',
-            'outcome_unknown' => 'Tidak yakin apakah provider menerima pesan.',
-            'expired' => 'Batas waktu kirim sudah lewat.',
-            'dead_letter' => 'Hub berhenti mencoba mengirim pesan ini.',
-            default => 'Periksa status dan jejak percobaan di bawah.',
-        };
-    }
-
-    public static function guidanceHeading(GatewayMessage $record): string
-    {
-        return match ($record->status) {
-            'queued' => 'Menunggu pengiriman',
-            'processing' => 'Sedang dikirim',
-            'provider_accepted' => 'Tidak perlu tindakan',
-            'failed' => $record->isSafeToRetry() ? 'Bisa dikirim ulang' : 'Tidak bisa dikirim ulang',
-            'outcome_unknown' => $record->isSafeToRetry() ? 'Perlu dicek sebelum kirim ulang' : 'Tidak bisa dikirim ulang',
-            'expired' => 'Sudah kedaluwarsa',
-            'dead_letter' => 'Pengiriman dihentikan',
-            default => 'Periksa status pesan',
-        };
-    }
-
-    public static function guidanceBody(GatewayMessage $record): string
-    {
-        return match ($record->status) {
-            'queued' => 'Pesan menunggu giliran. Muat ulang halaman jika status belum berubah.',
-            'processing' => 'Hub sedang menghubungi provider. Muat ulang untuk melihat hasilnya.',
-            'provider_accepted' => 'Provider sudah menerima pesan. Tidak perlu kirim ulang.',
-            'failed' => $record->isSafeToRetry()
-                ? 'Pengiriman gagal. Gunakan tombol Coba kirim ulang di atas. Riwayat percobaan lama tetap tersimpan.'
-                : 'Pesan gagal dan sudah melewati batas waktu. Minta aplikasi sumber mengirim pesan baru.',
-            'outcome_unknown' => $record->isSafeToRetry()
-                ? 'Tidak dapat dipastikan apakah provider menerima pesan. Kirim ulang berisiko penerima mendapat pesan ganda. Gunakan tombol Coba kirim ulang hanya jika Anda yakin.'
-                : 'Hasil pengiriman tidak pasti dan pesan sudah melewati batas waktu. Jangan kirim ulang dari sini.',
-            'expired' => 'Batas waktu pesan sudah lewat. Aplikasi sumber harus mengirim pesan baru dengan kunci idempotensi baru.',
-            'dead_letter' => 'Hub berhenti mencoba. Periksa akun provider, lalu kirim pesan baru dari aplikasi sumber.',
-            default => 'Muat ulang halaman jika status belum sesuai harapan.',
         };
     }
 

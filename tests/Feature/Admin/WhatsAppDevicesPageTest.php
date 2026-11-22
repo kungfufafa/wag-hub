@@ -51,8 +51,7 @@ class WhatsAppDevicesPageTest extends TestCase
             ->assertSee('Nomor gateway')
             ->assertSee('Nomor aplikasi')
             ->assertSee($host->name)
-            ->assertSee($linked->name)
-            ->assertSee('perangkat WAHA');
+            ->assertSee($linked->name);
 
         $this->assertSame([$host->id], $page->instance()->hostDevices()->pluck('id')->all());
         $this->assertSame([$linked->id], $page->instance()->linkedDevices()->pluck('id')->all());

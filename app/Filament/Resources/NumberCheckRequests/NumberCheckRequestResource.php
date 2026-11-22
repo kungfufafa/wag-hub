@@ -176,7 +176,6 @@ class NumberCheckRequestResource extends Resource
                     ])
                     ->columnSpanFull(),
                 Section::make('Percobaan provider')
-                    ->description('Urutan provider yang diperiksa, dilewati, atau tidak mendukung lookup.')
                     ->schema([
                         RepeatableEntry::make('attempts')
                             ->hiddenLabel()

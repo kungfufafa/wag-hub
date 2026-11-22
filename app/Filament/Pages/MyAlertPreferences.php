@@ -80,7 +80,6 @@ class MyAlertPreferences extends Page
         return $schema
             ->components([
                 Section::make('Telegram')
-                    ->description('Preferensi penerima alert via Telegram untuk akun Anda.')
                     ->schema([
                         Toggle::make('telegram_enabled')
                             ->label('Telegram aktif')
@@ -91,7 +90,6 @@ class MyAlertPreferences extends Page
                     ])
                     ->columns(['md' => 2]),
                 Section::make('Email')
-                    ->description('Preferensi penerima alert via email untuk akun Anda.')
                     ->schema([
                         Toggle::make('email_enabled')
                             ->label('Email aktif')

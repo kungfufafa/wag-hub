@@ -20,13 +20,10 @@ class RoutingPolicyStats extends StatsOverviewWidget
 
         return [
             Stat::make('Aturan rute', $total)
-                ->description('Semua urutan pengiriman')
                 ->color('gray'),
             Stat::make('Aktif', $active)
-                ->description('Dipakai saat mengirim')
                 ->color('success'),
             Stat::make('Default', $defaults)
-                ->description('Dipakai jika kunci rute tidak cocok')
                 ->color('info'),
         ];
     }

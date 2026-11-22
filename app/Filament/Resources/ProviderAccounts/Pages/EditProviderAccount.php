@@ -14,11 +14,6 @@ class EditProviderAccount extends EditRecord
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
-    public function getSubheading(): ?string
-    {
-        return 'Perbarui koneksi, uji akun, atau hapus provider yang tidak dipakai.';
-    }
-
     protected function getHeaderActions(): array
     {
         return [

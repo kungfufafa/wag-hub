@@ -19,7 +19,6 @@ class AutoReplyRuleForm
         return $schema
             ->components([
                 Section::make('Aturan balasan otomatis')
-                    ->description('Bot membalas pesan masuk pada nomor/akun provider terpilih. Aturan dievaluasi urut prioritas (kecil lebih dulu); balasan pertama yang cocok dikirim.')
                     ->schema([
                         Select::make('provider_account_id')
                             ->label('Akun provider (nomor)')
@@ -32,12 +31,10 @@ class AutoReplyRuleForm
                             ->native(false),
                         TextInput::make('name')
                             ->label('Nama aturan')
-                            ->placeholder('Contoh: Salam pembuka, Menu, Jam operasional')
                             ->required()
                             ->maxLength(120),
                         Select::make('match_type')
                             ->label('Pemicu')
-                            ->helperText('Kapan aturan ini dipakai.')
                             ->options([
                                 'welcome' => 'Sapaan (kontak pertama kali)',
                                 'keyword' => 'Kata kunci',
@@ -59,8 +56,6 @@ class AutoReplyRuleForm
                             ->required(fn (Get $get): bool => $get('match_type') === 'keyword'),
                         TagsInput::make('keywords')
                             ->label('Kata kunci')
-                            ->helperText('Tekan Enter tiap kata/frasa. Tidak peka huruf besar/kecil.')
-                            ->placeholder('menu, harga, halo')
                             ->visible(fn (Get $get): bool => $get('match_type') === 'keyword')
                             ->required(fn (Get $get): bool => $get('match_type') === 'keyword')
                             ->columnSpanFull(),
@@ -69,11 +64,9 @@ class AutoReplyRuleForm
                             ->rows(5)
                             ->required()
                             ->maxLength(4096)
-                            ->helperText('Untuk menu, tulis pilihan bernomor agar aman di semua channel (mis. "1. Produk\n2. Jam buka").')
                             ->columnSpanFull(),
                         TextInput::make('priority')
                             ->label('Prioritas')
-                            ->helperText('Angka kecil dievaluasi lebih dulu. Letakkan "cadangan" di prioritas paling besar.')
                             ->numeric()
                             ->default(0)
                             ->required(),

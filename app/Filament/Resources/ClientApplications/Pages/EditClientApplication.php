@@ -15,11 +15,6 @@ class EditClientApplication extends EditRecord
 
     protected Width|string|null $maxContentWidth = Width::Full;
 
-    public function getSubheading(): ?string
-    {
-        return 'Perbarui identitas aplikasi, terbitkan kredensial, atau hapus aplikasi yang tidak dipakai.';
-    }
-
     protected function getHeaderActions(): array
     {
         return [

@@ -58,7 +58,6 @@ class BotFlowsTable
                     DeleteBulkAction::make(),
                 ]),
             ])
-            ->emptyStateHeading('Belum ada menu bot')
-            ->emptyStateDescription('Buat menu bernomor untuk memandu pelanggan: jam operasional, katalog, atau serahkan ke agen.');
+            ->emptyStateHeading('Belum ada menu bot');
     }
 }

@@ -30,7 +30,7 @@ class ApiCredentialsRelationManager extends RelationManager
     {
         return Action::make('showIssuedPack')
             ->modalHeading('Salin ke .env')
-            ->modalDescription('Salin konfigurasi ini ke aplikasi Anda. Token hanya ditampilkan sekali.')
+            ->modalDescription('Token hanya ditampilkan sekali.')
             ->modalIcon(Heroicon::OutlinedClipboardDocumentList)
             ->modalIconColor('success')
             ->modalWidth(Width::Large)
@@ -75,7 +75,7 @@ class ApiCredentialsRelationManager extends RelationManager
     {
         return Action::make('showIssuedToken')
             ->modalHeading('Kredensial berhasil dibuat')
-            ->modalDescription('Salin token sekarang. Setelah modal ditutup, token tidak dapat dilihat lagi.')
+            ->modalDescription('Token hanya ditampilkan sekali.')
             ->modalIcon(Heroicon::OutlinedKey)
             ->modalIconColor('success')
             ->schema([
@@ -231,7 +231,6 @@ class ApiCredentialsRelationManager extends RelationManager
                     ->icon(Heroicon::OutlinedSparkles)
                     ->color('primary')
                     ->modalHeading('Hubungkan aplikasi ke WhatsApp')
-                    ->modalDescription('Buat token untuk mengelola nomor WhatsApp, mengirim pesan, dan mengecek nomor dari aplikasi ini.')
                     ->modalSubmitActionLabel('Buat token')
                     ->action(function (): void {
                         /** @var ClientApplication $application */
