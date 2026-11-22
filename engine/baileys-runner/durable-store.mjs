@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { EngineError, validateSessionId } from './send-journal.mjs';
 
-export function atomicJson(file, value) {
+function atomicJson(file, value) {
     const directory = path.dirname(file);
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     const temporary = `${file}.${randomBytes(8).toString('hex')}.tmp`;
