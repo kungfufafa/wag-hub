@@ -58,7 +58,7 @@ class NumberCheckRequestResource extends Resource
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('apiCredential.name')
-                    ->label('Credential')
+                    ->label('Kredensial')
                     ->searchable(),
                 TextColumn::make('recipient_last4')
                     ->label('Nomor')

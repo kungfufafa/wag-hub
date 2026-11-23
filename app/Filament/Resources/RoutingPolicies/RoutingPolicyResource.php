@@ -96,7 +96,6 @@ class RoutingPolicyResource extends Resource
                                 ->orderColumn('position')
                                 ->compact()
                                 ->itemNumbers()
-                                ->itemHeaders(false)
                                 ->defaultItems(1)
                                 ->saveRelationshipsUsing(function (Repeater $component): void {
                                     // Filament rewrites order one row at a time. Free the unique
@@ -132,6 +131,7 @@ class RoutingPolicyResource extends Resource
                                 ->minItems(1)
                                 ->required()
                                 ->reorderable()
+                                ->deletable(fn (?array $state): bool => count($state ?? []) > 1)
                                 ->addActionLabel('Tambah cadangan'),
                         ]),
                     Section::make('Opsi lanjutan')

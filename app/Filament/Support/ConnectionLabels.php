@@ -31,6 +31,19 @@ final class ConnectionLabels
         };
     }
 
+    public static function nextStep(WhatsAppConnection $connection): string
+    {
+        $fallback = match ($connection->statusEnum()) {
+            ConnectionStatus::Ready => null,
+            ConnectionStatus::Connecting => 'Scan QR',
+            ConnectionStatus::Degraded => 'Provider temporarily unavailable',
+            default => 'Check connection settings',
+        };
+
+        return self::recommendedAction(filled($connection->recommended_action) ? $connection->recommended_action : $fallback, $connection)
+            ?? 'Siap dipakai';
+    }
+
     public static function status(ConnectionStatus $status): string
     {
         return $status === ConnectionStatus::Error ? 'Kesalahan' : $status->label();

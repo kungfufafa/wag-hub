@@ -46,7 +46,7 @@ class AutoReplyRulesTable
                     }),
                 TextColumn::make('keywords')
                     ->label('Kata kunci')
-                    ->formatStateUsing(fn (mixed $state): string => is_array($state) ? implode(', ', $state) : '')
+                    ->separator(', ')
                     ->limit(40)
                     ->placeholder('—'),
                 IconColumn::make('is_active')

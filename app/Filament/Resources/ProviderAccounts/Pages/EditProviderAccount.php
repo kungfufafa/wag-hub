@@ -82,7 +82,7 @@ class EditProviderAccount extends EditRecord
             $configuration = array_replace($this->record->configuration ?? [], $configuration);
         }
 
-        $data['configuration'] = $configuration;
+        $data['configuration'] = ProviderAccountResource::withDriverDefaults($driver, $configuration);
 
         return $data;
     }

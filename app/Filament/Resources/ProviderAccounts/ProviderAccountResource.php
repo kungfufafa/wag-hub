@@ -213,8 +213,8 @@ class ProviderAccountResource extends Resource
                         TextInput::make('configuration.base_url')
                             ->label('Graph API Base URL')
                             ->url()
-                            ->default('https://graph.facebook.com')
-                            ->required(fn (Get $get): bool => $get('driver') === 'waba')
+                            ->placeholder('https://graph.facebook.com')
+                            ->helperText('Kosongkan untuk memakai https://graph.facebook.com.')
                             ->dehydratedWhenHidden(false),
                         TextInput::make('configuration.api_version')
                             ->label('Graph API Version')
@@ -635,5 +635,18 @@ class ProviderAccountResource extends Resource
             'create' => CreateProviderAccount::route('/create'),
             'edit' => EditProviderAccount::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $configuration
+     * @return array<string, mixed>
+     */
+    public static function withDriverDefaults(?string $driver, array $configuration): array
+    {
+        if ($driver === 'waba' && blank($configuration['base_url'] ?? null)) {
+            $configuration['base_url'] = 'https://graph.facebook.com';
+        }
+
+        return $configuration;
     }
 }

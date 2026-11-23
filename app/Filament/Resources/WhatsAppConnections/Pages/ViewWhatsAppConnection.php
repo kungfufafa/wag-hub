@@ -44,7 +44,7 @@ class ViewWhatsAppConnection extends ViewRecord
         return collect([
             $record->clientApplication?->name,
             $record->typeEnum()->label(),
-            ConnectionLabels::recommendedAction($record->recommended_action, $record) ?? 'Siap dipakai',
+            ConnectionLabels::nextStep($record),
         ])->filter()->implode(' · ');
     }
 

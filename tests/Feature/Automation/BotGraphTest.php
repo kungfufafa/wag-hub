@@ -6,6 +6,7 @@ use App\Models\BotGraph;
 use App\Models\GatewayMessage;
 use App\Models\ProviderAccount;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -99,7 +100,7 @@ class BotGraphTest extends TestCase
     }
 
     /**
-     * @return \Illuminate\Support\Collection<int, GatewayMessage>
+     * @return Collection<int, GatewayMessage>
      */
     private function botReplies(ProviderAccount $provider)
     {

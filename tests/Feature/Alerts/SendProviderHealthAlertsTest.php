@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\UserAlertPreference;
 use App\Notifications\ProviderHealthChangedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\BuildsGatewayFixtures;
@@ -69,7 +70,7 @@ class SendProviderHealthAlertsTest extends TestCase
             providerName: 'Waha Fanout',
             providerSlug: 'waha-fanout',
             providerDriver: 'waha',
-            providerUuid: (string) \Illuminate\Support\Facades\DB::table('provider_accounts')->where('id', $provider['id'])->value('uuid'),
+            providerUuid: (string) DB::table('provider_accounts')->where('id', $provider['id'])->value('uuid'),
             fromStatus: 'healthy',
             toStatus: 'degraded',
             consecutiveFailures: 1,
@@ -120,7 +121,7 @@ class SendProviderHealthAlertsTest extends TestCase
             providerName: 'Waha Async',
             providerSlug: 'waha-async-fanout',
             providerDriver: 'waha',
-            providerUuid: (string) \Illuminate\Support\Facades\DB::table('provider_accounts')->where('id', $provider['id'])->value('uuid'),
+            providerUuid: (string) DB::table('provider_accounts')->where('id', $provider['id'])->value('uuid'),
             fromStatus: 'healthy',
             toStatus: 'degraded',
             consecutiveFailures: 1,
@@ -155,7 +156,7 @@ class SendProviderHealthAlertsTest extends TestCase
             providerName: 'Off',
             providerSlug: 'waha-off',
             providerDriver: 'waha',
-            providerUuid: (string) \Illuminate\Support\Facades\DB::table('provider_accounts')->where('id', $provider['id'])->value('uuid'),
+            providerUuid: (string) DB::table('provider_accounts')->where('id', $provider['id'])->value('uuid'),
             fromStatus: 'healthy',
             toStatus: 'degraded',
             consecutiveFailures: 1,
@@ -191,7 +192,7 @@ class SendProviderHealthAlertsTest extends TestCase
             'api_key' => 'x',
             'session' => 'default',
         ]);
-        $uuid = (string) \Illuminate\Support\Facades\DB::table('provider_accounts')->where('id', $provider['id'])->value('uuid');
+        $uuid = (string) DB::table('provider_accounts')->where('id', $provider['id'])->value('uuid');
 
         event(new ProviderHealthChanged(
             providerAccountId: $provider['id'],

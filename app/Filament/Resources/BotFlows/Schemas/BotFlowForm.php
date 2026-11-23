@@ -62,7 +62,8 @@ class BotFlowForm
                             ->default(10)
                             ->required(),
                     ])
-                    ->columns(['md' => 2]),
+                    ->columns(['md' => 2])
+                    ->columnSpanFull(),
                 Section::make('Isi menu')
                     ->schema([
                         Textarea::make('header')
@@ -76,6 +77,7 @@ class BotFlowForm
                                 TextInput::make('key')
                                     ->label('Kunci')
                                     ->required()
+                                    ->distinct()
                                     ->maxLength(12),
                                 TextInput::make('label')
                                     ->label('Judul pilihan')
@@ -94,7 +96,8 @@ class BotFlowForm
                                 Textarea::make('reply')
                                     ->label(fn (Get $get): string => $get('action') === 'handoff' ? 'Pesan sebelum diserahkan' : 'Isi balasan')
                                     ->rows(3)
-                                    ->required(fn (Get $get): bool => $get('action') === 'reply'),
+                                    ->required(fn (Get $get): bool => $get('action') === 'reply')
+                                    ->columnSpanFull(),
                             ])
                             ->columns(['md' => 3])
                             ->itemLabel(fn (array $state): ?string => filled($state['label'] ?? null) ? ($state['key'] ?? '').'. '.$state['label'] : null)
@@ -112,7 +115,8 @@ class BotFlowForm
                             ->label('Balasan bila pilihan tidak dikenali (opsional)')
                             ->rows(2)
                             ->columnSpanFull(),
-                    ]),
+                    ])
+                    ->columnSpanFull(),
             ]);
     }
 }

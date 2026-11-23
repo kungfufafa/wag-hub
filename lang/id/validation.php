@@ -23,6 +23,7 @@ return [
     'confirmed' => 'Konfirmasi :attribute tidak cocok.',
     'date' => ':attribute bukan tanggal yang valid.',
     'date_format' => ':attribute tidak sesuai format :format.',
+    'distinct' => ':attribute memiliki nilai duplikat.',
     'different' => ':attribute dan :other harus berbeda.',
     'digits' => ':attribute harus terdiri dari :digits digit.',
     'digits_between' => ':attribute harus terdiri dari :min sampai :max digit.',

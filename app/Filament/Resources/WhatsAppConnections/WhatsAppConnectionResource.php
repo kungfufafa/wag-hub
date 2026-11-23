@@ -66,8 +66,7 @@ class WhatsAppConnectionResource extends Resource
                     ->color(fn (mixed $state): string => $state ? 'success' : 'gray'),
                 TextColumn::make('recommended_action')
                     ->label('Langkah berikutnya')
-                    ->formatStateUsing(fn (string $state, WhatsAppConnection $record): ?string => ConnectionLabels::recommendedAction($state, $record))
-                    ->placeholder('Siap dipakai'),
+                    ->state(fn (WhatsAppConnection $record): string => ConnectionLabels::nextStep($record)),
                 TextColumn::make('updated_at')
                     ->label('Diperbarui')
                     ->since()
