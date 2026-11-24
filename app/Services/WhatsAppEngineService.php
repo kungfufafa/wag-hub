@@ -613,14 +613,6 @@ class WhatsAppEngineService
         };
     }
 
-    /**
-     * @deprecated Use normalizeStatus instead. Retained for backward compatibility.
-     */
-    protected function cesaStatus(SessionStatus $status, string $mode): string
-    {
-        return $this->normalizeStatus($status, $mode);
-    }
-
     protected function storedMode(ProviderAccount $account): string
     {
         $mode = $account->configuration['engine_mode'] ?? $account->configuration['cesa_mode'] ?? 'qr';
