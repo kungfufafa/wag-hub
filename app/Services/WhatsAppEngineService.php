@@ -91,7 +91,7 @@ class WhatsAppEngineService
         $this->sessions->connect($account, $pairingPhone);
         $account->refresh();
 
-        return $this->publicSession($account, $sessionId, $mode, includeSecrets: true);
+        return $this->publicSession($account, $sessionId, $mode);
     }
 
     /**
@@ -113,7 +113,7 @@ class WhatsAppEngineService
         $this->sessions->refresh($account);
         $account->refresh();
 
-        return $this->publicSession($account, $sessionId, $this->storedMode($account), includeSecrets: true);
+        return $this->publicSession($account, $sessionId, $this->storedMode($account));
     }
 
     /**
@@ -554,7 +554,7 @@ class WhatsAppEngineService
     /**
      * @return array<string, mixed>
      */
-    protected function publicSession(ProviderAccount $account, string $sessionId, string $mode, bool $includeSecrets): array
+    protected function publicSession(ProviderAccount $account, string $sessionId, string $mode): array
     {
         $hubStatus = $account->sessionStatus();
         $status = $this->normalizeStatus($hubStatus, $mode);
@@ -563,11 +563,11 @@ class WhatsAppEngineService
         $qr = null;
         $pairingCode = null;
 
-        if ($includeSecrets && $status === 'qr') {
+        if ($status === 'qr') {
             $qr = $this->sessions->qrDataUri($account);
         }
 
-        if ($includeSecrets && $status === 'pairing') {
+        if ($status === 'pairing') {
             $pairingCode = $this->sessions->pairingCode($account) ?? (isset($meta['pairing_code']) ? (string) $meta['pairing_code'] : null);
         }
 
