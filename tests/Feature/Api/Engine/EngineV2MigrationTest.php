@@ -120,4 +120,19 @@ class EngineV2MigrationTest extends TestCase
         $this->getJson('/api/v1/engine/health')->assertStatus(410)->assertJsonPath('error.code', 'legacy_retired');
         $this->withToken($second['token'])->getJson('/api/v2/integration')->assertOk();
     }
+
+    public function test_legacy_traffic_touch_creates_the_integration_and_is_written_at_most_once_a_minute(): void
+    {
+        $client = $this->createClientApplication(['engine:use']);
+        Http::fake(['*/health' => Http::response(['ok' => true])]);
+        $this->withToken($client['token'])->getJson('/api/v1/engine/health');
+        $first = EngineIntegration::where('client_application_id', $client['id'])->firstOrFail()->last_legacy_request_at;
+        $this->assertNotNull($first);
+        $this->travel(30)->seconds();
+        $this->withToken($client['token'])->getJson('/api/v1/engine/health');
+        $this->assertTrue($first->eq(EngineIntegration::where('client_application_id', $client['id'])->firstOrFail()->last_legacy_request_at));
+        $this->travel(31)->seconds();
+        $this->withToken($client['token'])->getJson('/api/v1/engine/health');
+        $this->assertTrue(EngineIntegration::where('client_application_id', $client['id'])->firstOrFail()->last_legacy_request_at->gt($first));
+    }
 }
