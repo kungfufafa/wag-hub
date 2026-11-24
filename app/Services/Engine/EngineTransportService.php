@@ -52,8 +52,9 @@ class EngineTransportService
         }
         try {
             $message = DB::transaction(function () use ($application, $sessionUuid, $normalized, $key, $hash, $attachment, $expiresAt): EngineMessage {
+                // Shared: concurrent sends on one session proceed together; lifecycle changes still wait (FOR UPDATE).
                 $session = EngineSession::query()->where('client_application_id', $application->id)
-                    ->where('uuid', $sessionUuid)->lockForUpdate()->first();
+                    ->where('uuid', $sessionUuid)->sharedLock()->first();
                 if ($session === null) {
                     throw new WhatsAppEngineException('Session not found.', 404, 'session_not_found');
                 }
