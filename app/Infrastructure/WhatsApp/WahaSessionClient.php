@@ -42,18 +42,19 @@ final readonly class WahaSessionClient
         $session = $this->session($account);
         $webhookSecret = $this->webhookSecret($account);
 
+        $config = [
+            'webhooks' => [[
+                'url' => url('/webhooks/whatsapp/'.$account->uuid),
+                'events' => ['message', 'message.any', 'session.status'],
+                'customHeaders' => [['name' => 'X-Webhook-Token', 'value' => $webhookSecret]],
+            ]],
+        ];
+
         // Create-or-ignore: newer WAHA merges create+start, older needs create first.
-        $this->postJson($account, '/api/sessions', [
-            'name' => $session,
-            'start' => true,
-            'config' => [
-                'webhooks' => [[
-                    'url' => url('/webhooks/whatsapp/'.$account->uuid),
-                    'events' => ['message', 'message.any', 'session.status'],
-                    'customHeaders' => [['name' => 'X-Webhook-Token', 'value' => $webhookSecret]],
-                ]],
-            ],
-        ]);
+        $this->postJson($account, '/api/sessions', ['name' => $session, 'start' => true, 'config' => $config]);
+
+        // Create is rejected for an existing session, so push the webhook config explicitly.
+        $this->putJson($account, '/api/sessions/'.$session, ['name' => $session, 'config' => $config]);
 
         $this->postJson($account, '/api/sessions/'.$session.'/start', []);
 
@@ -211,6 +212,18 @@ final readonly class WahaSessionClient
         $json = $response->json();
 
         return is_array($json) ? $json : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function putJson(ProviderAccount $account, string $path, array $payload): void
+    {
+        try {
+            $this->request($account, $path)->asJson()->put($this->url($account, $path), $payload);
+        } catch (Throwable) {
+            return;
+        }
     }
 
     private function request(ProviderAccount $account, string $path): PendingRequest

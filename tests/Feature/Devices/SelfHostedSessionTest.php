@@ -6,6 +6,7 @@ use App\Models\InboxMessage;
 use App\Models\ProviderAccount;
 use App\Services\WhatsAppSessionManager;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -32,6 +33,11 @@ class SelfHostedSessionTest extends TestCase
         $this->assertSame('scan_qr', $status->value);
         $this->assertSame('scan_qr', $provider->fresh()->session_status);
         $this->assertNotNull($provider->fresh()->session_synced_at);
+
+        $secret = $provider->fresh()->configuration['webhook_secret'];
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+            && str_ends_with($request->url(), '/api/sessions/default')
+            && $request['config']['webhooks'][0]['customHeaders'] === [['name' => 'X-Webhook-Token', 'value' => $secret]]);
     }
 
     public function test_qr_is_returned_as_a_data_uri(): void

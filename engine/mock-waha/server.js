@@ -84,6 +84,12 @@ app.post('/api/sessions', (req, res) => {
   res.status(201).json(doc(s));
 });
 
+app.put('/api/sessions/:name', (req, res) => {
+  const s = getOrCreate(req.params.name);
+  s.webhooks = req.body?.config?.webhooks || s.webhooks;
+  res.json(doc(s));
+});
+
 app.post('/api/sessions/:name/start', (req, res) => {
   const s = getOrCreate(req.params.name);
   if (s.status !== 'WORKING') toScanQr(s);
