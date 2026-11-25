@@ -5,6 +5,7 @@ namespace App\Infrastructure\WhatsApp;
 use App\Models\ProviderAccount;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
 
@@ -39,6 +40,7 @@ final readonly class WahaSessionClient
     public function start(ProviderAccount $account): ?array
     {
         $session = $this->session($account);
+        $webhookSecret = $this->webhookSecret($account);
 
         // Create-or-ignore: newer WAHA merges create+start, older needs create first.
         $this->postJson($account, '/api/sessions', [
@@ -48,6 +50,7 @@ final readonly class WahaSessionClient
                 'webhooks' => [[
                     'url' => url('/webhooks/whatsapp/'.$account->uuid),
                     'events' => ['message', 'message.any', 'session.status'],
+                    'customHeaders' => [['name' => 'X-Webhook-Token', 'value' => $webhookSecret]],
                 ]],
             ],
         ]);
@@ -145,6 +148,20 @@ final readonly class WahaSessionClient
         }
 
         return null;
+    }
+
+    /** The inbound webhook rejects unauthenticated posts, so a session never registers without a token. */
+    private function webhookSecret(ProviderAccount $account): string
+    {
+        $configuration = $account->configuration ?? [];
+        $secret = InboxPayload::string($configuration['webhook_secret'] ?? null);
+
+        if ($secret === null) {
+            $secret = Str::random(48);
+            $account->forceFill(['configuration' => array_replace($configuration, ['webhook_secret' => $secret])])->save();
+        }
+
+        return $secret;
     }
 
     private function session(ProviderAccount $account): string

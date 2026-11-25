@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\V2;
 
 use App\Exceptions\WhatsAppEngineException;
+use App\Infrastructure\WhatsApp\HostResolver;
 use App\Jobs\EngineDeliverWebhook;
 use App\Jobs\EngineDispatchMessage;
 use App\Models\ClientApplication;
@@ -430,6 +431,44 @@ class EngineTransportTest extends TestCase
         $this->assertSame('', $guard->options('https://8.8.8.8/events')['proxy']);
         $this->assertSame('', $guard->options('https://[2001:4860:4860::8888]/events')['proxy']);
         Http::assertNothingSent();
+    }
+
+    public function test_webhook_destination_matches_the_provider_endpoint_guard(): void
+    {
+        config(['engine_v2.webhook_allow_private_hosts' => []]);
+        $guard = app(WebhookDestination::class);
+        foreach (['https://example.com./events', 'https://[64:ff9b::a9fe:a9fe]/events', 'https://[64:ff9b:1::1]/events',
+            'https://[2002:a9fe:a9fe::1]/events', 'https://2130706433/events', 'https://localhost/events'] as $url) {
+            foreach (['options', 'assertAllowed'] as $method) {
+                try {
+                    $guard->{$method}($url);
+                    $this->fail('Expected destination to be blocked: '.$url);
+                } catch (WhatsAppEngineException $exception) {
+                    $this->assertSame('webhook_destination_blocked', $exception->errorCode);
+                }
+            }
+        }
+
+        $this->app->instance(HostResolver::class, new class extends HostResolver
+        {
+            public function resolve(string $host): array
+            {
+                return ['64:ff9b::a9fe:a9fe'];
+            }
+        });
+        try {
+            app(WebhookDestination::class)->options('https://nat64.example.com/events');
+            $this->fail('Expected a NAT64-resolving host to be blocked.');
+        } catch (WhatsAppEngineException $exception) {
+            $this->assertSame('webhook_destination_blocked', $exception->errorCode);
+        }
+
+        $options = $guard->options('https://hooks.example.com/events');
+        $this->assertSame(['hooks.example.com:443:93.184.216.34'], $options['curl'][CURLOPT_RESOLVE]);
+        $this->assertSame('', $options['proxy']);
+
+        $this->expectException(WhatsAppEngineException::class);
+        $guard->options('http://hooks.example.com/events');
     }
 
     private function assertIneligibleWebhookDoesNotStarve(string $reason): void

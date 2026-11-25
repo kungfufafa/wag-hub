@@ -86,7 +86,7 @@ class BotGraphTest extends TestCase
 
     private function inbound(ProviderAccount $provider, string $id, string $body): void
     {
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$provider->uuid, [
             'event' => 'message',
             'payload' => [
                 'id' => $id,
@@ -118,6 +118,7 @@ class BotGraphTest extends TestCase
             $this->createProviderAccount('waha', 'waha-graph', [
                 'base_url' => 'https://waha-graph.test',
                 'session' => 'default',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
     }

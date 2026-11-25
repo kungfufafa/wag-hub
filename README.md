@@ -275,7 +275,7 @@ Tetap berjalan untuk klien lama, kontraknya tidak berubah
 - `POST /api/v1/messages` (dengan `route_key`, `purpose`, `mode` `sync`/`async`), `GET /api/v1/messages/{uuid}`
 - `POST /api/v1/attachments`, `GET /api/v1/attachments/{uuid}`
 - `/api/v1/engine/*` dan `/engine/*` (sesi per user dengan token `engine:use`, lihat [CESA_WEB.md](docs/CESA_WEB.md))
-- Webhook masuk provider: `/webhooks/whatsapp/{provider}`
+- Webhook masuk provider: `/webhooks/whatsapp/{provider}` — wajib terautentikasi: WAHA/Fonnte/GOWA memakai token webhook (`?token=` atau header `X-Webhook-Token`); WABA memakai `X-Hub-Signature-256` (HMAC-SHA256 body dengan Meta App Secret). Akun tanpa secret menolak semua webhook.
 
 Status ledger v1: `queued`, `processing`, `provider_accepted`, `failed`, `outcome_unknown`,
 `expired`. Kegagalan definitif berpindah ke provider berikutnya; timeout/5xx/ambigu menjadi

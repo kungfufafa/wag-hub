@@ -236,6 +236,14 @@ class ProviderAccountResource extends Resource
                             ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
                             ->dehydrated(fn (?string $state): bool => filled($state))
                             ->dehydratedWhenHidden(false),
+                        TextInput::make('configuration.app_secret')
+                            ->label('Meta App Secret')
+                            ->password()
+                            ->revealable()
+                            ->helperText('Dipakai untuk memverifikasi X-Hub-Signature-256 pada webhook masuk. Tanpa ini webhook WABA ditolak. Kosongkan jika tidak diubah.')
+                            ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
+                            ->dehydrated(fn (?string $state): bool => filled($state))
+                            ->dehydratedWhenHidden(false),
                     ])
                     ->visible(fn (Get $get): bool => $get('driver') === 'waba')
                     ->columns(['md' => 2]),
@@ -251,10 +259,10 @@ class ProviderAccountResource extends Resource
                                 return url('/webhooks/whatsapp/'.$record->uuid);
                             }),
                         TextInput::make('configuration.webhook_secret')
-                            ->label('Token webhook (opsional)')
+                            ->label('Token webhook')
                             ->password()
                             ->revealable()
-                            ->helperText('Kosongkan jika tidak diubah.')
+                            ->helperText('Wajib agar webhook diterima: kirim sebagai ?token=, header X-Webhook-Token, atau verify token WABA. Kosongkan jika tidak diubah.')
                             ->afterStateHydrated(fn (TextInput $component) => $component->state(null))
                             ->dehydrated(fn (?string $state): bool => filled($state)),
                     ]),

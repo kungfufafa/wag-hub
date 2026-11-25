@@ -95,7 +95,7 @@ class BotFlowTest extends TestCase
 
     private function inbound(ProviderAccount $provider, string $id, string $body): void
     {
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$provider->uuid, [
             'event' => 'message',
             'payload' => [
                 'id' => $id,
@@ -127,6 +127,7 @@ class BotFlowTest extends TestCase
             $this->createProviderAccount('waha', 'waha-flow', [
                 'base_url' => 'https://waha-flow.test',
                 'session' => 'default',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
     }

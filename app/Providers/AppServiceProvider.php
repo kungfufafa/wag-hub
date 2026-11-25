@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Events\ProviderHealthChanged;
 use App\Http\Middleware\TrustCurrentHostForLogViewer;
+use App\Models\User;
 use App\Notifications\Channels\TelegramChannel;
 use App\Services\Alerts\SendProviderHealthAlerts;
 use Filament\Support\Assets\Js;
@@ -66,7 +67,7 @@ class AppServiceProvider extends ServiceProvider
             ],
         ]);
 
-        // Restrict the log viewer (/log-viewer) to admin users.
-        LogViewer::auth(fn ($request): bool => (bool) optional($request->user())->is_admin);
+        // Restrict the log viewer (/log-viewer) to active admin users.
+        LogViewer::auth(fn ($request): bool => $request->user() instanceof User && $request->user()->isActiveAdmin());
     }
 }

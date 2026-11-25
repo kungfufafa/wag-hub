@@ -68,7 +68,7 @@ class SelfHostedSessionTest extends TestCase
     {
         $provider = $this->wahaProvider();
 
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$provider->uuid, [
             'event' => 'session.status',
             'payload' => [
                 'name' => 'default',
@@ -90,6 +90,7 @@ class SelfHostedSessionTest extends TestCase
                 'base_url' => 'https://waha-engine.test',
                 'session' => 'default',
                 'api_key' => 'secret-key',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
     }

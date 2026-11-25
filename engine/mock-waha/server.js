@@ -28,7 +28,10 @@ async function fireWebhook(s, event, payload) {
     try {
       await fetch(wh.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...Object.fromEntries((wh.customHeaders || []).map((h) => [h.name, h.value])),
+        },
         body: JSON.stringify({ event, session: s.name, payload }),
       });
       console.log(`[mock] webhook ${event} -> ${wh.url}`);
