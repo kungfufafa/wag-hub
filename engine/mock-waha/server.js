@@ -19,7 +19,7 @@ function getOrCreate(name) {
 }
 
 function doc(s) {
-  return { name: s.name, status: s.status, me: s.me, engine: { engine: 'NOWEB' }, config: { webhooks: s.webhooks } };
+  return { name: s.name, status: s.status, me: s.me, engine: { engine: 'NOWEB' }, config: { webhooks: s.webhooks.map(({ customHeaders, ...wh }) => wh) } };
 }
 
 async function fireWebhook(s, event, payload) {
