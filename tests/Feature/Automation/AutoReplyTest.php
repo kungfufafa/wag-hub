@@ -88,7 +88,7 @@ class AutoReplyTest extends TestCase
 
     private function sendInbound(ProviderAccount $provider, string $id, string $body, string $from = '628111000111@c.us'): void
     {
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$provider->uuid, [
             'event' => 'message',
             'payload' => [
                 'id' => $id,
@@ -141,6 +141,7 @@ class AutoReplyTest extends TestCase
             $this->createProviderAccount('waha', 'waha-bot', [
                 'base_url' => 'https://waha-bot.test',
                 'session' => 'default',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
     }

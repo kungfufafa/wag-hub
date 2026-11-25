@@ -82,7 +82,7 @@ final class WhatsAppWebhookController extends Controller
         $secret = $this->webhookSecret($account);
 
         if ($mode === 'subscribe' && is_string($challenge) && $challenge !== '') {
-            if ($secret === null || (is_string($token) && hash_equals($secret, $token))) {
+            if ($secret !== null && is_string($token) && hash_equals($secret, $token)) {
                 return response($challenge, 200)->header('Content-Type', 'text/plain');
             }
 
@@ -95,13 +95,13 @@ final class WhatsAppWebhookController extends Controller
     private function tokenMatches(Request $request, ProviderAccount $account): bool
     {
         if ($account->driver === 'waba') {
-            return true;
+            return $this->wabaSignatureMatches($request, $account);
         }
 
         $secret = $this->webhookSecret($account);
 
         if ($secret === null) {
-            return true;
+            return false;
         }
 
         $provided = $request->query('token')
@@ -109,6 +109,21 @@ final class WhatsAppWebhookController extends Controller
             ?? $request->header('X-Api-Key');
 
         return is_string($provided) && $provided !== '' && hash_equals($secret, $provided);
+    }
+
+    /** Meta signs every delivery with HMAC-SHA256 of the raw body keyed by the app secret. */
+    private function wabaSignatureMatches(Request $request, ProviderAccount $account): bool
+    {
+        $appSecret = $this->string(($account->configuration ?? [])['app_secret'] ?? null);
+        $signature = $request->header('X-Hub-Signature-256');
+
+        if ($appSecret === null || ! is_string($signature) || ! str_starts_with($signature, 'sha256=')) {
+            return false;
+        }
+
+        $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $appSecret);
+
+        return hash_equals($expected, strtolower($signature));
     }
 
     private function webhookSecret(ProviderAccount $account): ?string

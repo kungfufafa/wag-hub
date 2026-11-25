@@ -337,6 +337,7 @@ class WhatsAppInboxTest extends TestCase
             $this->createProviderAccount('fonnte', 'fonnte-wrap', [
                 'endpoint' => 'https://api.fonnte.com/send',
                 'token' => 'fonnte-secret',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
 
@@ -355,7 +356,7 @@ class WhatsAppInboxTest extends TestCase
             ]),
         ]);
 
-        $this->postJson('/webhooks/whatsapp/'.$fonnte->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$fonnte->uuid, [
             'sender' => '628555444333',
             'message' => 'Dari Fonnte',
             'name' => 'Sinta',
@@ -412,6 +413,7 @@ class WhatsAppInboxTest extends TestCase
             $this->createProviderAccount('fonnte', 'fonnte-wrap-query', [
                 'endpoint' => 'https://api.fonnte.com/send',
                 'token' => 'fonnte-secret',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
 
@@ -430,7 +432,7 @@ class WhatsAppInboxTest extends TestCase
             ]),
         ]);
 
-        $this->postJson('/webhooks/whatsapp/'.$fonnte->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$fonnte->uuid, [
             'sender' => '628555444333',
             'message' => 'Dari Fonnte',
             'name' => 'Sinta',
@@ -453,6 +455,7 @@ class WhatsAppInboxTest extends TestCase
                 'base_url' => 'https://waha-hook.test',
                 'session' => 'default',
                 'api_key' => 'waha-secret',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
 
@@ -460,7 +463,7 @@ class WhatsAppInboxTest extends TestCase
             'waha-hook.test/*' => Http::response([]),
         ]);
 
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$provider->uuid, [
             'event' => 'message',
             'session' => 'default',
             'payload' => [
@@ -632,6 +635,7 @@ class WhatsAppInboxTest extends TestCase
                 'base_url' => 'https://gowa-inbox-inbound.test',
                 'username' => 'gateway',
                 'password' => 'secret',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
 
@@ -639,7 +643,7 @@ class WhatsAppInboxTest extends TestCase
             'gowa-inbox-inbound.test/*' => Http::response([]),
         ]);
 
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$provider->uuid, [
             'sender_id' => '628777666555',
             'chat_id' => '628777666555@s.whatsapp.net',
             'from' => '628777666555@s.whatsapp.net',
@@ -676,10 +680,11 @@ class WhatsAppInboxTest extends TestCase
                 'api_version' => 'v25.0',
                 'phone_number_id' => '123456789012345',
                 'access_token' => 'meta-token',
+                'app_secret' => 'meta-app-secret',
             ])['id'],
         );
 
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $payload = [
             'object' => 'whatsapp_business_account',
             'entry' => [
                 [
@@ -703,7 +708,11 @@ class WhatsAppInboxTest extends TestCase
                     ],
                 ],
             ],
-        ])->assertOk();
+        ];
+
+        $this->withHeader('X-Hub-Signature-256', 'sha256='.hash_hmac('sha256', (string) json_encode($payload), 'meta-app-secret'))
+            ->postJson('/webhooks/whatsapp/'.$provider->uuid, $payload)
+            ->assertOk();
 
         $page = Livewire::test(WhatsAppInbox::class)
             ->set('providerId', $provider->id)

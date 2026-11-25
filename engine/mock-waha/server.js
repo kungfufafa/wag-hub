@@ -19,7 +19,7 @@ function getOrCreate(name) {
 }
 
 function doc(s) {
-  return { name: s.name, status: s.status, me: s.me, engine: { engine: 'NOWEB' } };
+  return { name: s.name, status: s.status, me: s.me, engine: { engine: 'NOWEB' }, config: { webhooks: s.webhooks.map(({ customHeaders, ...wh }) => wh) } };
 }
 
 async function fireWebhook(s, event, payload) {
@@ -28,7 +28,10 @@ async function fireWebhook(s, event, payload) {
     try {
       await fetch(wh.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...Object.fromEntries((wh.customHeaders || []).map((h) => [h.name, h.value])),
+        },
         body: JSON.stringify({ event, session: s.name, payload }),
       });
       console.log(`[mock] webhook ${event} -> ${wh.url}`);
@@ -79,6 +82,12 @@ app.post('/api/sessions', (req, res) => {
   s.webhooks = req.body?.config?.webhooks || s.webhooks;
   if (req.body?.start) toScanQr(s);
   res.status(201).json(doc(s));
+});
+
+app.put('/api/sessions/:name', (req, res) => {
+  const s = getOrCreate(req.params.name);
+  s.webhooks = req.body?.config?.webhooks || s.webhooks;
+  res.json(doc(s));
 });
 
 app.post('/api/sessions/:name/start', (req, res) => {

@@ -78,6 +78,23 @@ class WhatsAppEngineContractTest extends TestCase
         $this->assertSame('wgh-'.$provider->uuid, $provider->configuration['session'] ?? null);
         $this->assertSame('https://waha-engine.test', $provider->configuration['base_url'] ?? null);
 
+        $secret = (string) ($provider->configuration['webhook_secret'] ?? '');
+        $this->assertGreaterThanOrEqual(32, strlen($secret));
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+            && str_ends_with($request->url(), '/api/sessions')
+            && ($request['config']['webhooks'][0]['customHeaders'] ?? null) === [['name' => 'X-Webhook-Token', 'value' => $secret]]);
+
+        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+            'event' => 'session.status',
+            'payload' => ['name' => 'wgh-'.$provider->uuid, 'status' => 'FAILED'],
+        ])->assertUnauthorized();
+        $this->assertSame($provider->session_status, $provider->fresh()->session_status);
+
+        $this->withHeader('X-Webhook-Token', $secret)->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+            'event' => 'session.status',
+            'payload' => ['name' => 'wgh-'.$provider->uuid, 'status' => 'WORKING'],
+        ])->assertOk()->assertJsonPath('session', 'working');
+
         $policy = RoutingPolicy::query()
             ->where('client_application_id', $client['id'])
             ->where('operation', 'message')

@@ -79,7 +79,7 @@ class KnowledgeBaseAgentTest extends TestCase
 
     private function inbound(ProviderAccount $provider, string $id, string $body): void
     {
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$provider->uuid, [
             'event' => 'message',
             'payload' => [
                 'id' => $id,
@@ -111,6 +111,7 @@ class KnowledgeBaseAgentTest extends TestCase
             $this->createProviderAccount('waha', 'waha-kb', [
                 'base_url' => 'https://waha-kb.test',
                 'session' => 'default',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
     }

@@ -375,6 +375,7 @@ class WhatsAppEngineService
                         'base_url' => $host?->configuration['base_url'] ?? null,
                         'api_key' => $host?->configuration['api_key'] ?? null,
                         'session' => 'wgh-'.$uuid,
+                        'webhook_secret' => $native ? null : Str::random(48),
                         'engine_host_provider_id' => $host?->getKey(),
                         'owned_by_application_id' => $application->getKey(),
                         'engine_session_id' => $sessionId,

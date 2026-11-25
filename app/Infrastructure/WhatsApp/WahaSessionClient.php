@@ -5,6 +5,7 @@ namespace App\Infrastructure\WhatsApp;
 use App\Models\ProviderAccount;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
 
@@ -39,18 +40,18 @@ final readonly class WahaSessionClient
     public function start(ProviderAccount $account): ?array
     {
         $session = $this->session($account);
+        $webhookSecret = $this->webhookSecret($account);
+
+        $hubWebhook = [
+            'url' => url('/webhooks/whatsapp/'.$account->uuid),
+            'events' => ['message', 'message.any', 'session.status'],
+            'customHeaders' => [['name' => 'X-Webhook-Token', 'value' => $webhookSecret]],
+        ];
 
         // Create-or-ignore: newer WAHA merges create+start, older needs create first.
-        $this->postJson($account, '/api/sessions', [
-            'name' => $session,
-            'start' => true,
-            'config' => [
-                'webhooks' => [[
-                    'url' => url('/webhooks/whatsapp/'.$account->uuid),
-                    'events' => ['message', 'message.any', 'session.status'],
-                ]],
-            ],
-        ]);
+        $this->postJson($account, '/api/sessions', ['name' => $session, 'start' => true, 'config' => ['webhooks' => [$hubWebhook]]]);
+
+        $this->syncHubWebhook($account, $session, $hubWebhook);
 
         $this->postJson($account, '/api/sessions/'.$session.'/start', []);
 
@@ -147,6 +148,20 @@ final readonly class WahaSessionClient
         return null;
     }
 
+    /** The inbound webhook rejects unauthenticated posts, so a session never registers without a token. */
+    private function webhookSecret(ProviderAccount $account): string
+    {
+        $configuration = $account->configuration ?? [];
+        $secret = InboxPayload::string($configuration['webhook_secret'] ?? null);
+
+        if ($secret === null) {
+            $secret = Str::random(48);
+            $account->forceFill(['configuration' => array_replace($configuration, ['webhook_secret' => $secret])])->save();
+        }
+
+        return $secret;
+    }
+
     private function session(ProviderAccount $account): string
     {
         $session = InboxPayload::string(($account->configuration ?? [])['session'] ?? null);
@@ -194,6 +209,48 @@ final readonly class WahaSessionClient
         $json = $response->json();
 
         return is_array($json) ? $json : null;
+    }
+
+    /**
+     * Create is rejected for an existing session, so merge the Hub webhook into its
+     * current config, keeping other webhooks and settings (e.g. the NOWEB store).
+     *
+     * @param  array<string, mixed>  $hubWebhook
+     */
+    private function syncHubWebhook(ProviderAccount $account, string $session, array $hubWebhook): void
+    {
+        $document = $this->status($account);
+
+        if ($document === null || ! array_key_exists('config', $document)) {
+            return;
+        }
+
+        $config = is_array($document['config']) ? $document['config'] : [];
+        $webhooks = is_array($config['webhooks'] ?? null) ? $config['webhooks'] : [];
+
+        if (in_array($hubWebhook, $webhooks, false)) {
+            return;
+        }
+
+        $config['webhooks'] = [
+            ...array_values(array_filter($webhooks, fn ($webhook): bool => ! is_array($webhook)
+                || strtok((string) ($webhook['url'] ?? ''), '?') !== $hubWebhook['url'])),
+            $hubWebhook,
+        ];
+
+        $this->putJson($account, '/api/sessions/'.$session, ['name' => $session, 'config' => $config]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function putJson(ProviderAccount $account, string $path, array $payload): void
+    {
+        try {
+            $this->request($account, $path)->asJson()->put($this->url($account, $path), $payload);
+        } catch (Throwable) {
+            return;
+        }
     }
 
     private function request(ProviderAccount $account, string $path): PendingRequest

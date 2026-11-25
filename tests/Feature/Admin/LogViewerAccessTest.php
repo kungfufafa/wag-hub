@@ -6,6 +6,7 @@ use App\Http\Middleware\TrustCurrentHostForLogViewer;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Opcodes\LogViewer\Http\Middleware\EnsureFrontendRequestsAreStateful;
 use Tests\TestCase;
 
@@ -30,6 +31,20 @@ class LogViewerAccessTest extends TestCase
         $other->headers->set('Referer', 'http://evil.example/page');
 
         $this->assertFalse(EnsureFrontendRequestsAreStateful::fromFrontend($other));
+    }
+
+    public function test_deactivated_admin_is_rejected_from_log_viewer_and_horizon(): void
+    {
+        $user = User::factory()->create(['is_admin' => true, 'is_active' => false]);
+
+        $this->actingAs($user)
+            ->withHeader('Referer', 'http://wag-hub.test/log-viewer')
+            ->getJson('http://wag-hub.test/log-viewer/api/folders')
+            ->assertForbidden();
+
+        $this->assertFalse(Gate::forUser($user)->allows('viewHorizon'));
+        $this->assertTrue(Gate::forUser(User::factory()->create(['is_admin' => true, 'is_active' => true]))->allows('viewHorizon'));
+        $this->assertFalse(Gate::forUser(User::factory()->create(['is_admin' => false, 'is_active' => true]))->allows('viewHorizon'));
     }
 
     public function test_non_admin_is_still_rejected(): void

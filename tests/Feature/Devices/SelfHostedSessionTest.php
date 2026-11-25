@@ -6,6 +6,7 @@ use App\Models\InboxMessage;
 use App\Models\ProviderAccount;
 use App\Services\WhatsAppSessionManager;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\BuildsGatewayFixtures;
 use Tests\TestCase;
@@ -23,7 +24,13 @@ class SelfHostedSessionTest extends TestCase
 
         Http::fake([
             '*/api/sessions/default/start' => Http::response(['name' => 'default', 'status' => 'STARTING'], 200),
-            '*/api/sessions/default' => Http::response(['name' => 'default', 'status' => 'SCAN_QR_CODE'], 200),
+            '*/api/sessions/default' => Http::response(['name' => 'default', 'status' => 'SCAN_QR_CODE', 'config' => [
+                'noweb' => ['store' => ['enabled' => true]],
+                'webhooks' => [
+                    ['url' => 'https://crm.example.com/hook', 'events' => ['message']],
+                    ['url' => url('/webhooks/whatsapp/'.$provider->uuid).'?token=legacy', 'events' => ['message']],
+                ],
+            ]], 200),
             '*/api/sessions' => Http::response(['name' => 'default', 'status' => 'STARTING'], 201),
         ]);
 
@@ -32,6 +39,14 @@ class SelfHostedSessionTest extends TestCase
         $this->assertSame('scan_qr', $status->value);
         $this->assertSame('scan_qr', $provider->fresh()->session_status);
         $this->assertNotNull($provider->fresh()->session_synced_at);
+
+        $secret = $provider->fresh()->configuration['webhook_secret'];
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+            && str_ends_with($request->url(), '/api/sessions/default')
+            && $request['config']['noweb'] === ['store' => ['enabled' => true]]
+            && count($request['config']['webhooks']) === 2
+            && $request['config']['webhooks'][0]['url'] === 'https://crm.example.com/hook'
+            && $request['config']['webhooks'][1]['customHeaders'] === [['name' => 'X-Webhook-Token', 'value' => $secret]]);
     }
 
     public function test_qr_is_returned_as_a_data_uri(): void
@@ -68,7 +83,7 @@ class SelfHostedSessionTest extends TestCase
     {
         $provider = $this->wahaProvider();
 
-        $this->postJson('/webhooks/whatsapp/'.$provider->uuid, [
+        $this->withHeader('X-Webhook-Token', 'hook-token')->postJson('/webhooks/whatsapp/'.$provider->uuid, [
             'event' => 'session.status',
             'payload' => [
                 'name' => 'default',
@@ -90,6 +105,7 @@ class SelfHostedSessionTest extends TestCase
                 'base_url' => 'https://waha-engine.test',
                 'session' => 'default',
                 'api_key' => 'secret-key',
+                'webhook_secret' => 'hook-token',
             ])['id'],
         );
     }
