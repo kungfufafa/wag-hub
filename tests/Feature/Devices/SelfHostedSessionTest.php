@@ -28,7 +28,7 @@ class SelfHostedSessionTest extends TestCase
                 'noweb' => ['store' => ['enabled' => true]],
                 'webhooks' => [
                     ['url' => 'https://crm.example.com/hook', 'events' => ['message']],
-                    ['url' => url('/webhooks/whatsapp/'.$provider->uuid), 'events' => ['message']],
+                    ['url' => url('/webhooks/whatsapp/'.$provider->uuid).'?token=legacy', 'events' => ['message']],
                 ],
             ]], 200),
             '*/api/sessions' => Http::response(['name' => 'default', 'status' => 'STARTING'], 201),

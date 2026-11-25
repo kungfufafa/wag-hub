@@ -233,7 +233,8 @@ final readonly class WahaSessionClient
         }
 
         $config['webhooks'] = [
-            ...array_values(array_filter($webhooks, fn ($webhook): bool => ! is_array($webhook) || ($webhook['url'] ?? null) !== $hubWebhook['url'])),
+            ...array_values(array_filter($webhooks, fn ($webhook): bool => ! is_array($webhook)
+                || strtok((string) ($webhook['url'] ?? ''), '?') !== $hubWebhook['url'])),
             $hubWebhook,
         ];
 
