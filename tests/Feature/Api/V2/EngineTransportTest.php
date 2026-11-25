@@ -463,6 +463,20 @@ class EngineTransportTest extends TestCase
             $this->assertSame('webhook_destination_blocked', $exception->errorCode);
         }
 
+        $this->app->instance(HostResolver::class, new class extends HostResolver
+        {
+            public function resolve(string $host): array
+            {
+                return [];
+            }
+        });
+        try {
+            app(WebhookDestination::class)->options('https://unresolvable.example.com/events');
+            $this->fail('Expected an unresolvable host to be rejected.');
+        } catch (WhatsAppEngineException $exception) {
+            $this->assertSame('webhook_dns_failed', $exception->errorCode);
+        }
+
         $options = $guard->options('https://hooks.example.com/events');
         $this->assertSame(['hooks.example.com:443:93.184.216.34'], $options['curl'][CURLOPT_RESOLVE]);
         $this->assertSame('', $options['proxy']);

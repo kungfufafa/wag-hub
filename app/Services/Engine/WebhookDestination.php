@@ -3,13 +3,14 @@
 namespace App\Services\Engine;
 
 use App\Exceptions\WhatsAppEngineException;
+use App\Infrastructure\WhatsApp\HostResolver;
 use App\Infrastructure\WhatsApp\ProviderEndpointGuard;
 use InvalidArgumentException;
 
 /** Validate again at delivery time and pin DNS for that connection. */
 class WebhookDestination
 {
-    public function __construct(private ProviderEndpointGuard $guard) {}
+    public function __construct(private ProviderEndpointGuard $guard, private HostResolver $resolver) {}
 
     public function options(string $url): array
     {
@@ -27,6 +28,9 @@ class WebhookDestination
             try {
                 return $this->guard->assertPublic($url);
             } catch (InvalidArgumentException) {
+                if (filter_var($host, FILTER_VALIDATE_IP) === false && ! str_ends_with($host, '.') && $this->resolver->resolve($host) === []) {
+                    throw new WhatsAppEngineException('Webhook hostname cannot be resolved.', 422, 'webhook_dns_failed');
+                }
                 throw new WhatsAppEngineException('Webhook destination is not allowed.', 422, 'webhook_destination_blocked');
             }
         }
