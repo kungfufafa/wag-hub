@@ -24,7 +24,13 @@ class SelfHostedSessionTest extends TestCase
 
         Http::fake([
             '*/api/sessions/default/start' => Http::response(['name' => 'default', 'status' => 'STARTING'], 200),
-            '*/api/sessions/default' => Http::response(['name' => 'default', 'status' => 'SCAN_QR_CODE'], 200),
+            '*/api/sessions/default' => Http::response(['name' => 'default', 'status' => 'SCAN_QR_CODE', 'config' => [
+                'noweb' => ['store' => ['enabled' => true]],
+                'webhooks' => [
+                    ['url' => 'https://crm.example.com/hook', 'events' => ['message']],
+                    ['url' => url('/webhooks/whatsapp/'.$provider->uuid), 'events' => ['message']],
+                ],
+            ]], 200),
             '*/api/sessions' => Http::response(['name' => 'default', 'status' => 'STARTING'], 201),
         ]);
 
@@ -37,7 +43,10 @@ class SelfHostedSessionTest extends TestCase
         $secret = $provider->fresh()->configuration['webhook_secret'];
         Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
             && str_ends_with($request->url(), '/api/sessions/default')
-            && $request['config']['webhooks'][0]['customHeaders'] === [['name' => 'X-Webhook-Token', 'value' => $secret]]);
+            && $request['config']['noweb'] === ['store' => ['enabled' => true]]
+            && count($request['config']['webhooks']) === 2
+            && $request['config']['webhooks'][0]['url'] === 'https://crm.example.com/hook'
+            && $request['config']['webhooks'][1]['customHeaders'] === [['name' => 'X-Webhook-Token', 'value' => $secret]]);
     }
 
     public function test_qr_is_returned_as_a_data_uri(): void

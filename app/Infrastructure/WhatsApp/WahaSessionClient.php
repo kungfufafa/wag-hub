@@ -42,19 +42,16 @@ final readonly class WahaSessionClient
         $session = $this->session($account);
         $webhookSecret = $this->webhookSecret($account);
 
-        $config = [
-            'webhooks' => [[
-                'url' => url('/webhooks/whatsapp/'.$account->uuid),
-                'events' => ['message', 'message.any', 'session.status'],
-                'customHeaders' => [['name' => 'X-Webhook-Token', 'value' => $webhookSecret]],
-            ]],
+        $hubWebhook = [
+            'url' => url('/webhooks/whatsapp/'.$account->uuid),
+            'events' => ['message', 'message.any', 'session.status'],
+            'customHeaders' => [['name' => 'X-Webhook-Token', 'value' => $webhookSecret]],
         ];
 
         // Create-or-ignore: newer WAHA merges create+start, older needs create first.
-        $this->postJson($account, '/api/sessions', ['name' => $session, 'start' => true, 'config' => $config]);
+        $this->postJson($account, '/api/sessions', ['name' => $session, 'start' => true, 'config' => ['webhooks' => [$hubWebhook]]]);
 
-        // Create is rejected for an existing session, so push the webhook config explicitly.
-        $this->putJson($account, '/api/sessions/'.$session, ['name' => $session, 'config' => $config]);
+        $this->syncHubWebhook($account, $session, $hubWebhook);
 
         $this->postJson($account, '/api/sessions/'.$session.'/start', []);
 
@@ -212,6 +209,35 @@ final readonly class WahaSessionClient
         $json = $response->json();
 
         return is_array($json) ? $json : null;
+    }
+
+    /**
+     * Create is rejected for an existing session, so merge the Hub webhook into its
+     * current config, keeping other webhooks and settings (e.g. the NOWEB store).
+     *
+     * @param  array<string, mixed>  $hubWebhook
+     */
+    private function syncHubWebhook(ProviderAccount $account, string $session, array $hubWebhook): void
+    {
+        $document = $this->status($account);
+
+        if ($document === null || ! array_key_exists('config', $document)) {
+            return;
+        }
+
+        $config = is_array($document['config']) ? $document['config'] : [];
+        $webhooks = is_array($config['webhooks'] ?? null) ? $config['webhooks'] : [];
+
+        if (in_array($hubWebhook, $webhooks, false)) {
+            return;
+        }
+
+        $config['webhooks'] = [
+            ...array_values(array_filter($webhooks, fn ($webhook): bool => ! is_array($webhook) || ($webhook['url'] ?? null) !== $hubWebhook['url'])),
+            $hubWebhook,
+        ];
+
+        $this->putJson($account, '/api/sessions/'.$session, ['name' => $session, 'config' => $config]);
     }
 
     /**
